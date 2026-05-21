@@ -1,0 +1,423 @@
+<?php
+
+namespace App\Http\Controllers\Purchasing;
+
+use App\Http\Controllers\Controller;
+use App\Models\AccountingAccount;
+use App\Models\AccountingJournalEntry;
+use App\Models\AccountingJournalLine;
+use App\Models\Purchasing\PurchaseBill;
+use App\Models\Purchasing\PurchaseOrder;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class PurchaseBillController extends Controller
+{
+    private function authorizePurchasing(string $permission): void
+    {
+        $user = auth()->user();
+
+        abort_unless(
+            $user && (
+                $user->can($permission) ||
+                $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+            ),
+            403,
+            'Unauthorized purchasing action.'
+        );
+    }
+
+    public function index(Request $request)
+    {
+        $this->authorizePurchasing('purchasing.bills.view');
+
+        $perPage = (int) $request->input('per_page', 10);
+
+        if (! in_array($perPage, [10, 25, 50, 100], true)) {
+            $perPage = 10;
+        }
+
+        $search = trim((string) $request->input('search', ''));
+        $status = trim((string) $request->input('status', 'active'));
+
+        if (! in_array($status, ['active', 'all', 'unpaid', 'partially_paid', 'paid', 'voided'], true)) {
+            $status = 'active';
+        }
+
+        $bills = PurchaseBill::with(['purchaseOrder', 'supplier', 'postedPayments'])
+            ->when($status === 'active', function ($query) {
+                $query->where('status', '!=', 'voided');
+            })
+            ->when($status === 'unpaid', function ($query) {
+                $query->where('status', 'posted')
+                    ->whereDoesntHave('postedPayments');
+            })
+            ->when($status === 'paid', function ($query) {
+                $query->where('status', 'posted')
+                    ->whereRaw('(select coalesce(sum(amount), 0) from purchase_payments where purchase_payments.purchase_bill_id = purchase_bills.id and purchase_payments.status = ?) >= purchase_bills.total_amount', ['posted']);
+            })
+            ->when($status === 'partially_paid', function ($query) {
+                $query->where('status', 'posted')
+                    ->whereRaw('(select coalesce(sum(amount), 0) from purchase_payments where purchase_payments.purchase_bill_id = purchase_bills.id and purchase_payments.status = ?) > 0', ['posted'])
+                    ->whereRaw('(select coalesce(sum(amount), 0) from purchase_payments where purchase_payments.purchase_bill_id = purchase_bills.id and purchase_payments.status = ?) < purchase_bills.total_amount', ['posted']);
+            })
+            ->when($status === 'voided', function ($query) {
+                $query->where('status', 'voided');
+            })
+            ->search($search)
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $postedTotal = (float) PurchaseBill::where('status', 'posted')->sum('total_amount');
+        $paidTotal = (float) DB::table('purchase_payments')
+            ->where('status', 'posted')
+            ->whereNotNull('purchase_bill_id')
+            ->sum('amount');
+        $openTotal = max(0, $postedTotal - $paidTotal);
+
+        return view('purchasing.bills.index', compact(
+            'bills',
+            'perPage',
+            'search',
+            'status',
+            'postedTotal',
+            'paidTotal',
+            'openTotal'
+        ));
+    }
+
+    public function create(Request $request)
+    {
+        $this->authorizePurchasing('purchasing.bills.create');
+
+        $purchaseOrders = PurchaseOrder::with(['supplier'])
+            ->whereIn('status', ['partially_received', 'received'])
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($po) => $this->hydrateBillableAmounts($po))
+            ->filter(fn ($po) => $po->billable_balance > 0)
+            ->values();
+
+        $selectedPO = null;
+
+        if ($request->filled('purchase_order_id')) {
+            $selectedPO = PurchaseOrder::with(['supplier'])
+                ->whereIn('status', ['partially_received', 'received'])
+                ->find($request->purchase_order_id);
+
+            if ($selectedPO) {
+                $selectedPO = $this->hydrateBillableAmounts($selectedPO);
+
+                if ($selectedPO->billable_balance <= 0) {
+                    return redirect()
+                        ->route('purchasing.bills.create')
+                        ->with('error', 'This purchase order is already fully billed or fully paid directly and cannot be billed again.');
+                }
+            }
+        }
+
+        return view('purchasing.bills.create', compact('purchaseOrders', 'selectedPO'));
+    }
+
+    public function store(Request $request)
+    {
+        $this->authorizePurchasing('purchasing.bills.create');
+
+        $validated = $request->validate([
+            'purchase_order_id' => ['required', 'exists:purchase_orders,id'],
+            'bill_date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:bill_date'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        $po = PurchaseOrder::with('supplier')->findOrFail($validated['purchase_order_id']);
+
+        $receivedAmount = $this->getReceivedAmount($po);
+        $billedAmount = $this->getBilledAmount($po);
+        $directPaidAmount = $this->getDirectPaidAmount($po);
+        $billableBalance = max(0, $receivedAmount - $billedAmount - $directPaidAmount);
+        $amount = round((float) $validated['amount'], 2);
+
+        if ($directPaidAmount >= $receivedAmount && $receivedAmount > 0) {
+            return back()
+                ->withInput()
+                ->with('error', 'This purchase order is already fully paid through direct payment and cannot be billed.');
+        }
+
+        if ($billableBalance <= 0) {
+            return back()
+                ->withInput()
+                ->with('error', 'This purchase order is already fully billed or fully paid directly and cannot be billed again.');
+        }
+
+        if ($amount > round($billableBalance, 2)) {
+            return back()
+                ->withInput()
+                ->with('error', 'Bill amount cannot exceed the billable balance of ' . number_format($billableBalance, 2) . '.');
+        }
+
+        DB::transaction(function () use ($validated, $po, $amount) {
+            $billNo = $this->generateBillNo($validated['bill_date']);
+
+            $memo = trim((string) ($validated['description'] ?? ''));
+
+            if ($memo === '') {
+                $memo = 'Purchase Bill ' . $billNo . ' for PO ' . $po->po_no;
+            }
+
+            $journalEntry = $this->postBillJournalEntry(
+                $billNo,
+                $validated['bill_date'],
+                $memo,
+                $amount
+            );
+
+            PurchaseBill::create([
+                'bill_no' => $billNo,
+                'purchase_order_id' => $po->id,
+                'supplier_id' => $po->supplier_id,
+                'accounting_journal_entry_id' => $journalEntry->id,
+                'bill_date' => $validated['bill_date'],
+                'due_date' => $validated['due_date'] ?? null,
+                'reference_no' => $validated['reference_no'] ?? null,
+                'subtotal' => $amount,
+                'tax_amount' => 0,
+                'total_amount' => $amount,
+                'description' => $memo,
+                'status' => 'posted',
+                'created_by' => Auth::id(),
+            ]);
+        });
+
+        return redirect()
+            ->route('purchasing.bills.index')
+            ->with('success', 'Purchase bill recorded and Accounts Payable journal entry posted successfully.');
+    }
+
+    public function show(PurchaseBill $bill)
+    {
+        $this->authorizePurchasing('purchasing.bills.view');
+
+        $bill->load([
+            'purchaseOrder.supplier',
+            'supplier',
+            'postedPayments.bankAccount',
+            'journalEntry.lines.account',
+            'creator',
+            'voider',
+        ]);
+
+        return view('purchasing.bills.show', compact('bill'));
+    }
+
+    public function void(Request $request, PurchaseBill $bill)
+    {
+        $this->authorizePurchasing('purchasing.bills.void');
+
+        $validated = $request->validate([
+            'void_reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($bill->status !== 'posted') {
+            return back()->with('error', 'Only posted purchase bills can be voided.');
+        }
+
+        $paidAmount = (float) $bill->postedPayments()->sum('amount');
+
+        if ($paidAmount > 0) {
+            return back()->with('error', 'This bill already has posted payments. Void the related payments first before voiding the bill.');
+        }
+
+        DB::transaction(function () use ($bill, $validated) {
+            $amount = round((float) $bill->total_amount, 2);
+            $memo = 'Reversal of ' . $bill->bill_no;
+
+            $journalEntry = $this->postBillVoidJournalEntry($bill, $memo, $amount);
+
+            $bill->update([
+                'status' => 'voided',
+                'voided_at' => now(),
+                'voided_by' => Auth::id(),
+                'void_reason' => $validated['void_reason'] ?? null,
+            ]);
+        });
+
+        return redirect()
+            ->route('purchasing.bills.show', $bill)
+            ->with('success', 'Purchase bill voided successfully. Reversal journal entry posted.');
+    }
+
+    private function postBillJournalEntry(string $billNo, string $billDate, string $memo, float $amount): AccountingJournalEntry
+    {
+        $grniAccount = $this->findOrCreateGrniAccount();
+        $accountsPayableAccount = $this->findAccountingAccountByCode('2000', 'Accounts Payable');
+
+        if (! $accountsPayableAccount || ! $grniAccount) {
+            throw ValidationException::withMessages([
+                'accounting' => 'Accounting setup is incomplete. Please make sure Chart of Accounts has 2000 - Accounts Payable and 2100 - Goods Received Not Invoiced.',
+            ]);
+        }
+
+        $journalEntry = AccountingJournalEntry::create([
+            'entry_no' => $this->generateJournalEntryNo($billDate),
+            'entry_date' => $billDate,
+            'description' => $memo,
+            'status' => 'posted',
+            'created_by' => Auth::id(),
+            'posted_by' => Auth::id(),
+            'posted_at' => now(),
+        ]);
+
+        // Bill/AP recognition clears GRNI and recognizes supplier payable.
+        // Receiving already debited Inventory Asset and credited GRNI.
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $grniAccount->id,
+            'line_no' => 1,
+            'description' => $memo,
+            'debit' => $amount,
+            'credit' => 0,
+        ]);
+
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $accountsPayableAccount->id,
+            'line_no' => 2,
+            'description' => $memo,
+            'debit' => 0,
+            'credit' => $amount,
+        ]);
+
+        return $journalEntry;
+    }
+
+    private function postBillVoidJournalEntry(PurchaseBill $bill, string $memo, float $amount): AccountingJournalEntry
+    {
+        $grniAccount = $this->findOrCreateGrniAccount();
+        $accountsPayableAccount = $this->findAccountingAccountByCode('2000', 'Accounts Payable');
+
+        if (! $accountsPayableAccount || ! $grniAccount) {
+            throw ValidationException::withMessages([
+                'accounting' => 'Accounting setup is incomplete. Please make sure Chart of Accounts has 2000 - Accounts Payable and 2100 - Goods Received Not Invoiced.',
+            ]);
+        }
+
+        $journalEntry = AccountingJournalEntry::create([
+            'entry_no' => $this->generateJournalEntryNo(now()->toDateString()),
+            'entry_date' => now()->toDateString(),
+            'description' => $memo,
+            'status' => 'posted',
+            'created_by' => Auth::id(),
+            'posted_by' => Auth::id(),
+            'posted_at' => now(),
+        ]);
+
+        // Reverse AP recognition: debit AP, credit GRNI.
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $accountsPayableAccount->id,
+            'line_no' => 1,
+            'description' => $memo,
+            'debit' => $amount,
+            'credit' => 0,
+        ]);
+
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $grniAccount->id,
+            'line_no' => 2,
+            'description' => $memo,
+            'debit' => 0,
+            'credit' => $amount,
+        ]);
+
+        return $journalEntry;
+    }
+
+    private function hydrateBillableAmounts(PurchaseOrder $po): PurchaseOrder
+    {
+        $po->received_amount = $this->getReceivedAmount($po);
+        $po->billed_amount = $this->getBilledAmount($po);
+        $po->direct_paid_amount = $this->getDirectPaidAmount($po);
+        $po->billable_balance = max(0, $po->received_amount - $po->billed_amount - $po->direct_paid_amount);
+
+        return $po;
+    }
+
+    private function getReceivedAmount(PurchaseOrder $po): float
+    {
+        return (float) DB::table('warehouse_receiving_items as ri')
+            ->join('warehouse_receivings as r', 'r.id', '=', 'ri.receiving_id')
+            ->where(function ($query) use ($po) {
+                $query->where('r.reference_no', $po->po_no)
+                    ->orWhere('r.remarks', 'ilike', '%' . $po->po_no . '%');
+            })
+            ->sum('ri.total_cost');
+    }
+
+    private function getBilledAmount(PurchaseOrder $po): float
+    {
+        return (float) PurchaseBill::where('purchase_order_id', $po->id)
+            ->where('status', 'posted')
+            ->sum('total_amount');
+    }
+
+    private function getDirectPaidAmount(PurchaseOrder $po): float
+    {
+        return (float) DB::table('purchase_payments')
+            ->where('purchase_order_id', $po->id)
+            ->whereNull('purchase_bill_id')
+            ->where('status', 'posted')
+            ->sum('amount');
+    }
+
+    private function findAccountingAccountByCode(string $code, string $name): ?AccountingAccount
+    {
+        return AccountingAccount::where('code', $code)
+            ->where('name', $name)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    private function findOrCreateGrniAccount(): AccountingAccount
+    {
+        $account = AccountingAccount::where('code', '2100')
+            ->where('is_active', true)
+            ->first();
+
+        if ($account) {
+            return $account;
+        }
+
+        return AccountingAccount::create([
+            'code' => '2100',
+            'name' => 'Goods Received Not Invoiced',
+            'type' => 'liability',
+            'normal_balance' => 'credit',
+            'description' => 'Auto-created clearing account for purchase receiving before supplier billing.',
+            'is_active' => true,
+        ]);
+    }
+
+    private function generateBillNo(string $date): string
+    {
+        $dateCode = Carbon::parse($date)->format('Ymd');
+        $count = PurchaseBill::where('bill_no', 'like', 'PB-' . $dateCode . '-%')->count() + 1;
+
+        return 'PB-' . $dateCode . '-' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function generateJournalEntryNo(string $date): string
+    {
+        $dateCode = Carbon::parse($date)->format('Ymd');
+        $count = AccountingJournalEntry::where('entry_no', 'like', 'JE-' . $dateCode . '-%')->count() + 1;
+
+        return 'JE-' . $dateCode . '-' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+    }
+}

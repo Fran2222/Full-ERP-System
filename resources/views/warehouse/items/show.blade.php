@@ -1,0 +1,603 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0">
+        @include('warehouse.partials.nav')
+
+        @php
+            $displayCode = $item->display_code ?: '-';
+            $displayName = $item->display_name ?: '-';
+            $money = fn ($value) => number_format((float) $value, 2);
+
+            $statusBadge = function ($status) {
+                $normalized = strtolower((string) $status);
+
+                return match ($normalized) {
+                    'available' => '<span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">Available</span>',
+                    'borrowed' => '<span class="badge rounded-pill bg-warning-subtle text-warning px-3 py-2">Borrowed</span>',
+                    'for_repair' => '<span class="badge rounded-pill bg-info-subtle text-info px-3 py-2">For Repair</span>',
+                    'damaged' => '<span class="badge rounded-pill bg-danger-subtle text-danger px-3 py-2">Damaged</span>',
+                    'lost' => '<span class="badge rounded-pill bg-dark-subtle text-dark px-3 py-2">Lost</span>',
+                    default => '<span class="badge rounded-pill bg-secondary-subtle text-secondary px-3 py-2">' . e(ucwords(str_replace('_', ' ', $normalized ?: 'Unknown'))) . '</span>',
+                };
+            };
+
+            $movementBadge = function ($type) {
+                $normalized = strtolower((string) $type);
+                $label = ucwords(str_replace('_', ' ', $normalized));
+
+                if (str_contains($normalized, 'borrow') || str_contains($normalized, 'out')) {
+                    return '<span class="badge rounded-pill bg-danger-subtle text-danger px-3 py-2">' . e($label) . '</span>';
+                }
+
+                if (str_contains($normalized, 'return') || str_contains($normalized, 'in') || str_contains($normalized, 'receiving')) {
+                    return '<span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">' . e($label) . '</span>';
+                }
+
+                return '<span class="badge rounded-pill bg-secondary-subtle text-secondary px-3 py-2">' . e($label ?: '-') . '</span>';
+            };
+        @endphp
+
+        <style>
+            .wmc-local-table-toolbar {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 14px;
+            }
+
+            .wmc-local-table-toolbar .form-select,
+            .wmc-local-table-toolbar .form-control {
+                min-height: 38px;
+                border-radius: 10px;
+            }
+
+            .wmc-local-table-pagination {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 6px;
+                margin-top: 14px;
+            }
+
+            .wmc-local-table-pagination button {
+                border: 1px solid #d8dee9;
+                background: #fff;
+                color: #334155;
+                border-radius: 8px;
+                padding: 6px 11px;
+                font-size: 13px;
+                line-height: 1;
+            }
+
+            .wmc-local-table-pagination button.active {
+                background: #3b5bfd;
+                border-color: #3b5bfd;
+                color: #fff;
+                box-shadow: 0 6px 16px rgba(59, 91, 253, .22);
+            }
+
+            .wmc-local-table-pagination button:disabled {
+                opacity: .5;
+                cursor: not-allowed;
+            }
+
+            .wmc-local-table-info {
+                color: #64748b;
+                font-size: 13px;
+                margin-top: 12px;
+            }
+
+            .wmc-local-table-empty td {
+                text-align: center;
+                color: #64748b;
+                padding: 22px 12px !important;
+            }
+        </style>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+            <div>
+                <h4 class="fw-bold mb-1">Item Details</h4>
+                <p class="text-secondary mb-0">View item profile, serial numbers, inventory status, and movement history.</p>
+            </div>
+            <div class="d-flex gap-2">
+                @if($canManageItem)
+                    <a href="{{ route('warehouse.items.edit', $item) }}" class="btn btn-primary px-4">Edit Item</a>
+                @endif
+                @php
+                    $backUrl = request('return_url') ?: route('warehouse.items.index');
+                @endphp
+                <a href="{{ $backUrl }}" class="btn btn-outline-secondary px-4">Back</a>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-lg-4">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <div class="border rounded-4 bg-light-subtle d-flex align-items-center justify-content-center mb-4" style="min-height: 260px;">
+                            @if($item->image_path)
+                                <img src="{{ $item->image_url }}" alt="{{ $displayName }}" class="img-fluid rounded-4" style="max-height: 250px; object-fit: contain;">
+                            @else
+                                <div class="text-center text-secondary px-3">
+                                    <i class="fas fa-image mb-2" style="font-size: 42px;"></i>
+                                    <div>No item picture uploaded</div>
+                                    @if($canManageItem)
+                                        <div class="small mt-1">Upload from Edit Item.</div>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div>
+                                <div class="text-uppercase text-secondary small fw-bold mb-1">{{ $displayCode }}</div>
+                                <h4 class="fw-bold mb-1">{{ $displayName }}</h4>
+                                <div class="text-secondary">{{ $item->category?->name ?? 'No category' }}</div>
+                            </div>
+                            <div>
+                                @if($item->status)
+                                    <span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">Active</span>
+                                @else
+                                    <span class="badge rounded-pill bg-secondary-subtle text-secondary px-3 py-2">Inactive</span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <h5 class="fw-bold mb-3">Item Information</h5>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Unit</div>
+                                    <div class="fw-semibold">{{ $item->unit?->name ?? $item->unit?->abbreviation ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Supplier</div>
+                                    <div class="fw-semibold">{{ $item->supplier?->supplier_name ?? $item->supplier?->name ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Cost Price</div>
+                                    <div class="fw-bold">{{ $money($item->cost_price) }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Selling Price / SRP</div>
+                                    <div class="fw-bold text-primary">{{ $money($item->selling_price) }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Reorder Level</div>
+                                    <div class="fw-bold">{{ number_format((float) ($item->reorder_level ?? $item->minimum_stock ?? 0), 2) }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Serialized</div>
+                                    <div class="fw-semibold">{{ $item->is_serialized ? 'Yes' : 'No' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Service Unit / Borrowable</div>
+                                    <div class="fw-semibold">{{ $item->is_service_unit ? 'Yes' : 'No' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="border rounded-3 p-3 h-100">
+                                    <div class="text-secondary small">Description</div>
+                                    <div class="fw-semibold">{{ $item->description ?: 'No description added.' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card rounded-4 border-0 shadow-sm h-100"><div class="card-body p-4"><div class="text-secondary small">On Hand</div><h3 class="fw-bold mb-0">{{ number_format($onHandQty, 2) }}</h3></div></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card rounded-4 border-0 shadow-sm h-100"><div class="card-body p-4"><div class="text-secondary small">Available</div><h3 class="fw-bold text-success mb-0">{{ number_format($availableQty, 2) }}</h3></div></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card rounded-4 border-0 shadow-sm h-100"><div class="card-body p-4"><div class="text-secondary small">Borrowed</div><h3 class="fw-bold text-warning mb-0">{{ number_format($borrowedQty, 2) }}</h3></div></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card rounded-4 border-0 shadow-sm h-100"><div class="card-body p-4"><div class="text-secondary small">For Repair / Damaged / Lost</div><h3 class="fw-bold text-danger mb-0">{{ number_format($unavailableQty, 2) }}</h3></div></div>
+            </div>
+        </div>
+
+        <div class="card rounded-4 border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                <h5 class="fw-bold mb-1">Serial Numbers</h5>
+                <p class="text-secondary mb-0">Detailed list of every serial number for this item.</p>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <div class="wmc-local-table-toolbar" data-table-toolbar="serials-table">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-secondary small">Show</span>
+                        <select class="form-select form-select-sm wmc-local-table-size" style="width: 90px;">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span class="text-secondary small">entries</span>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <select class="form-select form-select-sm wmc-local-table-status" style="width: 170px;">
+                            <option value="">All Status</option>
+                            <option value="available">Available</option>
+                            <option value="borrowed">Borrowed</option>
+                            <option value="for_repair">For Repair</option>
+                            <option value="damaged">Damaged</option>
+                            <option value="lost">Lost</option>
+                        </select>
+                        <input type="search" class="form-control form-control-sm wmc-local-table-search" style="min-width: 260px;" placeholder="Search serial, location, borrower, remarks...">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="serials-table" class="table table-hover align-middle mb-0 js-local-table" data-empty-message="No matching serial numbers found.">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Serial No.</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Borrowed By</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($serials as $serial)
+                                <tr data-status="{{ strtolower((string) $serial->status) }}">
+                                    <td>{{ $loop->iteration }}</td>
+                                    <td class="fw-semibold text-primary">{{ $serial->serial_number }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $serial->location?->location_name ?? $serial->location?->name ?? '-' }}</div>
+                                        <div class="small text-secondary">{{ $serial->branch?->name ?? $serial->location?->branch?->name ?? '-' }}</div>
+                                    </td>
+                                    <td>{!! $statusBadge($serial->status) !!}</td>
+                                    <td>
+                                        @if($serial->activeServiceUnitBorrow?->employee)
+                                            <div class="fw-semibold">{{ $serial->activeServiceUnitBorrow->employee->name ?? trim(($serial->activeServiceUnitBorrow->employee->first_name ?? '') . ' ' . ($serial->activeServiceUnitBorrow->employee->last_name ?? '')) }}</div>
+                                            <div class="small text-secondary">{{ $serial->activeServiceUnitBorrow->employee->email }}</div>
+                                        @else
+                                            <span class="text-secondary">-</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-secondary">{{ $serial->remarks ?: '-' }}</td>
+                                </tr>
+                            @empty
+                                <tr class="wmc-server-empty-row">
+                                    <td colspan="6" class="text-center text-secondary py-4">No serial numbers found for this item.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+                <div class="wmc-local-table-info" data-table-info="serials-table"></div>
+                <div class="wmc-local-table-pagination" data-table-pagination="serials-table"></div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                        <h5 class="fw-bold mb-1">Inventory by Location</h5>
+                        <p class="text-secondary mb-0">Current available quantity per branch and warehouse location.</p>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="wmc-local-table-toolbar" data-table-toolbar="inventory-location-table">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-secondary small">Show</span>
+                                <select class="form-select form-select-sm wmc-local-table-size" style="width: 90px;">
+                                    <option value="10" selected>10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                </select>
+                                <span class="text-secondary small">entries</span>
+                            </div>
+                            <input type="search" class="form-control form-control-sm wmc-local-table-search" style="max-width: 280px;" placeholder="Search branch or location...">
+                        </div>
+                        <div class="table-responsive">
+                            <table id="inventory-location-table" class="table table-hover align-middle mb-0 js-local-table" data-empty-message="No matching inventory records found.">
+                                <thead><tr><th>Branch</th><th>Location</th><th class="text-end">Available Qty</th></tr></thead>
+                                <tbody>
+                                    @forelse($inventories as $inventory)
+                                        <tr>
+                                            <td>{{ $inventory->branch?->name ?? '-' }}</td>
+                                            <td>{{ $inventory->location?->location_name ?? $inventory->location?->name ?? '-' }}</td>
+                                            <td class="text-end fw-bold">{{ number_format((float) $inventory->quantity, 2) }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr class="wmc-server-empty-row"><td colspan="3" class="text-center text-secondary py-4">No inventory records found.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="wmc-local-table-info" data-table-info="inventory-location-table"></div>
+                        <div class="wmc-local-table-pagination" data-table-pagination="inventory-location-table"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                        <h5 class="fw-bold mb-1">Borrowing History</h5>
+                        <p class="text-secondary mb-0">Latest service unit borrow and return records.</p>
+                    </div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="wmc-local-table-toolbar" data-table-toolbar="borrowing-history-table">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-secondary small">Show</span>
+                                <select class="form-select form-select-sm wmc-local-table-size" style="width: 90px;">
+                                    <option value="10" selected>10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                                <span class="text-secondary small">entries</span>
+                            </div>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <select class="form-select form-select-sm wmc-local-table-status" style="width: 150px;">
+                                    <option value="">All Status</option>
+                                    <option value="active">Active</option>
+                                    <option value="returned">Returned</option>
+                                    <option value="overdue">Overdue</option>
+                                    <option value="cancelled">Cancelled</option>
+                                    <option value="lost">Lost</option>
+                                </select>
+                                <input type="search" class="form-control form-control-sm wmc-local-table-search" style="min-width: 240px;" placeholder="Search borrow no, employee, serial...">
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table id="borrowing-history-table" class="table table-hover align-middle mb-0 js-local-table" data-empty-message="No matching borrowing history found.">
+                                <thead><tr><th>Borrow No.</th><th>Employee</th><th>Serial</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    @forelse($borrowHistory as $borrow)
+                                        <tr data-status="{{ strtolower((string) $borrow->status) }}">
+                                            <td><a href="{{ route('warehouse.service-units.show', $borrow) }}" class="fw-semibold text-primary text-decoration-none">{{ $borrow->borrow_no }}</a></td>
+                                            <td>
+                                                <div class="fw-semibold">{{ $borrow->employee->name ?? trim(($borrow->employee->first_name ?? '') . ' ' . ($borrow->employee->last_name ?? '')) }}</div>
+                                                <div class="small text-secondary">{{ $borrow->employee->email ?? '-' }}</div>
+                                            </td>
+                                            <td>{{ $borrow->serial?->serial_number ?? '-' }}</td>
+                                            <td>{!! $statusBadge($borrow->status) !!}</td>
+                                        </tr>
+                                    @empty
+                                        <tr class="wmc-server-empty-row"><td colspan="4" class="text-center text-secondary py-4">No borrowing history found.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="wmc-local-table-info" data-table-info="borrowing-history-table"></div>
+                        <div class="wmc-local-table-pagination" data-table-pagination="borrowing-history-table"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card rounded-4 border-0 shadow-sm mt-4">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                <h5 class="fw-bold mb-1">Movement History</h5>
+                <p class="text-secondary mb-0">Latest stock and service unit movements for this item.</p>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <div class="wmc-local-table-toolbar" data-table-toolbar="movement-history-table">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-secondary small">Show</span>
+                        <select class="form-select form-select-sm wmc-local-table-size" style="width: 90px;">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span class="text-secondary small">entries</span>
+                    </div>
+                    <input type="search" class="form-control form-control-sm wmc-local-table-search" style="max-width: 340px;" placeholder="Search date, reference, type, location, remarks...">
+                </div>
+                <div class="table-responsive">
+                    <table id="movement-history-table" class="table table-hover align-middle mb-0 js-local-table" data-empty-message="No matching movement history found.">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Reference</th>
+                                <th>Type</th>
+                                <th>Location</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Balance</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($movements as $movement)
+                                <tr data-status="{{ strtolower((string) $movement->movement_type) }}">
+                                    <td class="text-secondary">{{ optional($movement->transaction_date ?? $movement->created_at)->format('M d, Y h:i A') }}</td>
+                                    <td class="fw-semibold text-primary">{{ $movement->reference_type ?: '-' }}</td>
+                                    <td>{!! $movementBadge($movement->movement_type) !!}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $movement->location?->location_name ?? $movement->location?->name ?? '-' }}</div>
+                                        <div class="small text-secondary">{{ $movement->location?->branch?->name ?? '-' }}</div>
+                                    </td>
+                                    <td class="text-end fw-bold {{ (float) $movement->quantity < 0 ? 'text-danger' : 'text-success' }}">{{ number_format((float) $movement->quantity, 2) }}</td>
+                                    <td class="text-end">{{ number_format((float) $movement->balance_after, 2) }}</td>
+                                    <td class="text-secondary">{{ $movement->remarks ?: '-' }}</td>
+                                </tr>
+                            @empty
+                                <tr class="wmc-server-empty-row"><td colspan="7" class="text-center text-secondary py-4">No movement history found.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+                <div class="wmc-local-table-info" data-table-info="movement-history-table"></div>
+                <div class="wmc-local-table-pagination" data-table-pagination="movement-history-table"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            function setupLocalTable(table) {
+                const tableId = table.id;
+                if (!tableId) return;
+
+                const toolbar = document.querySelector('[data-table-toolbar="' + tableId + '"]');
+                const info = document.querySelector('[data-table-info="' + tableId + '"]');
+                const pagination = document.querySelector('[data-table-pagination="' + tableId + '"]');
+                const sizeInput = toolbar ? toolbar.querySelector('.wmc-local-table-size') : null;
+                const searchInput = toolbar ? toolbar.querySelector('.wmc-local-table-search') : null;
+                const statusInput = toolbar ? toolbar.querySelector('.wmc-local-table-status') : null;
+                const tbody = table.querySelector('tbody');
+                if (!tbody) return;
+
+                const serverEmptyRows = Array.from(tbody.querySelectorAll('.wmc-server-empty-row'));
+                const rows = Array.from(tbody.querySelectorAll('tr')).filter(row => !row.classList.contains('wmc-server-empty-row'));
+                const colCount = table.querySelectorAll('thead th').length || 1;
+
+                let currentPage = 1;
+                let emptyRow = null;
+
+                function getPageSize() {
+                    return parseInt(sizeInput ? sizeInput.value : '10', 10) || 10;
+                }
+
+                function getFilteredRows() {
+                    const search = (searchInput ? searchInput.value : '').trim().toLowerCase();
+                    const status = (statusInput ? statusInput.value : '').trim().toLowerCase();
+
+                    return rows.filter(row => {
+                        const rowText = row.innerText.toLowerCase();
+                        const rowStatus = (row.dataset.status || '').trim().toLowerCase();
+                        const matchesSearch = !search || rowText.includes(search);
+                        const matchesStatus = !status || rowStatus === status;
+
+                        return matchesSearch && matchesStatus;
+                    });
+                }
+
+                function renderPagination(totalPages) {
+                    if (!pagination) return;
+                    pagination.innerHTML = '';
+
+                    if (totalPages <= 1) return;
+
+                    const createButton = (label, page, disabled, active) => {
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.textContent = label;
+                        button.disabled = !!disabled;
+                        if (active) button.classList.add('active');
+                        button.addEventListener('click', function () {
+                            currentPage = page;
+                            render();
+                        });
+                        pagination.appendChild(button);
+                    };
+
+                    createButton('Previous', Math.max(1, currentPage - 1), currentPage === 1, false);
+
+                    const pages = [];
+                    for (let page = 1; page <= totalPages; page++) {
+                        if (page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1) {
+                            pages.push(page);
+                        }
+                    }
+
+                    let previous = 0;
+                    pages.forEach(page => {
+                        if (page - previous > 1) {
+                            const dots = document.createElement('span');
+                            dots.className = 'text-secondary px-1';
+                            dots.textContent = '...';
+                            pagination.appendChild(dots);
+                        }
+                        createButton(String(page), page, false, page === currentPage);
+                        previous = page;
+                    });
+
+                    createButton('Next', Math.min(totalPages, currentPage + 1), currentPage === totalPages, false);
+                }
+
+                function render() {
+                    serverEmptyRows.forEach(row => row.style.display = 'none');
+                    if (emptyRow) emptyRow.remove();
+
+                    const pageSize = getPageSize();
+                    const filteredRows = getFilteredRows();
+                    const totalRows = filteredRows.length;
+                    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+
+                    if (currentPage > totalPages) currentPage = totalPages;
+
+                    const start = (currentPage - 1) * pageSize;
+                    const end = start + pageSize;
+
+                    rows.forEach(row => row.style.display = 'none');
+
+                    if (!totalRows) {
+                        emptyRow = document.createElement('tr');
+                        emptyRow.className = 'wmc-local-table-empty';
+                        emptyRow.innerHTML = '<td colspan="' + colCount + '">' + (table.dataset.emptyMessage || 'No matching records found.') + '</td>';
+                        tbody.appendChild(emptyRow);
+
+                        if (info) info.textContent = 'Showing 0 to 0 of 0 entries';
+                        renderPagination(1);
+                        return;
+                    }
+
+                    filteredRows.slice(start, end).forEach(row => row.style.display = '');
+
+                    if (info) {
+                        info.textContent = 'Showing ' + (start + 1) + ' to ' + Math.min(end, totalRows) + ' of ' + totalRows + ' entries';
+                    }
+
+                    renderPagination(totalPages);
+                }
+
+                if (sizeInput) {
+                    sizeInput.addEventListener('change', function () {
+                        currentPage = 1;
+                        render();
+                    });
+                }
+
+                if (searchInput) {
+                    searchInput.addEventListener('input', function () {
+                        currentPage = 1;
+                        render();
+                    });
+                }
+
+                if (statusInput) {
+                    statusInput.addEventListener('change', function () {
+                        currentPage = 1;
+                        render();
+                    });
+                }
+
+                render();
+            }
+
+            document.querySelectorAll('.js-local-table').forEach(setupLocalTable);
+        });
+    </script>
+</x-app-layout>

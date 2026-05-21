@@ -1,0 +1,18 @@
+@include('warehouse.partials.alerts')
+<div class="row g-3">
+<div class="col-md-6"><label class="form-label">Reference No.</label><input type="text" name="reference_no" class="form-control" value="{{ old('reference_no') }}" placeholder="Auto if blank"></div>
+<div class="col-md-6"><label class="form-label">Item</label><select name="item_id" class="form-select" required><option value="">Select Item</option>@foreach($items as $item)<option value="{{ $item->id }}" @selected(old('item_id') == $item->id)>{{ $item->code }} - {{ $item->name }} {{ $item->unit ? '('.$item->unit->name.')' : '' }}</option>@endforeach</select></div>
+@if($mode === 'transfer')
+<div class="col-md-6"><label class="form-label">From Branch</label><select name="from_branch_id" class="form-select" required><option value="">Select Source Branch</option>@foreach($branches as $b)<option value="{{ $b->id }}" @selected(old('from_branch_id') == $b->id)>{{ $b->name }}</option>@endforeach</select></div>
+<div class="col-md-6"><label class="form-label">From Location</label><select name="from_location_id" class="form-select" required><option value="">Select Source Location</option>@foreach($locations as $l)<option value="{{ $l->id }}" @selected(old('from_location_id') == $l->id)>{{ $l->name }}{{ $l->branch ? ' - '.$l->branch->name : '' }}</option>@endforeach</select></div>
+<div class="col-md-6"><label class="form-label">To Branch</label><select name="to_branch_id" class="form-select" required><option value="">Select Destination Branch</option>@foreach($branches as $b)<option value="{{ $b->id }}" @selected(old('to_branch_id') == $b->id)>{{ $b->name }}</option>@endforeach</select></div>
+<div class="col-md-6"><label class="form-label">To Location</label><select name="to_location_id" class="form-select" required><option value="">Select Destination Location</option>@foreach($locations as $l)<option value="{{ $l->id }}" @selected(old('to_location_id') == $l->id)>{{ $l->name }}{{ $l->branch ? ' - '.$l->branch->name : '' }}</option>@endforeach</select></div>
+@else
+<div class="col-md-6"><label class="form-label">Branch</label><select name="branch_id" class="form-select" required><option value="">Select Branch</option>@foreach($branches as $b)<option value="{{ $b->id }}" @selected(old('branch_id') == $b->id)>{{ $b->name }}</option>@endforeach</select></div>
+<div class="col-md-6"><label class="form-label">Location</label><select name="location_id" class="form-select" required><option value="">Select Location</option>@foreach($locations as $l)<option value="{{ $l->id }}" @selected(old('location_id') == $l->id)>{{ $l->name }}{{ $l->branch ? ' - '.$l->branch->name : '' }}</option>@endforeach</select></div>
+@endif
+@if($mode === 'adjustment')<div class="col-md-6"><label class="form-label">Adjustment Type</label><select name="adjustment_type" class="form-select" required><option value="add">Add Stock</option><option value="deduct">Deduct Stock</option></select></div>@endif
+<div class="col-md-6"><label class="form-label">Quantity</label><input type="number" step="0.01" min="0.01" name="quantity" class="form-control" value="{{ old('quantity') }}" required></div>
+<div class="col-12"><label class="form-label">Remarks</label><textarea name="remarks" class="form-control" rows="4" {{ $mode === 'adjustment' ? 'required' : '' }}>{{ old('remarks') }}</textarea></div>
+<div class="col-12 d-flex justify-content-end gap-2"><a href="{{ route('warehouse.dashboard') }}" class="btn btn-outline-secondary">Cancel</a><button class="btn btn-primary">{{ $buttonText }}</button></div>
+</div>

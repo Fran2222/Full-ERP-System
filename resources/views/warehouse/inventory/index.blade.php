@@ -1,0 +1,514 @@
+<x-app-layout :assets="['data-table']">
+    <div class="container-fluid content-inner mt-n5 py-0">
+
+        @include('warehouse.partials.nav')
+
+        @php
+            $user = auth()->user();
+
+            $canAccess = function ($permission) use ($user) {
+                return $user && (
+                    $user->can($permission)
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                );
+            };
+
+            abort_unless($canAccess('warehouse.inventory.view'), 403);
+
+            $branches = $branches ?? collect();
+            $locations = $locations ?? collect();
+
+            $canStockIn = $canStockIn ?? $canAccess('warehouse.stock_in.create');
+            $canStockOut = $canStockOut ?? $canAccess('warehouse.stock_out.create');
+            $canViewLedger = $canViewLedger ?? $canAccess('warehouse.ledger.view');
+        @endphp
+
+        <div class="card rounded-4 border-0 shadow-sm warehouse-card">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h4 class="card-title mb-1 fw-bold">Warehouse Inventory</h4>
+                        <p class="text-secondary mb-0">
+                            View current stock per item, branch, and warehouse location. Central stock can stay unassigned until transferred.
+                        </p>
+                    </div>
+
+                    @if($canStockIn || $canStockOut || $canViewLedger)
+                        <div class="d-flex flex-wrap gap-2">
+                            @if($canStockIn)
+                                <a href="{{ route('warehouse.stock-in') }}" class="btn btn-primary warehouse-soft-btn">
+                                    Stock In
+                                </a>
+                            @endif
+
+                            @if($canStockOut)
+                                <a href="{{ route('warehouse.stock-out') }}" class="btn btn-outline-primary warehouse-soft-btn">
+                                    Stock Out
+                                </a>
+                            @endif
+
+                            @if($canViewLedger)
+                                <a href="{{ route('warehouse.ledger') }}" class="btn btn-outline-secondary warehouse-soft-btn">
+                                    Ledger
+                                </a>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <div class="card-body px-4 pb-4">
+                @if(session('success'))
+                    <div class="alert alert-success rounded-3 mb-4">
+                        {{ session('success') }}
+                    </div>
+                @endif
+
+                @if(session('error'))
+                    <div class="alert alert-danger rounded-3 mb-4">
+                        {{ session('error') }}
+                    </div>
+                @endif
+
+                <div class="row g-3 align-items-center mb-3">
+                    <div class="col-lg-3 col-md-6">
+                        <select id="inventory-branch-filter" class="form-select warehouse-filter">
+                            <option value="">All Branches</option>
+                            <option value="__central">Central / Unassigned Warehouse</option>
+                            @foreach($branches as $branch)
+                                <option value="{{ $branch->id }}">
+                                    {{ $branch->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <select id="inventory-location-filter" class="form-select warehouse-filter">
+                            <option value="">All Locations</option>
+                            @foreach($locations as $location)
+                                <option value="{{ $location->id }}">
+                                    {{ $location->location_name ?? $location->name }}
+                                    {{ $location->branch ? ' - ' . $location->branch->name : ' - Central / Unassigned' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="col-lg-5 col-md-12">
+                        <div class="d-flex justify-content-lg-end">
+                            <button type="button" id="inventory-reset-filter" class="btn btn-outline-secondary px-4 warehouse-reset-btn">
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive warehouse-table-wrap">
+                    <table id="warehouse-inventory-table" class="table table-hover align-middle mb-0 warehouse-table w-100">
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">#</th>
+                                <th style="width: 150px;">Item Code</th>
+                                <th>Item Name</th>
+                                <th>Category</th>
+                                <th>Branch</th>
+                                <th>Location</th>
+                                <th>Unit</th>
+                                <th class="text-end" style="width: 120px;">On Hand</th>
+                                <th class="text-end" style="width: 120px;">Borrowed</th>
+                                <th class="text-end" style="width: 120px;">Available</th>
+                                <th style="width: 140px;">Status</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @push('scripts')
+        <script>
+            $(document).ready(function () {
+                let table = $('#warehouse-inventory-table').DataTable({
+                    processing: false,
+                    serverSide: true,
+                    responsive: false,
+                    autoWidth: false,
+                    pageLength: 10,
+                    lengthMenu: [10, 25, 50, 100],
+                    ajax: {
+                        url: "{{ route('warehouse.inventory') }}",
+                        data: function (d) {
+                            d.branch_id = $('#inventory-branch-filter').val();
+                            d.location_id = $('#inventory-location-filter').val();
+                        }
+                    },
+                    order: [[0, 'desc']],
+                    searchDelay: 250,
+                    columns: [
+                        {
+                            data: 'DT_RowIndex',
+                            name: 'DT_RowIndex',
+                            orderable: false,
+                            searchable: false
+                        },
+                        {
+                            data: 'item_code',
+                            name: 'item_code',
+                            orderable: false
+                        },
+                        {
+                            data: 'item_name',
+                            name: 'item_name',
+                            orderable: false
+                        },
+                        {
+                            data: 'category_name',
+                            name: 'category_name',
+                            orderable: false
+                        },
+                        {
+                            data: 'branch_name',
+                            name: 'branch_name',
+                            orderable: false
+                        },
+                        {
+                            data: 'location_name',
+                            name: 'location_name',
+                            orderable: false
+                        },
+                        {
+                            data: 'unit_name',
+                            name: 'unit_name',
+                            orderable: false
+                        },
+                        {
+                            data: 'on_hand_quantity',
+                            name: 'on_hand_quantity',
+                            orderable: false,
+                            searchable: false
+                        },
+                        {
+                            data: 'borrowed_quantity',
+                            name: 'borrowed_quantity',
+                            orderable: false,
+                            searchable: false
+                        },
+                        {
+                            data: 'quantity',
+                            name: 'quantity'
+                        },
+                        {
+                            data: 'stock_status',
+                            name: 'stock_status',
+                            orderable: false,
+                            searchable: false
+                        }
+                    ],
+                    language: {
+                        search: '',
+                        searchPlaceholder: 'Search inventory...',
+                        lengthMenu: 'Show _MENU_ entries',
+                        emptyTable: 'No inventory records found.',
+                        zeroRecords: 'No matching inventory records found.'
+                    },
+                    dom:
+                        "<'row g-3 align-items-center mb-3 warehouse-table-top'<'col-lg-6 col-md-6'l><'col-lg-6 col-md-6'f>>" +
+                        "<'row'<'col-12'tr>>" +
+                        "<'row g-3 align-items-center warehouse-table-footer'<'col-lg-6 col-md-6'i><'col-lg-6 col-md-6'p>>",
+                    columnDefs: [
+                        {
+                            targets: [0, 1, 7, 8, 9, 10],
+                            className: 'text-nowrap'
+                        },
+                        {
+                            targets: [7, 8, 9],
+                            className: 'text-end text-nowrap'
+                        }
+                    ],
+                    initComplete: function () {
+                        const searchInput = $('#warehouse-inventory-table_filter input');
+                        const lengthSelect = $('#warehouse-inventory-table_length select');
+
+                        searchInput.off();
+
+                        let searchTimer = null;
+
+                        searchInput.on('input', function () {
+                            const value = this.value;
+
+                            clearTimeout(searchTimer);
+
+                            searchTimer = setTimeout(function () {
+                                table.search(value).draw();
+                            }, 250);
+                        });
+
+                        lengthSelect.off('change').on('change', function () {
+                            table.page.len($(this).val()).draw();
+                        });
+                    }
+                });
+
+                $('#inventory-branch-filter, #inventory-location-filter').on('change', function () {
+                    table.ajax.reload(null, true);
+                });
+
+                $('#inventory-reset-filter').on('click', function () {
+                    $('#inventory-branch-filter').val('');
+                    $('#inventory-location-filter').val('');
+                    $('#warehouse-inventory-table_filter input').val('');
+                    table.search('').draw();
+                    table.ajax.reload(null, true);
+                });
+            });
+        </script>
+
+        <style>
+            .warehouse-card {
+                background: #ffffff;
+                border-radius: 18px !important;
+                border: 1px solid #edf0f5 !important;
+                box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055) !important;
+                overflow: hidden;
+            }
+
+            .warehouse-soft-btn {
+                border-radius: 10px;
+                padding: 10px 18px;
+                font-weight: 700;
+            }
+
+            .warehouse-reset-btn {
+                border-radius: 8px;
+                min-height: 42px;
+                font-weight: 600;
+            }
+
+            .warehouse-filter {
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                min-height: 42px;
+                box-shadow: none !important;
+            }
+
+            .warehouse-filter:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            .warehouse-table-wrap {
+                border: 0 !important;
+                border-radius: 0 !important;
+                overflow: hidden;
+                width: 100%;
+                background: #ffffff;
+            }
+
+            .warehouse-table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
+
+            .warehouse-table thead th {
+                background: #f4f6fb;
+                color: #8a94a6;
+                font-size: 12px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                border-bottom: 0 !important;
+                padding: 14px 16px;
+                white-space: nowrap;
+            }
+
+            .warehouse-table tbody td {
+                padding: 16px;
+                border-bottom: 0 !important;
+                vertical-align: middle;
+            }
+
+            .warehouse-table tbody tr {
+                transition: all 0.18s ease-in-out;
+            }
+
+            .warehouse-table tbody tr:hover {
+                background: #f8faff;
+            }
+
+            #warehouse-inventory-table.dataTable {
+                border: 0 !important;
+                margin-bottom: 0 !important;
+            }
+
+            #warehouse-inventory-table.dataTable tbody td.dataTables_empty {
+                text-align: center !important;
+                vertical-align: middle !important;
+                padding: 52px 16px !important;
+                color: #64748b !important;
+                font-size: 15px;
+                font-weight: 500;
+                height: 120px;
+                border-bottom: 0 !important;
+            }
+
+            #warehouse-inventory-table tbody tr:has(td.dataTables_empty):hover {
+                background: #ffffff !important;
+            }
+
+            .warehouse-table-footer {
+                padding: 22px 22px 6px !important;
+                margin: 0 !important;
+                border-top: 0 !important;
+                align-items: center;
+                background: #ffffff;
+            }
+
+            .warehouse-table-footer .dataTables_info {
+                padding-top: 0 !important;
+                color: #64748b;
+                font-size: 13px;
+            }
+
+            .warehouse-table-footer .dataTables_paginate {
+                padding-top: 0 !important;
+                margin-top: 0 !important;
+                display: flex;
+                justify-content: flex-end;
+            }
+
+            .warehouse-table-footer .pagination {
+                margin-bottom: 0 !important;
+                justify-content: flex-end;
+                gap: 0;
+            }
+
+            .warehouse-table-footer .pagination .page-item {
+                margin: 0;
+            }
+
+            .warehouse-table-footer .pagination .page-link {
+                min-width: 42px;
+                height: 38px;
+                padding: 8px 14px;
+                border: 1px solid #dce3ef !important;
+                color: #3a57e8 !important;
+                background: #ffffff !important;
+                font-size: 15px;
+                font-weight: 500;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: none !important;
+                outline: 0 !important;
+                border-radius: 0 !important;
+                line-height: 1.2;
+            }
+
+            .warehouse-table-footer .pagination .page-item:first-child .page-link {
+                border-top-left-radius: 8px !important;
+                border-bottom-left-radius: 8px !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item:last-child .page-link {
+                border-top-right-radius: 8px !important;
+                border-bottom-right-radius: 8px !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.active .page-link {
+                background: #3a57e8 !important;
+                border-color: #3a57e8 !important;
+                color: #ffffff !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.disabled .page-link {
+                color: #94a3b8 !important;
+                background: #ffffff !important;
+                border-color: #dce3ef !important;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            .warehouse-table-footer .pagination .page-link:hover {
+                background: #eef2ff !important;
+                border-color: #3a57e8 !important;
+                color: #3a57e8 !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.active .page-link:hover {
+                background: #3a57e8 !important;
+                border-color: #3a57e8 !important;
+                color: #ffffff !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter {
+                text-align: right;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter input {
+                min-width: 260px;
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                padding: 9px 12px;
+                margin-left: 8px;
+                box-shadow: none !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter input:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_length select {
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                padding: 7px 32px 7px 10px;
+                box-shadow: none !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_length select:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            .pagination {
+                margin-bottom: 0;
+                justify-content: flex-end;
+            }
+
+            @media (max-width: 991px) {
+                .warehouse-table-wrap {
+                    overflow-x: auto;
+                }
+
+                div.dataTables_wrapper div.dataTables_filter {
+                    text-align: left;
+                }
+
+                div.dataTables_wrapper div.dataTables_filter input {
+                    width: 100%;
+                    min-width: unset;
+                    margin-left: 0;
+                    margin-top: 8px;
+                }
+
+                .warehouse-table-footer {
+                    padding: 18px 14px 6px !important;
+                }
+
+                .warehouse-table-footer .dataTables_paginate,
+                .warehouse-table-footer .pagination {
+                    justify-content: flex-start !important;
+                }
+
+                .warehouse-table-footer .pagination .page-link {
+                    min-width: 38px;
+                    height: 36px;
+                    padding: 7px 12px;
+                    font-size: 14px;
+                }
+            }
+        </style>
+    @endpush
+</x-app-layout>

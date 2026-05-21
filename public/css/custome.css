@@ -1,0 +1,1524 @@
+/*!
+* Version: 1.2.0
+* Template: Example Project
+* Author: iqonic.design
+* Design and Developed by: iqonic.design
+* NOTE: This file contains the styling for Template.
+*
+*/
+:focus {
+  outline: none;
+}
+
+.sign-bg {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.sign-bg.sign-bg-right {
+  left: auto;
+  right: 0;
+}
+
+.gradient-main {
+  height: 100%;
+  width: 100%;
+  -o-object-fit: cover;
+     object-fit: cover;
+}
+
+.login-bottom {
+  margin-top: -12.5rem;
+}
+
+@media (min-width: 1400px) {
+  .auth-card {
+    padding: 0 6.25rem;
+  }
+}
+@media (max-width: 575.98px) {
+  .login-header {
+    height: 12.5rem !important;
+  }
+
+  .login-bottom {
+    margin-top: -6.25rem;
+  }
+}
+.card .iq-dashed-border {
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  border: 1px dashed #ced4da;
+}
+.card .card-body .grid-flow-col {
+  grid-auto-flow: column;
+}
+.card .card-body .iq-icon-box-2 {
+  height: 36px;
+  width: 36px;
+  min-width: 36px;
+  line-height: 36px;
+  background: #F5F6FA;
+  text-align: center;
+  font-size: 1rem;
+  text-decoration: none;
+  border-radius: 0.5rem;
+}
+.card .card-body .iq-media-group-1 .iq-media-1 {
+  margin-left: -1.25rem;
+  position: relative;
+  z-index: 0;
+}
+.card .card-body .iq-media-group-1 .iq-media-1:hover {
+  z-index: 9;
+}
+.card .card-body .iq-media-group-1 .iq-media-1 img {
+  border: 2px solid #eee;
+}
+.card .card-body .iq-media-group-1 .iq-media-1:first-child {
+  margin-left: 0;
+}
+.card .card-body .iq-media-group-1 .iq-media.border {
+  border: 2px solid #eee;
+}
+.card .card-body .iq-media-1 {
+  display: inline-flex;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  border-radius: 0.25rem;
+}
+.card .card-body .iq-media-1:hover {
+  text-decoration: none;
+}
+
+.pricing .table thead tr {
+  background-color: unset;
+}
+.pricing .table th {
+  border-top: none;
+  border-bottom: 1px solid #eee;
+}
+.pricing .table td {
+  border-top: none !important;
+}
+.pricing .table tr {
+  border-bottom: 1px solid #eee;
+}
+
+.prc-box {
+  background: #d8ddfa;
+  padding: 15px;
+  position: relative;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.type {
+  position: absolute;
+  background: #3a57e8;
+  padding: 9px 25px;
+  color: #fff;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 500;
+}
+.type:before {
+  position: absolute;
+  content: "";
+  width: 0;
+  height: 0;
+  right: -15px;
+  top: 0px;
+  border-left: 15px solid #0c112e;
+  border-top: 15px solid transparent;
+}
+.type:after {
+  position: absolute;
+  content: "";
+  width: 0;
+  height: 0;
+  left: -15px;
+  top: 0px;
+  border-right: 15px solid #0c112e;
+  border-top: 15px solid transparent;
+}
+
+.prc-box.active {
+  background: #3a57e8;
+}
+.prc-box.active .h3 {
+  color: #fff;
+}
+.prc-box.active .type {
+  background: #d8ddfa;
+  color: #212529;
+}
+.prc-box.active .type:before {
+  border-left: 16px solid #0c112e;
+  right: -16px;
+}
+.prc-box.active .type:after {
+  border-right: 16px solid #0c112e;
+  left: -16px;
+}
+
+.prc-wrap {
+  border-bottom: none !important;
+}
+
+.child-cell.active {
+  color: #3a57e8;
+  stroke: #3a57e8;
+}
+
+.line-around {
+  border-bottom: 1px solid #eee;
+  line-height: 0.1em;
+  margin: 10px 0 20px;
+}
+.line-around .line-around-1 {
+  text-transform: uppercase;
+  background: #fff;
+  padding: 0 10px 0 0;
+}
+
+.iq-single-card {
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+@media (max-width: 767.98px) {
+  .iq-single-card {
+    border-radius: 0 0 0.5rem 0.5rem;
+  }
+}
+.iq-star-inserted .iq-star-inserted-1.col {
+  padding-right: unset;
+}
+.iq-star-inserted .iq-star-inserted-2 {
+  z-index: 2;
+}
+.iq-star-inserted .iq-star-inserted-2.col {
+  padding: unset;
+}
+.iq-star-inserted .iq-star-inserted-2.col .card {
+  height: 100%;
+}
+.iq-star-inserted .iq-star-inserted-3.col {
+  padding-left: unset;
+}
+
+@media (max-width: 991.98px) {
+  .iq-star-inserted .card.my-5 {
+    margin: unset !important;
+    margin-bottom: 2rem !important;
+  }
+  .iq-star-inserted .iq-star-inserted-1.col {
+    padding-right: calc(var(--bs-gutter-x) / 2);
+  }
+  .iq-star-inserted .iq-star-inserted-2.col {
+    padding-right: calc(var(--bs-gutter-x) / 2);
+    padding-left: calc(var(--bs-gutter-x) / 2);
+  }
+  .iq-star-inserted .iq-star-inserted-2.col .card {
+    height: unset;
+    margin-bottom: 2rem !important;
+  }
+  .iq-star-inserted .iq-star-inserted-3.col {
+    padding-left: calc(var(--bs-gutter-x) / 2);
+  }
+}
+.body-class-1 {
+  scroll-behavior: smooth;
+}
+
+.main-img .container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-align: center;
+}
+.main-img .container h1 {
+  margin: 0;
+  font-size: 4.375rem;
+  color: #fff;
+}
+.main-img .container h1 span {
+  padding: 0.375rem 0.875rem;
+  display: inline-block;
+}
+
+.bd-heading-1 .bd-example {
+  margin-top: 1rem;
+}
+.bd-heading-1 .bd-example:first-child {
+  margin-top: 0rem;
+}
+
+.bd-cheatsheet {
+  margin-top: -2rem;
+}
+.bd-cheatsheet section article .card.iq-document-card {
+  padding: 1.5rem;
+}
+.bd-cheatsheet section article .card.iq-document-card .tab-content pre.language-markup {
+  margin: unset;
+}
+
+.bd-aside.card.iq-document-card {
+  padding: 1.5rem;
+  margin-top: -2rem;
+}
+
+/* Table of contents */
+.bd-aside a {
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.125rem;
+  margin-left: 0.25rem;
+  color: rgba(138, 146, 166, 0.95);
+  text-decoration: none;
+}
+.bd-aside a:hover, .bd-aside a:focus {
+  background-color: rgba(58, 87, 232, 0.1);
+}
+.bd-aside .active {
+  font-weight: 600;
+  background-color: rgba(58, 87, 232, 0.1);
+  color: #3a57e8;
+}
+.bd-aside .btn {
+  padding: 0.25rem 0.5rem;
+  font-weight: 600;
+  color: #8A92A6;
+  border: 0;
+}
+.bd-aside .btn .right-icon {
+  transition: transform 0.35s ease;
+}
+.bd-aside .btn:hover, .bd-aside .btn:focus {
+  background-color: rgba(58, 87, 232, 0.1);
+  color: #3a57e8;
+}
+.bd-aside .btn:focus {
+  box-shadow: 0 0 0 0.063rem rgba(58, 87, 232, 0.7);
+}
+.bd-aside .btn[aria-expanded=true] .right-icon {
+  transform: rotate(90deg);
+}
+
+.scrollspy-example {
+  position: relative;
+  height: 12.5rem;
+  margin-top: 0.5rem;
+  overflow: auto;
+}
+
+[id=modal] .bd-example .btn,
+[id=buttons] .bd-example .btn,
+[id=tooltips] .bd-example .btn,
+[id=popovers] .bd-example .btn,
+[id=dropdowns] .bd-example .btn-group,
+[id=dropdowns] .bd-example .dropdown,
+[id=dropdowns] .bd-example .dropup,
+[id=dropdowns] .bd-example .dropend,
+[id=dropdowns] .bd-example .dropstart {
+  margin-top: 0.5rem;
+}
+
+/* Layout */
+@media (min-width: 1200px) {
+  .body-class-1 {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr 4fr 1fr;
+    grid-template-rows: auto;
+  }
+
+  .bd-aside.sticky-xl-top {
+    top: 2rem !important;
+  }
+
+  .bd-header {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 1030;
+    grid-column: 1/span 3;
+  }
+
+  .sticky-xl-top {
+    z-index: 2;
+  }
+
+  .bd-cheatsheet, .bd-cheatsheet section, .bd-cheatsheet article {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: 3fr 1fr;
+    grid-column: span 2/span 2;
+    grid-template-rows: auto;
+  }
+
+  .bd-aside {
+    grid-area: 1/1;
+    scroll-margin-top: 4rem;
+  }
+
+  .bd-cheatsheet section, .bd-cheatsheet section > .iq-side-content {
+    top: 2rem;
+    scroll-margin-top: 0;
+  }
+
+  .bd-cheatsheet article, .bd-cheatsheet .bd-heading {
+    top: calc(7.2rem + 2rem);
+    scroll-margin-top: calc(7.8rem + 2rem);
+  }
+  .bd-cheatsheet .bd-heading {
+    z-index: 1;
+    order: 2;
+  }
+  .bd-cheatsheet .bd-heading .card {
+    margin-bottom: 0;
+  }
+  .bd-cheatsheet article .iq-document-card {
+    margin-bottom: unset;
+  }
+  .bd-cheatsheet article .iq-document-card.iq-doc-head {
+    margin-top: -6.8rem;
+  }
+}
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .mobile-offcanvas {
+    width: 40% !important;
+  }
+}
+@media (max-width: 767.98px) {
+  .main-img .container h1 {
+    font-size: 3.125rem;
+  }
+}
+@media (max-width: 1199.98px) {
+  .header .container {
+    max-width: unset !important;
+  }
+
+  aside.mobile-offcanvas {
+    margin-top: unset !important;
+  }
+  aside.mobile-offcanvas .offcanvas-header {
+    display: block;
+  }
+
+  .body-class-1 {
+    padding: unset;
+  }
+  .body-class-1.container {
+    max-width: unset;
+  }
+
+  #content .iq-side-content .card {
+    margin-top: 1.25rem;
+  }
+
+  .mobile-offcanvas {
+    visibility: hidden;
+    transform: translateX(-100%);
+    border-radius: 0;
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1200;
+    width: 75%;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    transition: visibility 0.3s ease-in-out, transform 0.3s ease-in-out;
+    background: #ffffffd6;
+    -webkit-backdrop-filter: blur(0.5rem);
+            backdrop-filter: blur(0.5rem);
+  }
+
+  .mobile-offcanvas.show {
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .mobile-offcanvas .container, .mobile-offcanvas .container-fluid {
+    display: block;
+  }
+}
+@media (min-width: 1200px) {
+  .bd-aside.card.iq-document-card, .bd-cheatsheet {
+    margin-top: -3rem;
+  }
+
+  aside.mobile-offcanvas .offcanvas-header {
+    display: none;
+  }
+
+  .bd-cheatsheet section .iq-side-content {
+    grid-column-end: 3;
+  }
+  .bd-cheatsheet section .iq-side-content .card {
+    margin-bottom: 0;
+  }
+}
+body.offcanvas-active {
+  overflow: hidden;
+}
+
+body.uikit .btn-download {
+  display: none;
+}
+
+.uisheet.screen-darken {
+  height: 100%;
+  width: 0%;
+  z-index: 30;
+  position: fixed;
+  top: 0;
+  right: 0;
+  opacity: 0;
+  visibility: hidden;
+  background-color: rgba(33, 37, 41, 0.6);
+  transition: opacity 0.2s linear, visibility 0.2s, width 2s ease-in;
+}
+.uisheet.screen-darken.active {
+  z-index: 10;
+  transition: opacity 0.3s ease, width 0s;
+  opacity: 1;
+  width: 100%;
+  visibility: visible;
+}
+
+#back-to-top {
+  display: inline !important;
+}
+#back-to-top .top {
+  bottom: 1.563rem;
+  right: 1.563rem;
+  z-index: 999;
+}
+
+.middle {
+  display: inline !important;
+}
+.middle .mid-menu {
+  position: fixed;
+  top: 9.375rem;
+  left: 0rem;
+  z-index: 999;
+  text-align: center;
+  cursor: pointer;
+  background: #3a57e8;
+  color: #fff;
+  padding: 0.2rem;
+  border-radius: 0 1rem 1rem 0;
+}
+
+.top-1 {
+  top: 1rem;
+}
+/* =========================================================
+   WIZMASTER BRANDING - LOGIN + TOPBAR
+   Add this at the very bottom of public/css/custom.css
+   ========================================================= */
+
+/* ---------- TOPBAR BRAND ---------- */
+.wiz-logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wiz-logo {
+  height: 34px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  transition: all 0.3s ease;
+  animation: wizPulse 3s infinite ease-in-out;
+}
+
+@keyframes wizPulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(58, 87, 232, 0));
+  }
+  50% {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 8px rgba(58, 87, 232, 0.22));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(58, 87, 232, 0));
+  }
+}
+
+.wiz-logo:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 8px rgba(58, 87, 232, 0.45));
+}
+
+.wiz-text {
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #1f3c88;
+  margin-bottom: 0;
+  line-height: 1;
+}
+
+/* ---------- LOGIN BRAND ---------- */
+.wiz-login-logo {
+  height: 72px;
+  width: auto;
+  max-width: 320px;
+  object-fit: contain;
+  animation: wizFloat 4s ease-in-out infinite;
+}
+
+@keyframes wizFloat {
+  0% {
+    transform: translateY(0px);
+    filter: drop-shadow(0 0 0 rgba(58, 87, 232, 0));
+  }
+  50% {
+    transform: translateY(-6px);
+    filter: drop-shadow(0 0 10px rgba(58, 87, 232, 0.18));
+  }
+  100% {
+    transform: translateY(0px);
+    filter: drop-shadow(0 0 0 rgba(58, 87, 232, 0));
+  }
+}
+
+  .wiz-login-text {
+    font-weight: 700;
+    color: #1f3c88;
+    letter-spacing: 1px;
+    text-align: center;
+    margin-bottom: 0;
+    display: inline-block;
+    animation: wizLoginTextGlow 3.8s ease-in-out infinite;
+  }
+
+  @keyframes wizLoginTextGlow {
+    0% {
+      text-shadow: 0 0 0 rgba(58, 87, 232, 0);
+      transform: translateY(0px);
+    }
+    50% {
+      text-shadow: 0 0 10px rgba(58, 87, 232, 0.18);
+      transform: translateY(-2px);
+    }
+    100% {
+      text-shadow: 0 0 0 rgba(58, 87, 232, 0);
+      transform: translateY(0px);
+    }
+  }
+
+/* ---------- BETTER BRAND LINK SPACING ---------- */
+.navbar-brand .wiz-logo {
+  display: block;
+}
+
+.navbar-brand.d-flex.align-items-center.gap-2 {
+  gap: 0.65rem !important;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 991.98px) {
+  .wiz-logo {
+    height: 30px;
+    max-width: 150px;
+  }
+
+  .wiz-text {
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #1f3c88;
+    margin-bottom: 0;
+    line-height: 1;
+    display: inline-block;
+    position: relative;
+    animation: wizTextFloat 3.5s ease-in-out infinite, wizTextGlow 3.5s ease-in-out infinite;
+    transition: all 0.3s ease;
+  }
+
+  .wiz-text:hover {
+    transform: scale(1.04);
+    color: #16357a;
+  }
+
+  @keyframes wizTextFloat {
+    0% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+    100% {
+      transform: translateY(0px);
+    }
+  }
+
+  @keyframes wizTextGlow {
+    0% {
+      text-shadow: 0 0 0 rgba(58, 87, 232, 0);
+    }
+    50% {
+      text-shadow: 0 0 8px rgba(58, 87, 232, 0.22);
+    }
+    100% {
+      text-shadow: 0 0 0 rgba(58, 87, 232, 0);
+    }
+  }
+
+  .wiz-login-logo {
+    height: 60px;
+    max-width: 260px;
+  }
+
+  .wiz-login-text {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .wiz-logo {
+    height: 26px;
+    max-width: 130px;
+  }
+
+  .wiz-login-logo {
+    height: 52px;
+    max-width: 220px;
+  }
+
+  .wiz-login-text {
+    font-size: 1rem;
+  }
+}
+/* =========================================================
+   WIZMASTER LOGIN 3D GLOW TEXT
+   ========================================================= */
+
+.wiz-3d-wrap {
+  perspective: 1000px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 64px;
+  margin-bottom: 0.25rem;
+}
+
+.wiz-3d-stack {
+  position: relative;
+  display: inline-block;
+  transform-style: preserve-3d;
+  animation: wizStackFloat 5s ease-in-out infinite;
+}
+
+.wiz-3d-text {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: block;
+  width: max-content;
+  font-weight: 900;
+  font-size: 2.1rem;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  text-align: center;
+  text-transform: none;
+  color: #123a8f;
+  user-select: none;
+  pointer-events: none;
+  font-family: inherit;
+}
+
+/* layered 3D depth */
+.wiz-3d-text:nth-child(1) { transform: translateX(-50%) translateZ(0px);  color: #0e2d6f; }
+.wiz-3d-text:nth-child(2) { transform: translateX(-50%) translateZ(4px);  color: #10357f; }
+.wiz-3d-text:nth-child(3) { transform: translateX(-50%) translateZ(8px);  color: #123d90; }
+.wiz-3d-text:nth-child(4) { transform: translateX(-50%) translateZ(12px); color: #1546a1; }
+.wiz-3d-text:nth-child(5) { transform: translateX(-50%) translateZ(16px); color: #1850b3; }
+.wiz-3d-text:nth-child(6) { transform: translateX(-50%) translateZ(20px); color: #1c5ac5; }
+.wiz-3d-text:nth-child(7) { transform: translateX(-50%) translateZ(24px); color: #2165d7; }
+.wiz-3d-text:nth-child(8) {
+  transform: translateX(-50%) translateZ(28px);
+  color: #ffffff;
+  text-shadow:
+    0 0 6px rgba(36, 37, 41, 0.45),
+    0 0 14px rgba(37, 39, 41, 0.35),
+    0 0 24px rgba(22, 25, 26, 0.22);
+  animation: wiz3DGlow 4s ease-in-out infinite;
+}
+
+/* floating whole stack */
+@keyframes wizStackFloat {
+  0% {
+    transform: rotateX(8deg) rotateY(-7deg) translateY(0px);
+  }
+  50% {
+    transform: rotateX(10deg) rotateY(7deg) translateY(-3px);
+  }
+  100% {
+    transform: rotateX(8deg) rotateY(-7deg) translateY(0px);
+  }
+}
+
+/* front text glow pulse */
+@keyframes wiz3DGlow {
+  0% {
+    text-shadow:
+      0 0 4px rgba(58, 87, 232, 0.30),
+      0 0 10px rgba(59, 138, 255, 0.20),
+      0 0 18px rgba(0, 183, 255, 0.12);
+  }
+  50% {
+    text-shadow:
+      0 0 8px rgba(58, 87, 232, 0.50),
+      0 0 18px rgba(59, 138, 255, 0.38),
+      0 0 32px rgba(0, 183, 255, 0.24);
+  }
+  100% {
+    text-shadow:
+      0 0 4px rgba(58, 87, 232, 0.30),
+      0 0 10px rgba(59, 138, 255, 0.20),
+      0 0 18px rgba(0, 183, 255, 0.12);
+  }
+}
+
+/* better sizing for login page */
+@media (max-width: 991.98px) {
+  .wiz-3d-wrap {
+    min-height: 56px;
+  }
+
+  .wiz-3d-text {
+    font-size: 1.7rem;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .wiz-3d-wrap {
+    min-height: 48px;
+  }
+
+  .wiz-3d-text {
+    font-size: 1.25rem;
+    letter-spacing: 0.4px;
+  }
+}
+/* =========================================================
+   WIZMASTER LOGIN SHADOW TEXT ANIMATION
+   ========================================================= */
+
+:root {
+  --wiz-color-primary: #6363ed;
+  --wiz-color-secondary: #2b56b3;
+  --wiz-color-tertiary: #f90000;
+  --wiz-color-quaternary: #6aa8ff;
+  --wiz-color-quinary: #5a80b3;
+}
+
+.wiz-shadow-text-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+  padding: 0 10px;
+  overflow: visible;
+}
+
+.wiz-shadow-text {
+  font-family: inherit;
+  font-weight: 800;
+  text-transform: none;
+  font-size: clamp(1.6rem, 2vw + 1rem, 2.4rem);
+  text-align: center;
+  letter-spacing: 0.08rem;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--wiz-color-primary);
+  text-shadow:
+    3px 3px 0 var(--wiz-color-secondary),
+    6px 6px 0 var(--wiz-color-tertiary),
+    9px 9px 0 var(--wiz-color-quaternary),
+    12px 12px 0 var(--wiz-color-quinary);
+  animation: wizShadowMove 3s ease-in-out infinite;
+  display: inline-block;
+  will-change: transform, text-shadow;
+}
+
+@keyframes wizShadowMove {
+  0% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+  10% {
+    transform: translate(-2px, -2px);
+    text-shadow: 2px 2px 0 var(--wiz-color-secondary);
+  }
+  20% {
+    transform: translate(-4px, -4px);
+    text-shadow:
+      2px 2px 0 var(--wiz-color-secondary),
+      4px 4px 0 var(--wiz-color-tertiary);
+  }
+  30% {
+    transform: translate(-6px, -6px);
+    text-shadow:
+      2px 2px 0 var(--wiz-color-secondary),
+      4px 4px 0 var(--wiz-color-tertiary),
+      6px 6px 0 var(--wiz-color-quaternary);
+  }
+  40%,
+  55% {
+    transform: translate(-8px, -8px);
+    text-shadow:
+      2px 2px 0 var(--wiz-color-secondary),
+      4px 4px 0 var(--wiz-color-tertiary),
+      6px 6px 0 var(--wiz-color-quaternary),
+      8px 8px 0 var(--wiz-color-quinary);
+  }
+  70% {
+    transform: translate(-6px, -6px);
+    text-shadow:
+      2px 2px 0 var(--wiz-color-secondary),
+      4px 4px 0 var(--wiz-color-tertiary),
+      6px 6px 0 var(--wiz-color-quaternary);
+  }
+  85% {
+    transform: translate(-4px, -4px);
+    text-shadow:
+      2px 2px 0 var(--wiz-color-secondary),
+      4px 4px 0 var(--wiz-color-tertiary);
+  }
+  100% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .wiz-shadow-text {
+    letter-spacing: 0.05rem;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .wiz-shadow-text {
+    font-size: clamp(1.2rem, 5vw, 1.6rem);
+    letter-spacing: 0.03rem;
+  }
+}
+/* =========================================================
+   WIZMASTER SIDEBAR MINI SHADOW TEXT
+   ========================================================= */
+
+.wiz-sidebar-text-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: visible;
+  min-width: 0;
+}
+
+.wiz-sidebar-shadow-text {
+  font-family: inherit;
+  font-weight: 800;
+  text-transform: none;
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0.04rem;
+  margin: 0;
+  color: #6363ed !important;
+  -webkit-text-fill-color: #6363ed !important;
+  text-fill-color: #6363ed;
+  text-shadow:
+    2px 2px 0 #114cb0,
+    4px 4px 0 #0733a3,
+    6px 6px 0 #fe0000;
+  animation: wizSidebarShadowMove 1.8s ease-in-out infinite;
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform, text-shadow;
+}
+
+@keyframes wizSidebarShadowMove {
+  0% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+  15% {
+    transform: translate(-1px, -1px);
+    text-shadow: 1px 1px 0 #245fc2;
+  }
+  30% {
+    transform: translate(-2px, -2px);
+    text-shadow:
+      1px 1px 0 #245fc2,
+      2px 2px 0 #ff4d4d;
+  }
+  45%,
+  60% {
+    transform: translate(-3px, -3px);
+    text-shadow:
+      1px 1px 0 #245fc2,
+      2px 2px 0 #ff4d4d,
+      3px 3px 0 #8db8ff;
+  }
+  75% {
+    transform: translate(-2px, -2px);
+    text-shadow:
+      1px 1px 0 #245fc2,
+      2px 2px 0 #ff4d4d;
+  }
+  90% {
+    transform: translate(-1px, -1px);
+    text-shadow: 1px 1px 0 #245fc2;
+  }
+  100% {
+    transform: translate(0, 0);
+    text-shadow: none;
+  }
+}
+
+.sidebar .navbar-brand {
+  min-width: 0;
+  padding-right: 26px;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar .navbar-brand .wiz-logo {
+  flex-shrink: 0;
+}
+
+.sidebar .wiz-sidebar-text-wrap {
+  margin-left: -10px;
+}
+
+.sidebar .sidebar-header {
+  position: relative;
+}
+
+.sidebar .sidebar-toggle {
+  position: relative;
+  z-index: 2;
+}
+
+/* responsive sidebar title */
+@media (max-width: 1199.98px) {
+  .wiz-sidebar-shadow-text {
+    font-size: 1.3rem;
+  }
+}
+/* =========================================================
+   Wizmaster Simple Sidebar Brand + Collapse Button Fix
+   ========================================================= */
+
+.sidebar .navbar-brand,
+.sidebar-default .navbar-brand,
+.iq-sidebar .navbar-brand {
+    min-height: 72px !important;
+    padding: 14px 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    overflow: visible !important;
+}
+
+.sidebar .navbar-brand img,
+.sidebar-default .navbar-brand img,
+.iq-sidebar .navbar-brand img {
+    width: 38px !important;
+    height: 38px !important;
+    object-fit: contain !important;
+    filter: none !important;
+    box-shadow: none !important;
+}
+
+.sidebar .logo-title,
+.sidebar-default .logo-title,
+.iq-sidebar .logo-title {
+    color: #315cf6 !important;
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    letter-spacing: .2px !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+    text-shadow: none !important;
+    white-space: normal !important;
+    max-width: 135px !important;
+}
+
+/* Collapse arrow button */
+.sidebar-toggle,
+.sidebar-default .sidebar-toggle,
+.iq-sidebar .sidebar-toggle {
+    position: absolute !important;
+    top: 86px !important;
+    right: -14px !important;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 50% !important;
+    background: #315cf6 !important;
+    color: #ffffff !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 4px 12px rgba(49, 92, 246, .18) !important;
+    z-index: 999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.sidebar-toggle svg,
+.sidebar-default .sidebar-toggle svg,
+.iq-sidebar .sidebar-toggle svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* Keep the arrow visible while allowing sidebar menu to scroll cleanly */
+.sidebar,
+.sidebar-default,
+.iq-sidebar {
+    overflow: visible !important;
+}
+
+.sidebar-body,
+.iq-sidebar .sidebar-body,
+.sidebar-default .sidebar-body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    max-height: calc(100vh - 86px) !important;
+    scrollbar-width: none !important;
+}
+
+.sidebar-body::-webkit-scrollbar,
+.iq-sidebar .sidebar-body::-webkit-scrollbar,
+.sidebar-default .sidebar-body::-webkit-scrollbar {
+    width: 0 !important;
+    display: none !important;
+}
+
+/* =========================================================
+   WIZMASTER FINAL OVERRIDE - SIMPLE SIDEBAR BRAND + ARROW
+   Put this at the VERY BOTTOM. Do not add old animated logo CSS after this.
+   ========================================================= */
+
+/* Sidebar container should not clip the collapse button */
+.sidebar,
+.sidebar-default,
+.iq-sidebar {
+    overflow: visible !important;
+}
+
+/* Header spacing */
+.sidebar .sidebar-header,
+.sidebar-default .sidebar-header,
+.iq-sidebar .sidebar-header {
+    min-height: 74px !important;
+    height: 74px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Brand/logo area */
+.sidebar .navbar-brand,
+.sidebar-default .navbar-brand,
+.iq-sidebar .navbar-brand {
+    min-height: 74px !important;
+    height: 74px !important;
+    width: 100% !important;
+    padding: 12px 42px 12px 16px !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    overflow: hidden !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* Logo image: simple, no pulse/float/glow */
+.sidebar .navbar-brand img,
+.sidebar-default .navbar-brand img,
+.iq-sidebar .navbar-brand img,
+.sidebar .wiz-logo,
+.sidebar-default .wiz-logo,
+.iq-sidebar .wiz-logo {
+    width: 34px !important;
+    height: 34px !important;
+    max-width: 34px !important;
+    min-width: 34px !important;
+    object-fit: contain !important;
+    filter: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+    flex-shrink: 0 !important;
+}
+
+/* Sidebar brand text: remove 3D/shadow animation */
+.sidebar .logo-title,
+.sidebar-default .logo-title,
+.iq-sidebar .logo-title,
+.sidebar .wiz-text,
+.sidebar-default .wiz-text,
+.iq-sidebar .wiz-text,
+.sidebar .wiz-sidebar-shadow-text,
+.sidebar-default .wiz-sidebar-shadow-text,
+.iq-sidebar .wiz-sidebar-shadow-text {
+    color: #315cf6 !important;
+    -webkit-text-fill-color: #315cf6 !important;
+    text-fill-color: #315cf6 !important;
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    letter-spacing: .2px !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+    text-shadow: none !important;
+    white-space: normal !important;
+    max-width: 145px !important;
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+    position: static !important;
+}
+
+.sidebar .wiz-sidebar-text-wrap,
+.sidebar-default .wiz-sidebar-text-wrap,
+.iq-sidebar .wiz-sidebar-text-wrap {
+    margin-left: 0 !important;
+    overflow: hidden !important;
+    min-width: 0 !important;
+}
+
+/* Collapse arrow: fixed clean position, not covered by topbar/content */
+.sidebar .sidebar-toggle,
+.sidebar-default .sidebar-toggle,
+.iq-sidebar .sidebar-toggle {
+    position: absolute !important;
+    top: 58px !important;
+    right: -15px !important;
+    left: auto !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    border-radius: 50% !important;
+    background: #315cf6 !important;
+    color: #ffffff !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 6px 14px rgba(49, 92, 246, .22) !important;
+    z-index: 99999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transform: none !important;
+}
+
+.sidebar .sidebar-toggle svg,
+.sidebar-default .sidebar-toggle svg,
+.iq-sidebar .sidebar-toggle svg {
+    width: 14px !important;
+    height: 14px !important;
+    margin: 0 !important;
+}
+
+/* Sidebar body scroll without ugly visible scrollbar */
+.sidebar .sidebar-body,
+.sidebar-default .sidebar-body,
+.iq-sidebar .sidebar-body {
+    max-height: calc(100vh - 74px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: none !important;
+    padding-bottom: 24px !important;
+}
+
+.sidebar .sidebar-body::-webkit-scrollbar,
+.sidebar-default .sidebar-body::-webkit-scrollbar,
+.iq-sidebar .sidebar-body::-webkit-scrollbar {
+    width: 0 !important;
+    display: none !important;
+}
+/* =========================================================
+   WIZMASTER SIDEBAR BRAND FINAL FIX
+   - Simple flat brand
+   - One collapse arrow only
+   - Hide duplicate body/header arrow
+   ========================================================= */
+
+/* Hide duplicate collapse arrow that appears inside main content/header */
+.content-inner .sidebar-toggle,
+.main-content .sidebar-toggle,
+.iq-navbar .sidebar-toggle,
+.navbar .sidebar-toggle,
+.header .sidebar-toggle,
+.nav-header .sidebar-toggle {
+    display: none !important;
+}
+
+/* Keep only the sidebar collapse arrow visible */
+.sidebar .sidebar-toggle,
+.sidebar-default .sidebar-toggle,
+.iq-sidebar .sidebar-toggle,
+aside.sidebar .sidebar-toggle {
+    display: flex !important;
+    position: absolute !important;
+    top: 76px !important;
+    right: -13px !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 50% !important;
+    background: #3a57e8 !important;
+    color: #ffffff !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 4px 10px rgba(58, 87, 232, 0.20) !important;
+    z-index: 9999 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Arrow icon size */
+.sidebar .sidebar-toggle svg,
+.sidebar-default .sidebar-toggle svg,
+.iq-sidebar .sidebar-toggle svg,
+aside.sidebar .sidebar-toggle svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* Sidebar must allow the arrow to sit outside the edge */
+.sidebar,
+.sidebar-default,
+.iq-sidebar,
+aside.sidebar {
+    overflow: visible !important;
+}
+
+/* Brand area spacing */
+.sidebar .navbar-brand,
+.sidebar-default .navbar-brand,
+.iq-sidebar .navbar-brand,
+aside.sidebar .navbar-brand {
+    min-height: 72px !important;
+    padding: 12px 14px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    overflow: visible !important;
+}
+
+/* Logo image: simple, no effects */
+.sidebar .navbar-brand img,
+.sidebar-default .navbar-brand img,
+.iq-sidebar .navbar-brand img,
+aside.sidebar .navbar-brand img,
+.sidebar .wiz-logo,
+.sidebar-default .wiz-logo,
+.iq-sidebar .wiz-logo,
+aside.sidebar .wiz-logo {
+    width: 38px !important;
+    height: 38px !important;
+    max-width: 38px !important;
+    object-fit: contain !important;
+    filter: none !important;
+    box-shadow: none !important;
+    animation: none !important;
+    transform: none !important;
+}
+
+/* Brand text: simple flat */
+.sidebar .logo-title,
+.sidebar-default .logo-title,
+.iq-sidebar .logo-title,
+aside.sidebar .logo-title,
+.sidebar .wiz-text,
+.sidebar-default .wiz-text,
+.iq-sidebar .wiz-text,
+aside.sidebar .wiz-text,
+.sidebar .wiz-sidebar-shadow-text,
+.sidebar-default .wiz-sidebar-shadow-text,
+.iq-sidebar .wiz-sidebar-shadow-text,
+aside.sidebar .wiz-sidebar-shadow-text {
+    color: #315cf6 !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.4px !important;
+    line-height: 1.05 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-shadow: none !important;
+    filter: none !important;
+    animation: none !important;
+    transform: none !important;
+    white-space: normal !important;
+    max-width: 135px !important;
+}
+
+/* Optional: force two-line corporation look */
+.sidebar .logo-title,
+.sidebar-default .logo-title,
+.iq-sidebar .logo-title,
+aside.sidebar .logo-title {
+    text-transform: uppercase !important;
+}
+
+/* Sidebar menu scroll stays clean */
+.sidebar-body,
+.iq-sidebar .sidebar-body,
+.sidebar-default .sidebar-body,
+aside.sidebar .sidebar-body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    max-height: calc(100vh - 86px) !important;
+    scrollbar-width: none !important;
+}
+
+.sidebar-body::-webkit-scrollbar,
+.iq-sidebar .sidebar-body::-webkit-scrollbar,
+.sidebar-default .sidebar-body::-webkit-scrollbar,
+aside.sidebar .sidebar-body::-webkit-scrollbar {
+    width: 0 !important;
+    display: none !important;
+}
+/* =========================================================
+   WIZMASTER UNIFORM ACTION BUTTONS
+   Standard: blue pencil + red trash, same square size everywhere
+   ========================================================= */
+.wmc-action-wrap,
+.list-user-action,
+.leave-type-action-wrap,
+.wmc-announcement-action-wrap,
+.warehouse-action-wrap {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+}
+
+.wmc-action-wrap form,
+.list-user-action form,
+.leave-type-action-wrap form,
+.wmc-announcement-action-wrap form,
+.warehouse-action-wrap form,
+.delete-form {
+    display: inline-flex !important;
+    margin: 0 !important;
+}
+
+.wmc-action-btn,
+.leave-type-action-btn,
+.warehouse-action-btn,
+.warehouse-table .btn-sm,
+.list-user-action .btn-icon,
+.wmc-announcement-action-wrap .btn.btn-sm,
+.role-permission-action-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    padding: 0 !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    font-size: 0 !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    vertical-align: middle !important;
+}
+
+.wmc-action-edit,
+.warehouse-action-btn.btn-primary,
+.warehouse-action-btn.btn-warning,
+.warehouse-table .btn-sm.btn-primary,
+.warehouse-table .btn-sm.btn-warning,
+.list-user-action .btn-warning,
+.list-user-action .btn-primary,
+.wmc-announcement-action-wrap .btn-primary,
+.role-permission-action-btn.wmc-action-edit {
+    background-color: #3a57e8 !important;
+    border-color: #3a57e8 !important;
+    color: #ffffff !important;
+}
+
+.wmc-action-delete,
+.warehouse-action-btn.btn-danger,
+.warehouse-table .btn-sm.btn-danger,
+.list-user-action .btn-danger,
+.wmc-announcement-action-wrap .btn-danger,
+.role-permission-action-btn.wmc-action-delete {
+    background-color: #c03221 !important;
+    border-color: #c03221 !important;
+    color: #ffffff !important;
+}
+
+.wmc-action-view {
+    background-color: #079aa2 !important;
+    border-color: #079aa2 !important;
+    color: #ffffff !important;
+}
+
+.wmc-action-btn:hover,
+.leave-type-action-btn:hover,
+.warehouse-action-btn:hover,
+.warehouse-table .btn-sm:hover,
+.list-user-action .btn-icon:hover,
+.wmc-announcement-action-wrap .btn.btn-sm:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, .12) !important;
+    color: #ffffff !important;
+}
+
+.wmc-action-btn svg,
+.wmc-action-btn svg path,
+.leave-type-action-btn svg,
+.leave-type-action-btn svg path,
+.warehouse-action-btn svg,
+.warehouse-action-btn svg path,
+.warehouse-table .btn-sm svg,
+.warehouse-table .btn-sm svg path,
+.list-user-action .btn-icon svg,
+.list-user-action .btn-icon svg path,
+.wmc-announcement-action-wrap .btn.btn-sm svg,
+.wmc-announcement-action-wrap .btn.btn-sm svg path {
+    width: 17px !important;
+    height: 17px !important;
+    stroke: #ffffff !important;
+    color: #ffffff !important;
+}
+
+.wmc-action-disabled,
+.wmc-action-disabled:hover {
+    background-color: #eef0f4 !important;
+    border-color: #d0d5dd !important;
+    color: #98a2b3 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: none !important;
+}

@@ -1,0 +1,412 @@
+<x-app-layout :assets="$assets ?? []">
+    <div class="container-fluid content-inner mt-n5 py-0">
+        @include('purchasing._nav')
+
+        @php
+            $locationName = $purchaseOrder->location?->location_name
+                ?? $purchaseOrder->location?->name
+                ?? '-';
+
+            $paymentSummary = $paymentSummary ?? [
+                'received_amount' => 0,
+                'billed_amount' => 0,
+                'paid_amount' => 0,
+                'payable_balance' => (float) $purchaseOrder->total_amount,
+                'payment_status' => 'Unpaid',
+            ];
+
+            $paymentStatusText = ucwords(str_replace('_', ' ', (string) $paymentSummary['payment_status']));
+            $paymentStatusKey = strtolower(str_replace(' ', '_', $paymentStatusText));
+
+            $paymentStatusClass = match ($paymentStatusKey) {
+                'paid' => 'badge bg-success',
+                'partially_paid' => 'badge bg-primary',
+                'unpaid' => 'badge bg-warning text-dark',
+                default => 'badge bg-secondary',
+            };
+
+            $receivingStatusClass = match ($purchaseOrder->status) {
+                'draft' => 'badge bg-warning text-dark',
+                'ordered' => 'badge bg-info',
+                'partially_received' => 'badge bg-primary',
+                'received' => 'badge bg-success',
+                'cancelled' => 'badge bg-secondary',
+                default => 'badge bg-secondary',
+            };
+        @endphp
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                    <div>
+                        <h4 class="mb-1 fw-bold">
+                            Purchase Order {{ $purchaseOrder->po_no }}
+                            <span class="{{ $receivingStatusClass }} ms-2">
+                                {{ ucwords(str_replace('_', ' ', $purchaseOrder->status)) }}
+                            </span>
+                        </h4>
+                        <p class="text-muted mb-0">
+                            Supplier purchase order details, receiving history, bills, payments, and journal entries.
+                        </p>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ route('purchasing.purchase-orders.print', $purchaseOrder) }}"
+                           class="btn btn-outline-primary"
+                           target="_blank">
+                            Print
+                        </a>
+                        @if(strtolower((string) $purchaseOrder->status) === 'draft')
+                            <form
+                                action="{{ route('purchasing.purchase-orders.mark-ordered', $purchaseOrder->id) }}"
+                                method="POST"
+                                class="d-inline mark-po-ordered-form"
+                            >
+                                @csrf
+                                @method('PATCH')
+
+                                <button type="submit" class="btn btn-success purchasing-soft-btn">
+                                    Mark as Ordered
+                                </button>
+                            </form>
+                        @endif
+                        <a href="{{ route('purchasing.purchase-orders.index') }}" class="btn btn-primary">Back</a>
+                    </div>
+                </div>
+
+                @if(session('success'))
+                    <div class="alert alert-success border border-success text-success">{{ session('success') }}</div>
+                @endif
+
+                @if(session('error'))
+                    <div class="alert alert-danger border border-danger text-danger">{{ session('error') }}</div>
+                @endif
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Total Amount</small>
+                            <h5 class="fw-bold text-success mb-0">{{ number_format((float) $purchaseOrder->total_amount, 2) }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Received Amount</small>
+                            <h5 class="fw-bold mb-0">{{ number_format((float) $paymentSummary['received_amount'], 2) }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Billed Amount</small>
+                            <h5 class="fw-bold mb-0">{{ number_format((float) $paymentSummary['billed_amount'], 2) }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Payment Status</small>
+                            <span class="{{ $paymentStatusClass }}">{{ $paymentStatusText }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Paid Amount</small>
+                            <h5 class="fw-bold text-primary mb-0">{{ number_format((float) $paymentSummary['paid_amount'], 2) }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Balance</small>
+                            <h5 class="fw-bold {{ (float) $paymentSummary['payable_balance'] <= 0 ? 'text-success' : 'text-danger' }} mb-0">
+                                {{ number_format((float) $paymentSummary['payable_balance'], 2) }}
+                            </h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">PO Date</small>
+                            <strong>{{ optional($purchaseOrder->po_date)->format('M d, Y') ?: '-' }}</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Expected Date</small>
+                            <strong>{{ optional($purchaseOrder->expected_date)->format('M d, Y') ?: '-' }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-responsive mb-4">
+                    <table class="table align-middle">
+                        <tbody>
+                            <tr>
+                                <th class="text-muted" style="width:220px;">Supplier</th>
+                                <td>{{ $purchaseOrder->supplier?->supplier_name ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th class="text-muted">Contact</th>
+                                <td>{{ $purchaseOrder->supplier?->contact_person ?? '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th class="text-muted">Location</th>
+                                <td>{{ $locationName }}</td>
+                            </tr>
+                            <tr>
+                                <th class="text-muted">Reference No.</th>
+                                <td>{{ $purchaseOrder->reference_no ?: '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th class="text-muted">Payment Terms</th>
+                                <td>{{ $purchaseOrder->payment_terms ?: '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th class="text-muted">Notes</th>
+                                <td>{{ $purchaseOrder->notes ?: '-' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="fw-bold mb-3">Items</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Item</th>
+                                <th>Description</th>
+                                <th class="text-end">Qty</th>
+                                <th>U/M</th>
+                                <th class="text-end">Unit Price</th>
+                                <th class="text-end">Tax</th>
+                                <th class="text-end">Line Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($purchaseOrder->items as $item)
+                                <tr>
+                                    <td>{{ $loop->iteration }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $item->item_name ?? $item->item?->item_name ?? $item->item?->name ?? '-' }}</div>
+                                        <small class="text-muted">{{ $item->item_code ?? $item->item?->item_code ?? $item->item?->code ?? '-' }}</small>
+                                    </td>
+                                    <td>{{ $item->description ?: '-' }}</td>
+                                    <td class="text-end">{{ number_format((float) $item->quantity, 2) }}</td>
+                                    <td>{{ $item->unit_name ?: '-' }}</td>
+                                    <td class="text-end">{{ number_format((float) $item->unit_price, 2) }}</td>
+                                    <td class="text-end">{{ number_format((float) $item->tax_amount, 2) }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $item->line_total, 2) }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">No purchase order items found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="fw-bold mb-3">Receiving History</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Receiving No.</th>
+                                <th>Date</th>
+                                <th>Location</th>
+                                <th class="text-end">Total Cost</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($receivingRecords ?? collect()) as $receiving)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('purchasing.receiving.show', $receiving->id) }}" class="fw-semibold text-primary">
+                                            {{ $receiving->receiving_no }}
+                                        </a>
+                                    </td>
+                                    <td>{{ $receiving->received_date ? \Carbon\Carbon::parse($receiving->received_date)->format('M d, Y') : '-' }}</td>
+                                    <td>{{ $receiving->location_name ?? $receiving->location_alt_name ?? '-' }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $receiving->total_cost, 2) }}</td>
+                                    <td><span class="badge bg-success">{{ ucwords(str_replace('_', ' ', $receiving->status)) }}</span></td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No receiving records found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="fw-bold mb-3">Bills / AP Vouchers</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Bill No.</th>
+                                <th>Date</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Paid</th>
+                                <th class="text-end">Balance</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($bills ?? collect()) as $bill)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('purchasing.bills.show', $bill) }}" class="fw-semibold text-primary">
+                                            {{ $bill->bill_no }}
+                                        </a>
+                                    </td>
+                                    <td>{{ optional($bill->bill_date)->format('M d, Y') ?: '-' }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $bill->total_amount, 2) }}</td>
+                                    <td class="text-end text-primary fw-bold">{{ number_format((float) $bill->paid_amount, 2) }}</td>
+                                    <td class="text-end {{ (float) $bill->balance <= 0 ? 'text-success' : 'text-danger' }} fw-bold">{{ number_format((float) $bill->balance, 2) }}</td>
+                                    <td>
+                                        @if($bill->status === 'voided')
+                                            <span class="badge bg-danger">Voided</span>
+                                        @elseif((float) $bill->balance <= 0)
+                                            <span class="badge bg-success">Paid</span>
+                                        @elseif((float) $bill->paid_amount > 0)
+                                            <span class="badge bg-primary">Partially Paid</span>
+                                        @else
+                                            <span class="badge bg-warning text-dark">Unpaid</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No purchase bills found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="fw-bold mb-3">Payment History</h5>
+                <div class="table-responsive mb-4">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Payment No.</th>
+                                <th>Date</th>
+                                <th>Source</th>
+                                <th>Paid Through</th>
+                                <th class="text-end">Amount</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($payments ?? collect()) as $poPayment)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('purchasing.payments.show', $poPayment) }}" class="fw-semibold text-primary">
+                                            {{ $poPayment->payment_no }}
+                                        </a>
+                                    </td>
+                                    <td>{{ optional($poPayment->payment_date)->format('M d, Y') ?: '-' }}</td>
+                                    <td>
+                                        @if($poPayment->purchaseBill)
+                                            <span class="badge bg-info">Bill</span>
+                                            <a href="{{ route('purchasing.bills.show', $poPayment->purchaseBill) }}" class="text-primary fw-semibold">
+                                                {{ $poPayment->purchaseBill->bill_no }}
+                                            </a>
+                                        @else
+                                            <span class="badge bg-secondary">Direct PO</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ $poPayment->bankAccount->name ?? '-' }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $poPayment->amount, 2) }}</td>
+                                    <td>
+                                        @if($poPayment->status === 'posted')
+                                            <span class="badge bg-success">Posted</span>
+                                        @elseif($poPayment->status === 'voided')
+                                            <span class="badge bg-danger">Voided</span>
+                                        @else
+                                            <span class="badge bg-secondary">{{ ucfirst($poPayment->status) }}</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No supplier payments found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <h5 class="fw-bold mb-3">Related Journal Entries</h5>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Entry No.</th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th class="text-end">Debit</th>
+                                <th class="text-end">Credit</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse(($journalEntries ?? collect()) as $entry)
+                                <tr>
+                                    <td>
+                                        <a href="{{ route('accounting.journal-entries.show', $entry->id) }}" class="fw-semibold text-primary">
+                                            {{ $entry->entry_no }}
+                                        </a>
+                                    </td>
+                                    <td>{{ $entry->entry_date ? \Carbon\Carbon::parse($entry->entry_date)->format('M d, Y') : '-' }}</td>
+                                    <td>{{ $entry->description ?: '-' }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $entry->total_debit, 2) }}</td>
+                                    <td class="text-end fw-bold">{{ number_format((float) $entry->total_credit, 2) }}</td>
+                                    <td><span class="badge bg-success">{{ ucfirst($entry->status) }}</span></td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">No related journal entries found.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.mark-po-ordered-form').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            if (typeof Swal === 'undefined') {
+                form.submit();
+                return;
+            }
+
+            Swal.fire({
+                title: 'Mark as Ordered?',
+                text: 'This purchase order will become available for receiving.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, mark ordered',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3a57e8'
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+});
+</script>
+@endpush
+</x-app-layout>
