@@ -296,6 +296,8 @@ class SalesReceiptController extends Controller
             }
         });
 
+        \App\Services\SystemNotificationService::notifySalesReceiptCreated($salesReceipt->fresh(['customer']), auth()->id());
+
         return redirect()
             ->route('sales.sales-receipts.show', $salesReceipt)
             ->with('success', 'Sales receipt created successfully.');
@@ -593,3 +595,4 @@ class SalesReceiptController extends Controller
             . ' entries';
     }
 }
+

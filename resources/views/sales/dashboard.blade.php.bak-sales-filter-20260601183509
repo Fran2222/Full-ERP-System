@@ -1,0 +1,914 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0 sales-dashboard-page">
+
+        @php
+            $user = auth()->user();
+
+            $canAccess = function ($permission) use ($user) {
+                return $user && (
+                    $user->can($permission)
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                );
+            };
+
+            abort_unless($canAccess('sales.dashboard.view'), 403);
+
+            $canViewCustomers = $canAccess('sales.customers.view');
+            $canViewInvoices = $canAccess('sales.invoices.view');
+            $canViewPayments = $canAccess('sales.payments.view');
+            $canViewReceipts = false; // WMC: Sales Receipts/POS hidden from Sales dashboard
+
+            $recentInvoices = $recentInvoices ?? collect();
+            $dueSoonInvoices = $dueSoonInvoices ?? collect();
+            $overdueInvoices = $overdueInvoices ?? collect();
+            $recentPayments = $recentPayments ?? collect();
+            $recentSalesReceipts = $recentSalesReceipts ?? collect();
+
+            $salesStatusBadgeClass = function ($status) {
+                return match ($status) {
+                    'paid' => 'sales-badge sales-badge-success',
+                    'partially_paid' => 'sales-badge sales-badge-info',
+                    'unpaid' => 'sales-badge sales-badge-warning',
+                    'void' => 'sales-badge sales-badge-muted',
+                    default => 'sales-badge sales-badge-primary',
+                };
+            };
+
+
+            $salesCardIcon = function ($type) {
+                return match ($type) {
+                    'customers' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11c1.66 0 3-1.57 3-3.5S17.66 4 16 4s-3 1.57-3 3.5S14.34 11 16 11ZM8 11c1.66 0 3-1.57 3-3.5S9.66 4 8 4 5 5.57 5 7.5 6.34 11 8 11Zm0 2c-2.67 0-6 1.34-6 4v1.25c0 .41.34.75.75.75h10.5c.41 0 .75-.34.75-.75V17c0-2.66-3.33-4-6-4Zm8 0c-.31 0-.66.02-1.03.07 1.26.91 2.03 2.16 2.03 3.93v1.25c0 .26-.04.51-.11.75h4.36c.41 0 .75-.34.75-.75V17c0-2.66-3.33-4-6-4Z"/></svg>',
+                    'invoices' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h8l5 5v13.25c0 .97-.78 1.75-1.75 1.75H7.75C6.78 22 6 21.22 6 20.25V3.75C6 2.78 6.78 2 7.75 2H7Zm7 1.8V8h4.2L14 3.8ZM9 12.25c0 .41.34.75.75.75h6.5a.75.75 0 0 0 0-1.5h-6.5a.75.75 0 0 0-.75.75Zm.75 3.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z"/></svg>',
+                    'outstanding' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1.75 20.25A1.18 1.18 0 0 0 2.78 22h18.44c.9 0 1.47-.98 1.03-1.75L12 2Zm.85 15.35c0 .47-.38.85-.85.85s-.85-.38-.85-.85.38-.85.85-.85.85.38.85.85ZM11.25 8.5c0-.41.34-.75.75-.75s.75.34.75.75v5.25c0 .41-.34.75-.75.75s-.75-.34-.75-.75V8.5Z"/></svg>',
+                    'payments' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 5h16.5C21.22 5 22 5.78 22 6.75v10.5c0 .97-.78 1.75-1.75 1.75H3.75C2.78 19 2 18.22 2 17.25V6.75C2 5.78 2.78 5 3.75 5Zm.75 3v1.75h15V8h-15Zm12.75 6.25h-3.5a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5ZM7 12.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>',
+                    'receipts' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 2h11c.83 0 1.5.67 1.5 1.5v18.25c0 .55-.64.86-1.08.53L16 20.83l-1.92 1.45a1 1 0 0 1-1.16 0L11 20.83l-1.92 1.45a1 1 0 0 1-1.16 0L6 20.83l-1.92 1.45A.67.67 0 0 1 3 21.75V3.5C3 2.67 3.67 2 4.5 2h2Zm2 6.25c0 .41.34.75.75.75h5.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0-.75.75Zm0 4c0 .41.34.75.75.75h5.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0-.75.75Zm0 4c0 .41.34.75.75.75h3.5a.75.75 0 0 0 0-1.5h-3.5a.75.75 0 0 0-.75.75Z"/></svg>',
+                    'due' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.01 10.01 0 0 0 12 2Zm.75 5.25v4.45l3.05 1.82a.75.75 0 0 1-.77 1.29l-3.42-2.05a.75.75 0 0 1-.36-.64V7.25a.75.75 0 0 1 1.5 0Z"/></svg>',
+                    'total' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 3h14.5c.97 0 1.75.78 1.75 1.75v14.5c0 .97-.78 1.75-1.75 1.75H4.75C3.78 21 3 20.22 3 19.25V4.75C3 3.78 3.78 3 4.75 3Zm3 5.25c0 .41.34.75.75.75h7a.75.75 0 0 0 0-1.5h-7a.75.75 0 0 0-.75.75Zm0 4c0 .41.34.75.75.75h7a.75.75 0 0 0 0-1.5h-7a.75.75 0 0 0-.75.75Zm0 4c0 .41.34.75.75.75h4a.75.75 0 0 0 0-1.5h-4a.75.75 0 0 0-.75.75Z"/></svg>',
+                    'overdue' => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.01 10.01 0 0 0 12 2Zm.75 13.75c0 .41-.34.75-.75.75s-.75-.34-.75-.75V15a.75.75 0 0 1 1.5 0v.75Zm0-3.75c0 .41-.34.75-.75.75s-.75-.34-.75-.75V7.5a.75.75 0 0 1 1.5 0V12Z"/></svg>',
+                    default => '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/></svg>',
+                };
+            };
+        @endphp
+
+        @include('sales._nav')
+
+        <div class="sales-dashboard-header mb-4">
+            <div>
+                <h4 class="fw-bold mb-1">Sales Dashboard</h4>
+                <p class="text-secondary mb-0">
+                    Monitor sales activity, customer payments, and receivables reminders.
+                </p>
+            </div>
+
+            <div class="sales-dashboard-date">
+                {{ now()->format('M d, Y') }}
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            @if($canViewCustomers)
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.customers.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-blue">
+                                    {!! $salesCardIcon('customers') !!}
+                                </div>
+                                <span class="sales-mini-pill">{{ number_format($activeCustomers ?? 0) }} active</span>
+                            </div>
+
+                            <div class="sales-stat-label">Customers</div>
+                            <div class="sales-stat-value">{{ number_format($totalCustomers ?? 0) }}</div>
+                            <div class="sales-stat-subtitle">Customer master records</div>
+                        </div>
+                    </a>
+                </div>
+            @endif
+
+            @if($canViewInvoices)
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.invoices.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-indigo">
+                                    {!! $salesCardIcon('invoices') !!}
+                                </div>
+                                <span class="sales-mini-pill">{{ number_format($paidInvoices ?? 0) }} paid</span>
+                            </div>
+
+                            <div class="sales-stat-label">Invoices</div>
+                            <div class="sales-stat-value">{{ number_format($totalInvoices ?? 0) }}</div>
+                            <div class="sales-stat-subtitle">{{ number_format($unpaidInvoices ?? 0) }} unpaid / partial</div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.invoices.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-red">
+                                    {!! $salesCardIcon('outstanding') !!}
+                                </div>
+                                <span class="sales-mini-pill-danger">{{ number_format($overdueCount ?? 0) }} overdue</span>
+                            </div>
+
+                            <div class="sales-stat-label">Outstanding</div>
+                            <div class="sales-stat-value text-danger">
+                                {{ number_format((float) ($outstandingBalance ?? 0), 2) }}
+                            </div>
+                            <div class="sales-stat-subtitle">Total receivables balance</div>
+                        </div>
+                    </a>
+                </div>
+            @endif
+
+            @if($canViewPayments)
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.receive-payments.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-green">
+                                    {!! $salesCardIcon('payments') !!}
+                                </div>
+                                <span class="sales-mini-pill">payments</span>
+                            </div>
+
+                            <div class="sales-stat-label">Payments Received</div>
+                            <div class="sales-stat-value text-success">
+                                {{ number_format((float) ($totalPayments ?? 0), 2) }}
+                            </div>
+                            <div class="sales-stat-subtitle">Recorded receive payments</div>
+                        </div>
+                    </a>
+                </div>
+            @endif
+
+            @if($canViewReceipts)
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.sales-receipts.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-purple">
+                                    {!! $salesCardIcon('receipts') !!}
+                                </div>
+                                <span class="sales-mini-pill">{{ number_format($totalSalesReceipts ?? 0) }} records</span>
+                            </div>
+
+                            <div class="sales-stat-label">Sales Receipts</div>
+                            <div class="sales-stat-value">
+                                {{ number_format((float) ($totalSalesReceiptAmount ?? 0), 2) }}
+                            </div>
+                            <div class="sales-stat-subtitle">Paid receipt sales total</div>
+                        </div>
+                    </a>
+                </div>
+            @endif
+
+            @if($canViewInvoices)
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.invoices.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-orange">
+                                    {!! $salesCardIcon('due') !!}
+                                </div>
+                                <span class="sales-mini-pill-warning">{{ number_format($dueSoonCount ?? 0) }} due soon</span>
+                            </div>
+
+                            <div class="sales-stat-label">Due Soon</div>
+                            <div class="sales-stat-value">{{ number_format($dueSoonCount ?? 0) }}</div>
+                            <div class="sales-stat-subtitle">Invoices due within 7 days</div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-3 col-md-6">
+                    <a href="{{ route('sales.invoices.index') }}" class="text-decoration-none">
+                        <div class="sales-stat-card">
+                            <div class="sales-stat-top">
+                                <div class="sales-stat-icon sales-stat-slate">
+                                    {!! $salesCardIcon('total') !!}
+                                </div>
+                                <span class="sales-mini-pill">invoiced</span>
+                            </div>
+
+                            <div class="sales-stat-label">Invoice Total</div>
+                            <div class="sales-stat-value">
+                                {{ number_format((float) ($totalInvoiceAmount ?? 0), 2) }}
+                            </div>
+                            <div class="sales-stat-subtitle">Total invoice amount</div>
+                        </div>
+                    </a>
+                </div>
+            @endif
+        </div>
+
+        @if($canViewInvoices)
+            <div class="row g-4 mb-4">
+                <div class="col-xl-6">
+                    <div class="card sales-panel sales-reminder-card sales-reminder-warning h-100">
+                        <div class="card-header bg-transparent border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="sales-reminder-icon">
+                                    {!! $salesCardIcon('due') !!}
+                                </div>
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Receivables Due Soon</h4>
+                                    <p class="text-secondary mb-0">Invoices due within the next 7 days.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            @forelse($dueSoonInvoices as $invoice)
+                                <div class="sales-alert-row">
+                                    <div>
+                                        <a href="{{ route('sales.invoices.show', $invoice) }}" class="fw-semibold text-primary text-decoration-none">
+                                            {{ $invoice->invoice_no }}
+                                        </a>
+                                        <div class="small text-secondary">
+                                            {{ $invoice->customer?->customer_name ?? '-' }}
+                                        </div>
+                                        <div class="small text-warning-emphasis">
+                                            Due: {{ optional($invoice->due_date)->format('M d, Y') }}
+                                        </div>
+                                    </div>
+
+                                    <div class="text-end">
+                                        <div class="fw-bold text-danger">
+                                            {{ number_format((float) $invoice->balance_due, 2) }}
+                                        </div>
+                                        <span class="sales-badge sales-badge-warning mt-1">Due Soon</span>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="sales-empty-note">No invoices due soon.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-xl-6">
+                    <div class="card sales-panel sales-reminder-card sales-reminder-danger h-100">
+                        <div class="card-header bg-transparent border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="sales-reminder-icon sales-reminder-icon-danger">
+                                    {!! $salesCardIcon('overdue') !!}
+                                </div>
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Overdue Invoices</h4>
+                                    <p class="text-secondary mb-0">Invoices past due date with balance.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            @forelse($overdueInvoices as $invoice)
+                                <div class="sales-alert-row">
+                                    <div>
+                                        <a href="{{ route('sales.invoices.show', $invoice) }}" class="fw-semibold text-primary text-decoration-none">
+                                            {{ $invoice->invoice_no }}
+                                        </a>
+                                        <div class="small text-secondary">
+                                            {{ $invoice->customer?->customer_name ?? '-' }}
+                                        </div>
+                                        <div class="small text-danger">
+                                            Due: {{ optional($invoice->due_date)->format('M d, Y') }}
+                                        </div>
+                                    </div>
+
+                                    <div class="text-end">
+                                        <div class="fw-bold text-danger">
+                                            {{ number_format((float) $invoice->balance_due, 2) }}
+                                        </div>
+                                        <span class="sales-badge sales-badge-danger mt-1">Overdue</span>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="sales-empty-note">No overdue invoices.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-12">
+                    <div class="card sales-panel h-100">
+                        <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="sales-panel-heading d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Recent Invoices</h4>
+                                    <p class="text-secondary mb-0">Latest customer invoices and current balances.</p>
+                                </div>
+
+                                <a href="{{ route('sales.invoices.index') }}" class="btn btn-outline-primary sales-soft-btn sales-soft-btn-sm">
+                                    View Invoices
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            <div class="sales-table-scroll sales-table-frame">
+                                <table class="table table-hover align-middle mb-0 sales-table sales-table-invoices">
+                                    <thead>
+                                        <tr>
+                                            <th>Invoice No.</th>
+                                            <th>Customer</th>
+                                            <th>Due Date</th>
+                                            <th class="text-end">Total</th>
+                                            <th class="text-end">Balance</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+                                        @forelse($recentInvoices as $invoice)
+                                            <tr>
+                                                <td>
+                                                    <a href="{{ route('sales.invoices.show', $invoice) }}" class="fw-semibold text-primary text-decoration-none">
+                                                        {{ $invoice->invoice_no }}
+                                                    </a>
+                                                </td>
+
+                                                <td>
+                                                    <div class="fw-semibold text-dark">{{ $invoice->customer?->customer_name ?? '-' }}</div>
+                                                    <div class="small text-secondary">{{ $invoice->customer?->customer_code ?? '-' }}</div>
+                                                </td>
+
+                                                <td class="text-secondary">
+                                                    {{ optional($invoice->due_date)->format('M d, Y') ?: '-' }}
+                                                </td>
+
+                                                <td class="text-end fw-semibold">
+                                                    {{ number_format((float) $invoice->total_amount, 2) }}
+                                                </td>
+
+                                                <td class="text-end fw-bold {{ (float) $invoice->balance_due > 0 ? 'text-danger' : 'text-success' }}">
+                                                    {{ number_format((float) $invoice->balance_due, 2) }}
+                                                </td>
+
+                                                <td>
+                                                    <span class="{{ $salesStatusBadgeClass($invoice->status) }}">
+                                                        {{ ucwords(str_replace('_', ' ', $invoice->status)) }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="6" class="text-center py-5">
+                                                    <div class="text-secondary">No invoices found.</div>
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if($canViewPayments)
+            <div class="row g-4 mb-4">
+                <div class="col-12">
+                    <div class="card sales-panel h-100">
+                        <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="sales-panel-heading d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Recent Payments</h4>
+                                    <p class="text-secondary mb-0">Latest payments applied to customer invoices.</p>
+                                </div>
+
+                                <a href="{{ route('sales.receive-payments.index') }}" class="btn btn-outline-primary sales-soft-btn sales-soft-btn-sm">
+                                    View Payments
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            <div class="sales-table-scroll sales-table-frame">
+                                <table class="table table-hover align-middle mb-0 sales-table sales-table-payments">
+                                    <thead>
+                                        <tr>
+                                            <th>Payment No.</th>
+                                            <th>Customer</th>
+                                            <th>Invoice</th>
+                                            <th class="text-end">Amount</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+                                        @forelse($recentPayments as $payment)
+                                            <tr>
+                                                <td>
+                                                    <span class="fw-semibold text-primary">{{ $payment->payment_no }}</span>
+                                                    <div class="small text-secondary">
+                                                        {{ optional($payment->payment_date)->format('M d, Y') ?: '-' }}
+                                                    </div>
+                                                </td>
+
+                                                <td>
+                                                    <div class="fw-semibold text-dark">{{ $payment->customer?->customer_name ?? '-' }}</div>
+                                                    <div class="small text-secondary">{{ $payment->payment_method ?: '-' }}</div>
+                                                </td>
+
+                                                <td>
+                                                    @if($payment->invoice && $canViewInvoices)
+                                                        <a href="{{ route('sales.invoices.show', $payment->invoice) }}" class="fw-semibold text-primary text-decoration-none">
+                                                            {{ $payment->invoice->invoice_no }}
+                                                        </a>
+                                                    @else
+                                                        <span class="text-secondary">
+                                                            {{ $payment->invoice?->invoice_no ?? '-' }}
+                                                        </span>
+                                                    @endif
+                                                </td>
+
+                                                <td class="text-end fw-bold text-success">
+                                                    {{ number_format((float) $payment->amount, 2) }}
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="4" class="text-center py-5">
+                                                    <div class="text-secondary">No payments found.</div>
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if($canViewReceipts)
+            <div class="row g-4 sales-dashboard-last-row">
+                <div class="col-12">
+                    <div class="card sales-panel h-100">
+                        <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="sales-panel-heading d-flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Recent Sales Receipts</h4>
+                                    <p class="text-secondary mb-0">Latest paid sales receipts and stock-out transactions.</p>
+                                </div>
+
+                                <a href="{{ route('sales.sales-receipts.index') }}" class="btn btn-outline-primary sales-soft-btn sales-soft-btn-sm">
+                                    View Receipts
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            <div class="sales-table-scroll sales-table-frame">
+                                <table class="table table-hover align-middle mb-0 sales-table sales-table-receipts">
+                                    <thead>
+                                        <tr>
+                                            <th>Receipt No.</th>
+                                            <th>Customer</th>
+                                            <th>Date</th>
+                                            <th class="text-end">Total</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+                                        @forelse($recentSalesReceipts as $receipt)
+                                            <tr>
+                                                <td>
+                                                    <a href="{{ route('sales.sales-receipts.show', $receipt) }}" class="fw-semibold text-primary text-decoration-none">
+                                                        {{ $receipt->receipt_no }}
+                                                    </a>
+                                                </td>
+
+                                                <td>
+                                                    <div class="fw-semibold text-dark">{{ $receipt->customer?->customer_name ?? '-' }}</div>
+                                                    <div class="small text-secondary">{{ $receipt->payment_method ?: '-' }}</div>
+                                                </td>
+
+                                                <td class="text-secondary">
+                                                    {{ optional($receipt->receipt_date)->format('M d, Y') ?: '-' }}
+                                                </td>
+
+                                                <td class="text-end fw-bold text-success">
+                                                    {{ number_format((float) $receipt->total_amount, 2) }}
+                                                </td>
+
+                                                <td>
+                                                    <span class="{{ $salesStatusBadgeClass($receipt->status) }}">
+                                                        {{ ucwords(str_replace('_', ' ', $receipt->status)) }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="5" class="text-center py-5">
+                                                    <div class="text-secondary">No sales receipts found.</div>
+                                                </td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+    </div>
+
+    <style>
+        .sales-dashboard-page {
+            padding-bottom: 38px !important;
+        }
+
+        .sales-dashboard-last-row {
+            margin-bottom: 32px;
+        }
+
+        .sales-dashboard-header {
+            background: #ffffff;
+            border: 1px solid #edf0f5;
+            border-radius: 20px;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
+            padding: 22px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .sales-dashboard-date {
+            background: #eef4ff;
+            color: #315cf6;
+            border-radius: 999px;
+            padding: 9px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .sales-stat-card,
+        .sales-panel {
+            background: #ffffff;
+            border-radius: 18px !important;
+            border: 1px solid #edf0f5 !important;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055) !important;
+        }
+
+        .sales-stat-card {
+            padding: 24px;
+            min-height: 160px;
+            transition: all .18s ease-in-out;
+        }
+
+        .sales-stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(8, 23, 53, 0.08) !important;
+        }
+
+        .sales-stat-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .sales-stat-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 900;
+            flex: 0 0 auto;
+        }
+
+        .sales-stat-icon svg,
+        .sales-reminder-icon svg {
+            width: 20px;
+            height: 20px;
+            display: block;
+            fill: currentColor;
+        }
+
+        .sales-stat-blue {
+            background: #eef4ff;
+            color: #315cf6;
+        }
+
+        .sales-stat-indigo {
+            background: #eef2ff;
+            color: #4338ca;
+        }
+
+        .sales-stat-red {
+            background: #fff1f2;
+            color: #e11d48;
+        }
+
+        .sales-stat-green {
+            background: #eaf8f0;
+            color: #078642;
+        }
+
+        .sales-stat-purple {
+            background: #f5f3ff;
+            color: #7c3aed;
+        }
+
+        .sales-stat-orange {
+            background: #fff7e6;
+            color: #b45309;
+        }
+
+        .sales-stat-slate {
+            background: #f1f5f9;
+            color: #334155;
+        }
+
+        .sales-mini-pill,
+        .sales-mini-pill-warning,
+        .sales-mini-pill-danger {
+            border-radius: 999px;
+            padding: 5px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .sales-mini-pill {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .sales-mini-pill-warning {
+            background: #fff7e6;
+            color: #b45309;
+        }
+
+        .sales-mini-pill-danger {
+            background: #fff1f2;
+            color: #e11d48;
+        }
+
+        .sales-stat-label {
+            color: #6b7280;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .sales-stat-value {
+            color: #111827;
+            font-size: 26px;
+            font-weight: 900;
+            line-height: 1.15;
+            word-break: break-word;
+        }
+
+        .sales-stat-subtitle {
+            color: #8a94a6;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .sales-panel-heading {
+            width: 100%;
+            flex-wrap: nowrap;
+        }
+
+        .sales-panel-heading > div:first-child {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .sales-panel-heading .card-title,
+        .sales-panel-heading .text-secondary {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sales-soft-btn {
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .sales-soft-btn-sm {
+            min-width: auto;
+            flex: 0 0 auto;
+            padding: 7px 12px;
+            font-size: 13px;
+            line-height: 1.2;
+            border-radius: 9px;
+        }
+
+        @media (max-width: 575.98px) {
+            .sales-panel-heading {
+                flex-wrap: wrap;
+            }
+
+            .sales-soft-btn-sm {
+                width: 100%;
+                justify-content: center;
+                margin-top: 6px;
+            }
+        }
+
+        .sales-table-frame {
+            border: 1px solid #edf0f5;
+            border-radius: 16px;
+        }
+
+        .sales-table-scroll {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: #b8c0cc #eef1f6;
+        }
+
+        .sales-table-scroll::-webkit-scrollbar {
+            height: 9px;
+        }
+
+        .sales-table-scroll::-webkit-scrollbar-track {
+            background: #eef1f6;
+            border-radius: 999px;
+        }
+
+        .sales-table-scroll::-webkit-scrollbar-thumb {
+            background: #b8c0cc;
+            border-radius: 999px;
+        }
+
+        .sales-table {
+            width: 100%;
+            min-width: 100%;
+            table-layout: auto;
+        }
+
+        .sales-table-invoices {
+            min-width: 980px;
+        }
+
+        .sales-table-payments {
+            min-width: 900px;
+        }
+
+        .sales-table-receipts {
+            min-width: 940px;
+        }
+
+        .sales-table thead th {
+            background: #f4f6fb;
+            color: #8a94a6;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 0;
+            padding: 14px 16px;
+            white-space: nowrap;
+        }
+
+        .sales-table tbody td {
+            padding: 16px;
+            border-bottom: 1px solid #edf0f5;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .sales-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .sales-table tbody tr:hover {
+            background: #f8faff;
+        }
+
+        .sales-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .sales-badge-success {
+            background: #eaf8f0;
+            color: #078642;
+        }
+
+        .sales-badge-info,
+        .sales-badge-primary {
+            background: #eef4ff;
+            color: #315cf6;
+        }
+
+        .sales-badge-warning {
+            background: #fff7e6;
+            color: #b45309;
+        }
+
+        .sales-badge-danger {
+            background: #fff1f2;
+            color: #e11d48;
+        }
+
+        .sales-badge-muted {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .sales-reminder-card {
+            overflow: hidden;
+        }
+
+        .sales-reminder-warning {
+            background: linear-gradient(180deg, #fffdf5 0%, #ffffff 70%);
+        }
+
+        .sales-reminder-danger {
+            background: linear-gradient(180deg, #fff7f7 0%, #ffffff 70%);
+        }
+
+        .sales-reminder-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: #fff7e6;
+            color: #b45309;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sales-reminder-icon-danger {
+            background: #fff1f2;
+            color: #e11d48;
+        }
+
+        .sales-alert-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid #edf0f5;
+            padding: 14px 0;
+        }
+
+        .sales-alert-row:first-child {
+            padding-top: 0;
+        }
+
+        .sales-alert-row:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .sales-empty-note {
+            color: #8a94a6;
+            min-height: 150px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 18px;
+        }
+
+        @media (max-width: 768px) {
+            .sales-dashboard-header {
+                align-items: flex-start;
+                flex-direction: column;
+                padding: 20px;
+            }
+
+            .sales-stat-card {
+                min-height: auto;
+            }
+
+            .sales-stat-value {
+                font-size: 24px;
+            }
+        }
+    </style>
+</x-app-layout>

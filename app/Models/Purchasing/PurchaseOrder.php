@@ -5,6 +5,7 @@ namespace App\Models\Purchasing;
 use App\Models\User;
 use App\Models\Warehouse\WarehouseLocation as Location;
 use App\Models\Warehouse\WarehouseSupplier as Supplier;
+use App\Services\Purchasing\PurchaseBillAutoService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -27,6 +28,10 @@ class PurchaseOrder extends Model
         'status',
         'notes',
         'created_by',
+        'approved_by',
+        'approved_at',
+        'received_by',
+        'received_at',
     ];
 
     protected $casts = [
@@ -35,6 +40,8 @@ class PurchaseOrder extends Model
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'approved_at' => 'datetime',
+        'received_at' => 'datetime',
     ];
 
     public function supplier()
@@ -78,4 +85,24 @@ class PurchaseOrder extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function receiver()
+    {
+        return $this->belongsTo(User::class, 'received_by');
+    }
+
+    protected static function booted(): void
+    {
+        static::updated(function (PurchaseOrder $purchaseOrder) {
+            if ($purchaseOrder->status === 'received') {
+                app(PurchaseBillAutoService::class)->createForFullyReceivedPurchaseOrder($purchaseOrder->fresh(['items', 'supplier']));
+            }
+        });
+    }
+
 }

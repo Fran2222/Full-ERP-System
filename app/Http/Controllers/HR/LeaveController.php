@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -214,6 +215,59 @@ class LeaveController extends Controller
             'leaveTypes',
             'currentYear'
         ));
+    }
+
+
+    public function updateCreditAllocation(Request $request, User $employee, LeaveType $leaveType): RedirectResponse
+    {
+        abort_unless(auth()->user()->can('hr.leave.requests.view'), 403);
+
+        $employee->load('employeeProfile');
+        abort_unless($employee->employeeProfile, 404);
+        abort_unless((bool) $leaveType->is_paid === true, 404);
+
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'allocated' => ['required', 'numeric', 'min:0', 'max:365'],
+            'adjustment_remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $year = (int) $validated['year'];
+        $allocated = round((float) $validated['allocated'], 2);
+
+        $used = (float) LeaveRequest::where('user_id', $employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->where('status', 'approved')
+            ->whereYear('start_datetime', $year)
+            ->sum('days');
+
+        $balance = LeaveBalance::firstOrNew([
+            'employee_profile_id' => $employee->employeeProfile->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => $year,
+        ]);
+
+        $balance->allocated = $allocated;
+        $balance->used = $used;
+        $balance->remaining = max($allocated - $used, 0);
+
+        if (Schema::hasColumn('leave_balances', 'adjustment_remarks')) {
+            $balance->adjustment_remarks = $validated['adjustment_remarks'] ?? null;
+        }
+
+        if (Schema::hasColumn('leave_balances', 'adjusted_by')) {
+            $balance->adjusted_by = auth()->id();
+        }
+
+        if (Schema::hasColumn('leave_balances', 'adjusted_at')) {
+            $balance->adjusted_at = now();
+        }
+
+        $balance->save();
+
+        return redirect()
+            ->route('hr.leave.credit-management.show', $employee->id)
+            ->with('success', $leaveType->name . ' credits updated successfully for ' . $year . '.');
     }
 
     public function store(StoreLeaveRequest $request): RedirectResponse
@@ -500,7 +554,8 @@ class LeaveController extends Controller
                 ->where('id', '!=', $leaveRequest->id)
                 ->sum('days');
 
-            $remaining = max((float) ($leaveType->default_credits ?? 0) - $used, 0);
+            $allocated = $this->resolveAllocatedCredits($user, $user->employeeProfile, $leaveType, $year);
+            $remaining = max($allocated - $used, 0);
 
             if ($days > $remaining) {
                 return back()
@@ -826,7 +881,19 @@ class LeaveController extends Controller
 
     private function computeCreditForLeaveType(User $user, ?EmployeeProfile $employeeProfile, LeaveType $leaveType, int $year): array
     {
+        $balance = null;
         $allocated = (float) ($leaveType->default_credits ?? 0);
+
+        if ($employeeProfile && (bool) $leaveType->is_paid === true) {
+            $balance = LeaveBalance::where('employee_profile_id', $employeeProfile->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->where('year', $year)
+                ->first();
+
+            if ($balance) {
+                $allocated = (float) $balance->allocated;
+            }
+        }
 
         $used = (float) LeaveRequest::where('user_id', $user->id)
             ->where('leave_type_id', $leaveType->id)
@@ -843,18 +910,18 @@ class LeaveController extends Controller
         $remaining = max($allocated - $used, 0);
 
         if ($employeeProfile && (bool) $leaveType->is_paid === true) {
-            LeaveBalance::updateOrCreate(
-                [
+            if (!$balance) {
+                $balance = new LeaveBalance([
                     'employee_profile_id' => $employeeProfile->id,
                     'leave_type_id' => $leaveType->id,
                     'year' => $year,
-                ],
-                [
-                    'allocated' => $allocated,
-                    'used' => $used,
-                    'remaining' => $remaining,
-                ]
-            );
+                ]);
+                $balance->allocated = $allocated;
+            }
+
+            $balance->used = $used;
+            $balance->remaining = $remaining;
+            $balance->save();
         }
 
         return [
@@ -865,7 +932,25 @@ class LeaveController extends Controller
             'used' => $used,
             'pending' => $pending,
             'remaining' => $remaining,
+            'adjustment_remarks' => $balance?->adjustment_remarks ?? null,
+            'adjusted_at' => $balance?->adjusted_at ?? null,
         ];
+    }
+
+    private function resolveAllocatedCredits(User $user, ?EmployeeProfile $employeeProfile, LeaveType $leaveType, int $year): float
+    {
+        if ($employeeProfile && (bool) $leaveType->is_paid === true) {
+            $balance = LeaveBalance::where('employee_profile_id', $employeeProfile->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->where('year', $year)
+                ->first();
+
+            if ($balance) {
+                return (float) $balance->allocated;
+            }
+        }
+
+        return (float) ($leaveType->default_credits ?? 0);
     }
 
     private function computeCreditInfoForRequest(LeaveRequest $leaveRequest): array
@@ -890,8 +975,8 @@ class LeaveController extends Controller
 
         $year = Carbon::parse($leaveRequest->start_datetime)->year;
         $requestedDays = (float) ($leaveRequest->days ?? 0);
-        $allocated = (float) ($leaveType->default_credits ?? 0);
         $isPaid = (bool) $leaveType->is_paid;
+        $allocated = $this->resolveAllocatedCredits($employee, $employee->employeeProfile, $leaveType, $year);
 
         if (!$isPaid) {
             return [

@@ -4,6 +4,8 @@
     .travel-order-document {
         color: #111827;
         line-height: 1.7;
+        position: relative;
+        padding-bottom: 92px !important;
     }
 
     .travel-order-document p,
@@ -14,6 +16,45 @@
 
     .travel-order-document strong {
         font-weight: 700;
+    }
+
+    .travel-order-record-box {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        width: 185px;
+        padding: 5px 7px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        line-height: 1.15;
+    }
+
+    .travel-order-record-box div {
+        font-size: 9px;
+        color: #111827;
+        display: flex;
+        justify-content: space-between;
+        gap: 4px;
+    }
+
+    .travel-order-record-box span:first-child {
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .travel-order-record-box span:last-child {
+        text-align: right;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 767.98px) {
+        .travel-order-record-box {
+            position: static;
+            width: 100%;
+            margin: 0 0 18px 0;
+        }
     }
     </style>
 
@@ -62,6 +103,25 @@
             <div class="card-body">
 
             <div class="border rounded-4 p-4 bg-white travel-order-document">
+                <div class="travel-order-record-box">
+                    <div>
+                        <span>Document No.:</span>
+                        <span>WMC-HR-TO-001</span>
+                    </div>
+                    <div>
+                        <span>Revision No.:</span>
+                        <span>00</span>
+                    </div>
+                    <div>
+                        <span>Effective Date:</span>
+                        <span>{{ $travelOrder->document_effective_date }}</span>
+                    </div>
+                    <div>
+                        <span>Travel Order No.:</span>
+                        <span>{{ $travelOrder->travel_order_number }}</span>
+                    </div>
+                </div>
+
                 <div class="text-center mb-4">
                     <h5 class="mb-1 fw-bold text-uppercase">
                         WIZMASTER COMPUTER SALES AND SERVICES CORPORATION

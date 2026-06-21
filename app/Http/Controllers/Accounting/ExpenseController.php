@@ -97,7 +97,9 @@ class ExpenseController extends Controller
             'description' => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $expense = null;
+
+        DB::transaction(function () use (&$expense, $validated) {
             $bankAccount = AccountingBankAccount::with('accountingAccount')
                 ->lockForUpdate()
                 ->findOrFail($validated['accounting_bank_account_id']);
@@ -156,6 +158,12 @@ class ExpenseController extends Controller
             $bankAccount->decrement('current_balance', $expense->amount);
         });
 
+        if (isset($expense)
+            && $expense
+            && class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingExpenseActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingExpenseActivity($expense->fresh(), 'created', auth()->id());
+        }
         return redirect()
             ->route('accounting.expenses.index')
             ->with('success', 'Expense recorded and journal entry posted successfully.');
@@ -228,6 +236,10 @@ class ExpenseController extends Controller
             ]);
         });
 
+        if (class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingExpenseActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingExpenseActivity($expense->fresh(), 'voided', auth()->id());
+        }
         return redirect()
             ->route('accounting.expenses.show', $expense)
             ->with('success', 'Expense voided successfully. Reversal journal entry posted and cash/bank balance restored.');

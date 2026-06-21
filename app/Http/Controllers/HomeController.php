@@ -185,6 +185,13 @@ class HomeController extends Controller
             if (Schema::hasColumn('announcements', 'is_published')) {
                 $query->where('is_published', true);
             }
+
+            if (Schema::hasColumn('announcements', 'expires_at')) {
+                $query->where(function ($announcementQuery) {
+                    $announcementQuery->whereNull('expires_at')
+                        ->orWhere('expires_at', '>=', now());
+                });
+            }
         });
 
         $quickActions = [

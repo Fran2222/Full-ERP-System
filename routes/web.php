@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Warehouse\WarehouseItemPickerController;
+use App\Http\Controllers\Service\ServiceJobOrderReportController;
+use App\Http\Controllers\Vehicle\VehicleDocumentController;
+use App\Http\Controllers\Vehicle\VehicleReportController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\Security\RolePermission;
 use App\Http\Controllers\Security\RoleController;
@@ -19,12 +23,16 @@ use App\Http\Controllers\HR\LeaveController;
 use App\Http\Controllers\HR\LeaveTypeController;
 use App\Http\Controllers\HR\DesignationController;
 use App\Http\Controllers\HR\AttendanceController;
+use App\Http\Controllers\HR\AttendanceBatchController;
+use App\Http\Controllers\HR\AttendanceReportController;
 use App\Http\Controllers\HR\PayrollController;
 use App\Http\Controllers\HR\TravelOrderController;
 use App\Http\Controllers\HR\OvertimeRequestController;
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 use App\Http\Controllers\Warehouse\ItemController;
 use App\Http\Controllers\Warehouse\LocationController;
@@ -36,6 +44,12 @@ use App\Http\Controllers\Warehouse\WarehouseController;
 use App\Http\Controllers\Warehouse\ServiceUnitController;
 use App\Http\Controllers\Warehouse\WarehouseTransferController;
 
+use App\Http\Controllers\Vehicle\VehicleDashboardController;
+use App\Http\Controllers\Vehicle\VehicleSetupController;
+use App\Http\Controllers\Vehicle\VehiclePlaceholderController;
+use App\Http\Controllers\Vehicle\VehicleController;
+use App\Http\Controllers\Vehicle\VehicleAssignmentController;
+use App\Http\Controllers\Vehicle\VehicleMaintenanceController;
 use App\Http\Controllers\Sales\SalesDashboardController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseBillController;
@@ -47,6 +61,25 @@ use App\Http\Controllers\Accounting\AccountingReportController;
 use App\Http\Controllers\Accounting\BankAccountController;
 use App\Http\Controllers\Accounting\ExpenseController;
 use App\Http\Controllers\Accounting\CollectionController;
+
+use App\Http\Controllers\ProjectMgmt\DashboardController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectsController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ClientController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectTypeController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectPriorityController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectStatusController;  //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\CRM\CRMController; //PROJECTCRM CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\TeamController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectMilestoneController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectTaskController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectFileController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\StoreNameController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\RfpTypeController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectRfpController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectExpenseController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectVehicleController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectGasSlipController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\DocumentControlController; //PROJECT SETUP CONTROLLERS
 
 /*
 |--------------------------------------------------------------------------
@@ -74,6 +107,20 @@ Route::get('/users/list', [UserController::class, 'getUsers'])
 
 // Authenticated routes
 Route::middleware(['auth'])->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | POS Module
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('pos')->name('pos.')->group(function () {
+        Route::get('/', [POSController::class, 'index'])->name('index');
+        Route::get('/access', [POSController::class, 'access'])->name('access');
+        Route::post('/access', [POSController::class, 'authenticate'])->name('authenticate');
+        Route::post('/logout', [POSController::class, 'logout'])->name('logout');
+        Route::get('/terminal', [POSController::class, 'terminal'])->name('terminal');
+    });
+
+
     /*
     |--------------------------------------------------------------------------
     | Announcements
@@ -232,6 +279,8 @@ Route::middleware(['auth'])->group(function () {
 
         Route::patch('/purchase-orders/{purchase_order}/mark-ordered', [PurchaseOrderController::class, 'markOrdered'])
             ->name('purchase-orders.mark-ordered');
+        Route::patch('/purchase-orders/{purchase_order}/mark-supplier-arrived', [PurchaseOrderController::class, 'markSupplierArrived'])
+            ->name('purchase-orders.mark-supplier-arrived');
 
         Route::resource('purchase-orders', PurchaseOrderController::class);
     });
@@ -468,8 +517,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('leave.credit-management');
 
         Route::get('/leave/credit-management/{employee}', [LeaveController::class, 'creditManagementShow'])
-            ->middleware('permission:hr.leave.requests.view')
+            ->middleware('permission:hr.leave.view|hr.leave.own.view|hr.leave.credits.view')
             ->name('leave.credit-management.show');
+        
+        Route::patch('/leave/credit-management/{employee}/leave-types/{leaveType}', [LeaveController::class, 'updateCreditAllocation'])
+            ->middleware('permission:hr.leave.requests.view')
+            ->name('leave.credit-management.update');
 
         Route::post('/leave', [LeaveController::class, 'store'])
             ->middleware('permission:hr.leave.apply')
@@ -529,6 +582,27 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])
             ->middleware('permission:hr.attendance.delete')
             ->name('attendance.destroy');
+        
+        Route::get('/attendance-batches', [AttendanceBatchController::class, 'index'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.index');
+
+        Route::get('/attendance-batches/create', [AttendanceBatchController::class, 'create'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.create');
+
+        Route::post('/attendance-batches', [AttendanceBatchController::class, 'store'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.store');
+        
+        Route::get('/attendance-reports', [AttendanceReportController::class, 'index'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-reports.index');
+
+        Route::get('/attendance-reports/export', [AttendanceReportController::class, 'export'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-reports.export');
+
 
         /*
         |--------------------------------------------------------------------------
@@ -996,7 +1070,17 @@ Route::middleware(['auth'])->group(function () {
             return view('modules.payroll');
         })->name('payroll');
 
-        Route::get('/reports', function () {
+        
+        // WMC_RESTORE_ACCOUNTING_PAY_BILLS_ROUTES
+        Route::get('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'index'])
+            ->name('pay-bills.index');
+        Route::get('/pay-bills/create', [\App\Http\Controllers\Accounting\PayBillController::class, 'create'])
+            ->name('pay-bills.create');
+        Route::post('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'store'])
+            ->name('pay-bills.store');
+        Route::get('/pay-bills/{payment}', [\App\Http\Controllers\Accounting\PayBillController::class, 'show'])
+            ->name('pay-bills.show');
+Route::get('/reports', function () {
             abort_unless(auth()->user()->hasModuleAccess('reports', 'viewer'), 403);
             return view('modules.reports');
         })->name('reports');
@@ -1007,6 +1091,326 @@ Route::middleware(['auth'])->group(function () {
         })->name('project-management');
     });
 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vehicle Management Route Guards
+    |--------------------------------------------------------------------------
+    | Vehicle Admin:
+    | - Full access.
+    |
+    | Vehicle Manager:
+    | - Dashboard, vehicles view, assignments, maintenance, documents, reports.
+    |
+    | Vehicle Staff / Driver:
+    | - Reserved for own assigned vehicle workflow in later package.
+    */
+    $getVehicleAccessLevel = function ($user): ?string {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'super admin', 'super-admin', 'superadmin', 'admin'])) {
+            return 'system_admin';
+        }
+
+        $primary = strtolower(str_replace(['_', '-'], ' ', (string) ($user->primary_module ?? '')));
+        if (str_contains($primary, 'vehicle')) {
+            return 'manager';
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_module_accesses',
+            'module_accesses',
+            'user_modules',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+                continue;
+            }
+
+            $query = DB::table($table)->where('user_id', $user->id);
+
+            if (Schema::hasColumn($table, 'enabled')) {
+                $query->where('enabled', true);
+            } elseif (Schema::hasColumn($table, 'is_enabled')) {
+                $query->where('is_enabled', true);
+            } elseif (Schema::hasColumn($table, 'status')) {
+                $query->whereIn('status', ['active', 1, true]);
+            }
+
+            $vehicleAccessLevel = null;
+
+            foreach ($query->get() as $assignment) {
+                $haystack = strtolower(collect((array) $assignment)
+                    ->filter(fn ($value) => is_scalar($value) && $value !== null)
+                    ->implode(' '));
+
+                if (! str_contains($haystack, 'vehicle')) {
+                    continue;
+                }
+
+                if (str_contains($haystack, 'admin')) {
+                    return 'admin';
+                }
+
+                if (str_contains($haystack, 'manager')) {
+                    $vehicleAccessLevel = 'manager';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'staff') && ! in_array($vehicleAccessLevel, ['manager', 'admin'], true)) {
+                    $vehicleAccessLevel = 'staff';
+                    continue;
+                }
+
+                if (! $vehicleAccessLevel) {
+                    $vehicleAccessLevel = 'viewer';
+                }
+            }
+
+            if ($vehicleAccessLevel) {
+                return $vehicleAccessLevel;
+            }
+        }
+
+        return null;
+    };
+
+    $vehicleViewOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin', 'manager', 'staff', 'viewer'], true),
+            403,
+            'Vehicle Management access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $vehicleManagerOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin', 'manager'], true),
+            403,
+            'Vehicle Manager/Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $vehicleAdminOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin'], true),
+            403,
+            'Vehicle Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    app('router')->aliasMiddleware('vehicle.view', $vehicleViewOnly);
+    app('router')->aliasMiddleware('vehicle.manager', $vehicleManagerOnly);
+    app('router')->aliasMiddleware('vehicle.admin', $vehicleAdminOnly);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vehicle Management Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('vehicle-management')->name('vehicle.')->middleware('vehicle.view')->group(function () {
+        Route::get('/', [VehicleDashboardController::class, 'index'])
+                    ->middleware('vehicle.manager')
+                    ->name('dashboard');
+        Route::get('/vehicles', [VehicleController::class, 'index'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.index');
+        Route::get('/vehicles/create', [VehicleController::class, 'create'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.create');
+        Route::post('/vehicles', [VehicleController::class, 'store'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.store');
+        Route::get('/vehicles/{vehicle}', [VehicleController::class, 'show'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.show');
+        Route::get('/vehicles/{vehicle}/edit', [VehicleController::class, 'edit'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.edit');
+        Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.update');
+        Route::patch('/vehicles/{vehicle}', [VehicleController::class, 'update'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.patch');
+        Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.destroy');
+
+        Route::resource('assignments', VehicleAssignmentController::class)
+            ->middleware('vehicle.manager')
+            ->names('assignments');
+
+        Route::resource('maintenance', VehicleMaintenanceController::class)
+                    ->middleware('vehicle.manager')
+                    ->names('maintenance');
+
+        Route::resource('documents', VehicleDocumentController::class)
+                    ->middleware('vehicle.manager')
+                    ->names('documents');
+
+        Route::get('/reports', [VehicleReportController::class, 'index'])
+                    ->middleware('vehicle.manager')
+                    ->name('reports.index');
+
+                Route::get('/setup', [VehicleSetupController::class, 'index'])
+            ->middleware('vehicle.manager')
+            ->name('setup.index');
+
+        Route::post('/setup/{group}', [VehicleSetupController::class, 'store'])
+            ->middleware('vehicle.admin')
+            ->name('setup.store');
+
+        Route::put('/setup/{group}/{id}', [VehicleSetupController::class, 'update'])
+            ->middleware('vehicle.admin')
+            ->name('setup.update');
+
+        Route::patch('/setup/{group}/{id}', [VehicleSetupController::class, 'update'])
+            ->middleware('vehicle.admin')
+            ->name('setup.patch');
+
+        Route::delete('/setup/{group}/{id}', [VehicleSetupController::class, 'destroy'])
+            ->middleware('vehicle.admin')
+            ->name('setup.destroy');
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Warehouse Role Route Guards
+    |--------------------------------------------------------------------------
+    | Warehouse Staff:
+    | - Dashboard, Inventory, Service Units, Transfer, Ledger
+    |
+    | Warehouse Manager:
+    | - Staff pages + Stock In, Stock Out, Adjustment
+    |
+    | Warehouse Admin / System Admin:
+    | - Full Warehouse access
+    */
+    $getWarehouseAccessLevel = function ($user): ?string {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])) {
+            return 'system_admin';
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_modules',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+                continue;
+            }
+
+            $query = DB::table($table)->where('user_id', $user->id);
+
+            if (Schema::hasColumn($table, 'enabled')) {
+                $query->where('enabled', true);
+            } elseif (Schema::hasColumn($table, 'is_enabled')) {
+                $query->where('is_enabled', true);
+            } elseif (Schema::hasColumn($table, 'status')) {
+                $query->whereIn('status', ['active', 1, true]);
+            }
+
+            $assignments = $query->get();
+
+            $warehouseAccessLevel = null;
+
+            foreach ($assignments as $assignment) {
+                $haystack = strtolower(collect((array) $assignment)
+                    ->filter(fn ($value) => is_scalar($value) && $value !== null)
+                    ->implode(' '));
+
+                if (! str_contains($haystack, 'warehouse') && ! str_contains($haystack, 'inventory')) {
+                    continue;
+                }
+
+                /*
+                 * Important:
+                 * A user may have multiple module access rows, example:
+                 * - Inventory - Staff (Primary)
+                 * - Warehouse - Manager
+                 * Do not stop at the first Staff row. Keep scanning and keep the highest
+                 * warehouse-related access level found.
+                 */
+                if (str_contains($haystack, 'admin')) {
+                    return 'admin';
+                }
+
+                if (str_contains($haystack, 'manager')) {
+                    $warehouseAccessLevel = 'manager';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'staff') && ! in_array($warehouseAccessLevel, ['manager', 'admin'], true)) {
+                    $warehouseAccessLevel = 'staff';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'viewer') && ! $warehouseAccessLevel) {
+                    $warehouseAccessLevel = 'viewer';
+                }
+            }
+
+            if ($warehouseAccessLevel) {
+                return $warehouseAccessLevel;
+            }
+        }
+
+        return null;
+    };
+
+    $warehouseManagerOnly = function ($request, $next) use ($getWarehouseAccessLevel) {
+        $level = $getWarehouseAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'manager', 'admin'], true),
+            403,
+            'Warehouse Manager/Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $warehouseAdminOnly = function ($request, $next) use ($getWarehouseAccessLevel) {
+        $level = $getWarehouseAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin'], true),
+            403,
+            'Warehouse Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    app('router')->aliasMiddleware('warehouse.manager.only', $warehouseManagerOnly);
+    app('router')->aliasMiddleware('warehouse.admin.only', $warehouseAdminOnly);
+
     /*
     |--------------------------------------------------------------------------
     | Warehouse Module Routes
@@ -1015,11 +1419,53 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('warehouse')->name('warehouse.')->group(function () {
         Route::get('/', [WarehouseController::class, 'dashboard'])->name('dashboard');
 
-        Route::resource('categories', CategoryController::class)->except(['show']);
-        Route::resource('units', UnitController::class)->except(['show']);
-        Route::resource('suppliers', SupplierController::class)->except(['show']);
-        Route::resource('locations', LocationController::class)->except(['show']);
-        Route::resource('items', ItemController::class);
+        Route::resource('categories', CategoryController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('units', UnitController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('suppliers', SupplierController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('locations', LocationController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        /*
+         * Item master maintenance is Warehouse Admin only.
+         * Item details/show is kept read-only for Warehouse/Inventory users so managers
+         * can open item information from Inventory without being able to add/edit/delete.
+         */
+        Route::get('/items', [ItemController::class, 'index'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.index');
+
+        Route::get('/items/create', [ItemController::class, 'create'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.create');
+
+        Route::post('/items', [ItemController::class, 'store'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.store');
+
+        Route::get('/items/{item}', [ItemController::class, 'show'])
+            ->name('items.show');
+
+        Route::get('/items/{item}/edit', [ItemController::class, 'edit'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.edit');
+
+        Route::match(['put', 'patch'], '/items/{item}', [ItemController::class, 'update'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.update');
+
+        Route::delete('/items/{item}', [ItemController::class, 'destroy'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.destroy');
 
 
 
@@ -1036,13 +1482,24 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory');
         Route::get('/ledger', [WarehouseController::class, 'ledger'])->name('ledger');
 
-        Route::get('/stock-in', [WarehouseController::class, 'stockIn'])->name('stock-in');
-        Route::post('/stock-in', [InventoryController::class, 'stockIn'])->name('stock-in.store');
+        Route::get('/stock-in', [WarehouseController::class, 'stockIn'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-in');
 
-        Route::get('/stock-out', [WarehouseController::class, 'stockOut'])->name('stock-out');
-        Route::post('/stock-out', [InventoryController::class, 'stockOut'])->name('stock-out.store');
+        Route::post('/stock-in', [InventoryController::class, 'stockIn'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-in.store');
+
+        Route::get('/stock-out', [WarehouseController::class, 'stockOut'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-out');
+
+        Route::post('/stock-out', [InventoryController::class, 'stockOut'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-out.store');
 
         Route::get('/serials/available', [InventoryController::class, 'availableSerials'])
+            ->middleware('warehouse.manager.only')
             ->name('serials.available');
 
         Route::get('/transfer', [WarehouseTransferController::class, 'index'])->name('transfer');
@@ -1054,8 +1511,13 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('/transfer/{transfer}/receive', [WarehouseTransferController::class, 'receive'])->name('transfer.receive');
         Route::patch('/transfer/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])->name('transfer.cancel');
 
-        Route::get('/adjustment', [WarehouseController::class, 'adjustment'])->name('adjustment');
-        Route::post('/adjustment', [InventoryController::class, 'adjustment'])->name('adjustment.store');
+        Route::get('/adjustment', [WarehouseController::class, 'adjustment'])
+            ->middleware('warehouse.manager.only')
+            ->name('adjustment');
+
+        Route::post('/adjustment', [InventoryController::class, 'adjustment'])
+            ->middleware('warehouse.manager.only')
+            ->name('adjustment.store');
     });
 
 /*
@@ -1139,3 +1601,707 @@ Route::group(['prefix' => 'icons'], function () {
 */
 Route::get('/privacy-policy', [HomeController::class, 'privacypolicy'])->name('pages.privacy-policy');
 Route::get('/terms-of-use', [HomeController::class, 'termsofuse'])->name('pages.term-of-use');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Service Operations / Job Order Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('service-operations')->name('service.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Service\ServiceDashboardController::class, 'index'])->name('dashboard');
+        Route::resource('job-orders', \App\Http\Controllers\Service\ServiceJobOrderController::class);
+        Route::get('/setup', [\App\Http\Controllers\Service\ServiceSetupController::class, 'index'])->name('setup.index');
+        Route::post('/setup/types', [\App\Http\Controllers\Service\ServiceSetupController::class, 'storeType'])->name('setup.types.store');
+        Route::post('/setup/statuses', [\App\Http\Controllers\Service\ServiceSetupController::class, 'storeStatus'])->name('setup.statuses.store');
+    });
+
+// Service Operations Phase 2 - Technician Reports
+Route::middleware(['web'])->group(function () {
+    Route::get('service-operations/job-orders/{job_order}/reports/create', [ServiceJobOrderReportController::class, 'create'])
+        ->name('service.job-orders.reports.create');
+
+    Route::post('service-operations/job-orders/{job_order}/reports', [ServiceJobOrderReportController::class, 'store'])
+        ->name('service.job-orders.reports.store');
+});
+
+
+
+// Global Warehouse Item Picker API
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/warehouse/item-picker/search', [WarehouseItemPickerController::class, 'search'])->name('warehouse.item-picker.search');
+    Route::get('/warehouse/item-picker/serials', [WarehouseItemPickerController::class, 'serials'])->name('warehouse.item-picker.serials');
+});
+// POS MODULE ROUTES - FORCE RESTORED
+Route::middleware(['auth'])->prefix('pos')->name('pos.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\POS\POSController::class, 'index'])->name('index');
+    Route::get('/access', [\App\Http\Controllers\POS\POSController::class, 'access'])->name('access');
+    Route::post('/access', [\App\Http\Controllers\POS\POSController::class, 'authenticate'])->name('authenticate');
+    Route::post('/logout', [\App\Http\Controllers\POS\POSController::class, 'logout'])->name('logout');
+    Route::get('/terminal', [\App\Http\Controllers\POS\POSController::class, 'terminal'])->name('terminal');
+});
+// END POS MODULE ROUTES
+// POS store route - added by POS Phase 2A patch.
+Route::post('/pos/sales', [\App\Http\Controllers\POS\POSController::class, 'store'])->name('pos.store')->middleware('auth');
+/*
+|--------------------------------------------------------------------------
+| Global System Notifications
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->prefix('notifications')->name('system-notifications.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\SystemNotificationController::class, 'index'])->name('index');
+    Route::get('/{notification}/open', [\App\Http\Controllers\SystemNotificationController::class, 'open'])->name('open');
+    Route::patch('/{notification}/read', [\App\Http\Controllers\SystemNotificationController::class, 'markRead'])->name('read');
+    Route::post('/mark-all-read', [\App\Http\Controllers\SystemNotificationController::class, 'markAllRead'])->name('mark-all-read');
+});
+
+Route::get('/notifications/poll', [\App\Http\Controllers\SystemNotificationController::class, 'poll'])->name('notifications.poll');
+
+
+// WMC_CORRECT_ACCOUNTING_PAY_BILLS_ROUTES
+Route::middleware(['auth'])
+    ->prefix('accounting')
+    ->name('accounting.')
+    ->group(function () {
+        Route::get('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'index'])
+            ->name('pay-bills.index');
+
+        Route::get('/pay-bills/create', [\App\Http\Controllers\Accounting\PayBillController::class, 'create'])
+            ->name('pay-bills.create');
+
+        Route::post('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'store'])
+            ->name('pay-bills.store');
+
+        Route::get('/pay-bills/{payment}', [\App\Http\Controllers\Accounting\PayBillController::class, 'show'])
+            ->name('pay-bills.show');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| CRM + Project Management Module Routes (Merged from DES package)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | CRM MODULE ROUTES START
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['permission:crm_dashboard.view'])->group(function () {
+        Route::get('/crm', [CRMController::class, 'dashboard'])
+            ->name('crm.dashboard');
+    });
+
+        Route::middleware(['permission:crm_pipeline.view'])->group(function () {
+
+        Route::get('/crm/pipeline', [CRMController::class, 'pipeline'])
+            ->name('crm.pipeline');
+
+        Route::post('/crm/leads', [CRMController::class, 'storeLead'])
+            ->name('crm.leads.store');
+
+        Route::get('/crm/leads/{lead}', [CRMController::class, 'showLead'])
+            ->name('crm.leads.show');
+
+        Route::get('/crm/leads/{lead}/edit', [CRMController::class, 'editLead'])
+            ->name('crm.leads.edit');
+
+        Route::put('/crm/leads/{lead}', [CRMController::class, 'updateLead'])
+            ->name('crm.leads.update');
+
+        Route::post('/crm/leads/{lead}/follow-ups', [CRMController::class, 'storeLeadFollowUp'])
+            ->name('crm.leads.follow-ups.store');
+
+        Route::patch('/crm/follow-ups/{followUp}/status', [CRMController::class, 'updateFollowUpStatus'])
+            ->name('crm.follow-ups.update-status');
+
+        Route::post('/crm/leads/{lead}/notes', [CRMController::class, 'storeLeadNote'])
+            ->name('crm.leads.notes.store');
+
+        Route::patch('/crm/leads/{lead}/stage', [CRMController::class, 'updateLeadStage'])
+            ->name('crm.leads.update-stage');
+
+        Route::post('/crm/pipeline/stages/{stage}/duplicate', [CRMController::class, 'duplicateStage'])
+            ->name('crm.pipeline.stages.duplicate');
+
+        Route::put('/crm/pipeline/stages/{stage}/rename', [CRMController::class, 'renameStage'])
+            ->name('crm.pipeline.stages.rename');
+
+        Route::delete('/crm/pipeline/stages/{stage}/archive', [CRMController::class, 'archiveStage'])
+            ->name('crm.pipeline.stages.archive');
+
+        Route::put('/crm/pipeline/stages/{stage}/color', [CRMController::class, 'updateStageColor'])
+            ->name('crm.pipeline.stages.color');
+
+        Route::patch('/crm/pipeline/stages/reorder', [CRMController::class, 'reorderStages'])
+            ->name('crm.pipeline.stages.reorder');
+
+        Route::post('/crm/leads/{lead}/convert-client', [CRMController::class, 'convertLeadToClient'])
+            ->name('crm.leads.convert-client');
+
+        Route::get('/crm/leads/{lead}/create-project', [CRMController::class, 'createProjectFromLead'])
+            ->name('crm.leads.create-project');
+
+        Route::delete('/crm/leads/{lead}/archive', [CRMController::class, 'archiveLead'])
+            ->name('crm.leads.archive');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRM MODULE ROUTES END
+    |--------------------------------------------------------------------------
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROJECTS MANAGEMENT MODULE ROUTES START
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('project-management')->group(function () {
+        /*
+        |--------------------------------------------------------------------------
+        | Project Dashboard
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware(['permission:project_management.view|project_dashboard.view|projects_mgmt.view'])->group(function () {
+            Route::get('/dashboard', [DashboardController::class, 'dashboard'])
+                ->name('pm_dashboard');
+
+            Route::get('/projects', [ProjectsController::class, 'index'])
+                ->name('projects.index');
+
+            Route::get('/projects/list', [ProjectsController::class, 'list'])
+                ->name('projects.list');
+
+            Route::get('/projects/{project}', [ProjectsController::class, 'show'])
+                ->whereNumber('project')
+                ->name('projects.show');
+
+            Route::get('/clients', [ClientController::class, 'index'])
+                ->name('clients.index');
+
+            Route::get('/clients/list', [ClientController::class, 'list'])
+                ->name('clients.list');
+
+            Route::get('/clients/{client}', [ClientController::class, 'show'])
+                ->whereNumber('client')
+                ->name('clients.show');
+
+            Route::get('/files', [ProjectFileController::class, 'index'])
+                ->name('project-files.index');
+
+            Route::get('/files/project/{project}', [ProjectFileController::class, 'show'])
+                ->whereNumber('project')
+                ->name('project-files.folder');
+
+            Route::get('/files/{projectFile}/preview', [ProjectFileController::class, 'preview'])
+                ->whereNumber('projectFile')
+                ->name('project-files.preview');
+
+            Route::get('/files/{projectFile}/download', [ProjectFileController::class, 'download'])
+                ->whereNumber('projectFile')
+                ->name('project-files.download');
+
+            Route::get('/milestones', [ProjectMilestoneController::class, 'index'])
+                ->name('project-milestones.index');
+
+            Route::get('/milestones/list', [ProjectMilestoneController::class, 'list'])
+                ->name('project-milestones.list');
+
+            Route::get('/milestones/{milestone}', [ProjectMilestoneController::class, 'show'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.show');
+
+            Route::get('/tasks', [ProjectTaskController::class, 'index'])
+                ->name('project-tasks.index');
+
+            Route::get('/tasks/events', [ProjectTaskController::class, 'events'])
+                ->name('project-tasks.events');
+
+            Route::post('/tasks/{projectTask}/reports', [ProjectTaskController::class, 'storeReport'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.reports.store');
+
+            Route::redirect('/setup', '/project-management/project-types')
+                ->name('project_setup.index');
+
+
+            Route::get('/document-controls', [DocumentControlController::class, 'index'])
+                ->name('document-controls.index');
+
+            Route::get('/document-controls/list', [DocumentControlController::class, 'list'])
+                ->name('document-controls.list');
+
+            Route::get('/document-controls/create', [DocumentControlController::class, 'create'])
+                ->name('document-controls.create');
+
+            Route::post('/document-controls', [DocumentControlController::class, 'store'])
+                ->name('document-controls.store');
+
+            Route::post('/document-controls/{documentControl}/new-revision', [DocumentControlController::class, 'newRevision'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.new-revision');
+
+            Route::post('/document-controls/{documentControl}/publish', [DocumentControlController::class, 'publish'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.publish');
+
+            Route::get('/document-controls/{documentControl}', [DocumentControlController::class, 'show'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.show');
+
+            Route::get('/document-controls/{documentControl}/edit', [DocumentControlController::class, 'edit'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.edit');
+
+            Route::put('/document-controls/{documentControl}', [DocumentControlController::class, 'update'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.update');
+
+            Route::delete('/document-controls/{documentControl}', [DocumentControlController::class, 'destroy'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.destroy');
+
+            Route::get('/project-types', [ProjectTypeController::class, 'index'])
+                ->name('project-types.index');
+
+            Route::get('/project-types/list', [ProjectTypeController::class, 'list'])
+                ->name('project-types.list');
+
+            Route::get('/project-types/{projectType}', [ProjectTypeController::class, 'show'])
+                ->whereNumber('projectType')
+                ->name('project-types.show');
+
+            Route::get('/project-priorities', [ProjectPriorityController::class, 'index'])
+                ->name('project-priorities.index');
+
+            Route::get('/project-priorities/list', [ProjectPriorityController::class, 'list'])
+                ->name('project-priorities.list');
+
+            Route::get('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'show'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.show');
+
+            Route::get('/project-statuses', [ProjectStatusController::class, 'index'])
+                ->name('project-statuses.index');
+
+            Route::get('/project-statuses/list', [ProjectStatusController::class, 'list'])
+                ->name('project-statuses.list');
+
+            Route::get('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'show'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.show');
+
+            Route::get('/project-teams', [TeamController::class, 'index'])
+                ->name('project-teams.index');
+
+            Route::get('/project-teams/list', [TeamController::class, 'list'])
+                ->name('project-teams.list');
+
+            Route::get('/project-teams/{team}', [TeamController::class, 'show'])
+                ->whereNumber('team')
+                ->name('project-teams.show');
+
+            Route::get('/rfp-types', [RfpTypeController::class, 'index'])
+                ->name('rfp-types.index');
+
+            Route::get('/rfp-types/list', [RfpTypeController::class, 'list'])
+                ->name('rfp-types.list');
+
+            Route::get('/rfp-types/{rfpType}', [RfpTypeController::class, 'show'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.show');
+
+            Route::get('/store-names', [StoreNameController::class, 'index'])
+                ->name('store-names.index');
+
+            Route::get('/store-names/list', [StoreNameController::class, 'list'])
+                ->name('store-names.list');
+
+            Route::get('/store-names/{storeName}', [StoreNameController::class, 'show'])
+                ->whereNumber('storeName')
+                ->name('store-names.show');
+
+            Route::get('/vehicles', [ProjectVehicleController::class, 'index'])
+                ->name('project-vehicles.index');
+
+            Route::get('/vehicles/list', [ProjectVehicleController::class, 'list'])
+                ->name('project-vehicles.list');
+
+            Route::get('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'show'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.show');
+
+            Route::get('/project-finances/rfps', [ProjectRfpController::class, 'index'])
+                ->name('project-rfps.index');
+
+            Route::get('/project-finances/rfps/list', [ProjectRfpController::class, 'list'])
+                ->name('project-rfps.list');
+
+            Route::get('/project-finances/rfps/project-details/{project}', [ProjectRfpController::class, 'projectDetails'])
+                ->whereNumber('project')
+                ->name('project-rfps.project-details');
+
+            Route::get('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'show'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.show');
+
+            Route::get('/project-finances/expenses', [ProjectExpenseController::class, 'index'])
+                ->name('project-expenses.index');
+
+            Route::get('/project-finances/expenses/list', [ProjectExpenseController::class, 'list'])
+                ->name('project-expenses.list');
+
+            Route::get('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'show'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.show');
+
+            Route::get('/project-finances/gas-slips', [ProjectGasSlipController::class, 'index'])
+                ->name('project-gas-slips.index');
+
+            Route::get('/project-finances/gas-slips/list', [ProjectGasSlipController::class, 'list'])
+                ->name('project-gas-slips.list');
+
+            Route::get('/project-finances/gas-slips/vehicle-drivers/{vehicle}', [ProjectGasSlipController::class, 'vehicleDrivers'])
+                ->whereNumber('vehicle')
+                ->name('project-gas-slips.vehicle-drivers');
+
+            Route::get('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'show'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.show');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Projects Create / Edit / Delete
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware(['permission:project_management.create|projects_mgmt.create'])->group(function () {
+            Route::get('/projects/create', [ProjectsController::class, 'create'])
+                ->name('projects.create');
+
+            Route::post('/projects', [ProjectsController::class, 'store'])
+                ->name('projects.store');
+
+            Route::get('/clients/create', [ClientController::class, 'create'])
+                ->name('clients.create');
+
+            Route::post('/clients', [ClientController::class, 'store'])
+                ->name('clients.store');
+
+            Route::get('/milestones/create', [ProjectMilestoneController::class, 'create'])
+                ->name('project-milestones.create');
+
+            Route::post('/milestones', [ProjectMilestoneController::class, 'store'])
+                ->name('project-milestones.store');
+
+            Route::get('/tasks/create', [ProjectTaskController::class, 'create'])
+                ->name('project-tasks.create');
+
+            Route::post('/tasks', [ProjectTaskController::class, 'store'])
+                ->name('project-tasks.store');
+
+            Route::get('/files/create', [ProjectFileController::class, 'create'])
+                ->name('project-files.create');
+
+            Route::post('/files', [ProjectFileController::class, 'store'])
+                ->name('project-files.store');
+
+            Route::get('/project-types/create', [ProjectTypeController::class, 'create'])
+                ->name('project-types.create');
+
+            Route::post('/project-types', [ProjectTypeController::class, 'store'])
+                ->name('project-types.store');
+
+            Route::get('/project-priorities/create', [ProjectPriorityController::class, 'create'])
+                ->name('project-priorities.create');
+
+            Route::post('/project-priorities', [ProjectPriorityController::class, 'store'])
+                ->name('project-priorities.store');
+
+            Route::get('/project-statuses/create', [ProjectStatusController::class, 'create'])
+                ->name('project-statuses.create');
+
+            Route::post('/project-statuses', [ProjectStatusController::class, 'store'])
+                ->name('project-statuses.store');
+
+            Route::get('/project-teams/create', [TeamController::class, 'create'])
+                ->name('project-teams.create');
+
+            Route::post('/project-teams', [TeamController::class, 'store'])
+                ->name('project-teams.store');
+
+            Route::get('/rfp-types/create', [RfpTypeController::class, 'create'])
+                ->name('rfp-types.create');
+
+            Route::post('/rfp-types', [RfpTypeController::class, 'store'])
+                ->name('rfp-types.store');
+
+            Route::get('/store-names/create', [StoreNameController::class, 'create'])
+                ->name('store-names.create');
+
+            Route::post('/store-names', [StoreNameController::class, 'store'])
+                ->name('store-names.store');
+
+            Route::get('/vehicles/create', [ProjectVehicleController::class, 'create'])
+                ->name('project-vehicles.create');
+
+            Route::post('/vehicles', [ProjectVehicleController::class, 'store'])
+                ->name('project-vehicles.store');
+
+            Route::get('/project-finances/rfps/create', [ProjectRfpController::class, 'create'])
+                ->name('project-rfps.create');
+
+            Route::post('/project-finances/rfps', [ProjectRfpController::class, 'store'])
+                ->name('project-rfps.store');
+
+            Route::get('/project-finances/expenses/create', [ProjectExpenseController::class, 'create'])
+                ->name('project-expenses.create');
+
+            Route::post('/project-finances/expenses', [ProjectExpenseController::class, 'store'])
+                ->name('project-expenses.store');
+
+            Route::get('/project-finances/gas-slips/create', [ProjectGasSlipController::class, 'create'])
+                ->name('project-gas-slips.create');
+
+            Route::post('/project-finances/gas-slips', [ProjectGasSlipController::class, 'store'])
+                ->name('project-gas-slips.store');
+        });
+
+        Route::middleware(['permission:project_management.edit|projects_mgmt.edit'])->group(function () {
+            Route::get('/projects/{project}/edit', [ProjectsController::class, 'edit'])
+                ->whereNumber('project')
+                ->name('projects.edit');
+
+            Route::put('/projects/{project}', [ProjectsController::class, 'update'])
+                ->whereNumber('project')
+                ->name('projects.update');
+
+            Route::get('/clients/{client}/edit', [ClientController::class, 'edit'])
+                ->whereNumber('client')
+                ->name('clients.edit');
+
+            Route::put('/clients/{client}', [ClientController::class, 'update'])
+                ->whereNumber('client')
+                ->name('clients.update');
+
+            Route::get('/milestones/{milestone}/edit', [ProjectMilestoneController::class, 'edit'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.edit');
+
+            Route::put('/milestones/{milestone}', [ProjectMilestoneController::class, 'update'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.update');
+
+            Route::post('/milestones/{milestone}/toggle-complete', [ProjectMilestoneController::class, 'toggleComplete'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.toggle-complete');
+
+            Route::get('/tasks/{projectTask}/edit', [ProjectTaskController::class, 'edit'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.edit');
+
+            Route::put('/tasks/{projectTask}', [ProjectTaskController::class, 'update'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.update');
+
+            Route::put('/files/{projectFile}/rename', [ProjectFileController::class, 'rename'])
+                ->whereNumber('projectFile')
+                ->name('project-files.rename');
+
+            Route::put('/files/{projectFile}/move', [ProjectFileController::class, 'move'])
+                ->whereNumber('projectFile')
+                ->name('project-files.move');
+
+            Route::put('/files/project/{project}/folder-color', [ProjectFileController::class, 'folderColor'])
+                ->whereNumber('project')
+                ->name('project-files.folder-color');
+
+            Route::get('/project-types/{projectType}/edit', [ProjectTypeController::class, 'edit'])
+                ->whereNumber('projectType')
+                ->name('project-types.edit');
+
+            Route::put('/project-types/{projectType}', [ProjectTypeController::class, 'update'])
+                ->whereNumber('projectType')
+                ->name('project-types.update');
+
+            Route::get('/project-priorities/{projectPriority}/edit', [ProjectPriorityController::class, 'edit'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.edit');
+
+            Route::put('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'update'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.update');
+
+            Route::get('/project-statuses/{projectStatus}/edit', [ProjectStatusController::class, 'edit'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.edit');
+
+            Route::put('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'update'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.update');
+
+            Route::get('/project-teams/{team}/edit', [TeamController::class, 'edit'])
+                ->whereNumber('team')
+                ->name('project-teams.edit');
+
+            Route::put('/project-teams/{team}', [TeamController::class, 'update'])
+                ->whereNumber('team')
+                ->name('project-teams.update');
+
+            Route::get('/rfp-types/{rfpType}/edit', [RfpTypeController::class, 'edit'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.edit');
+
+            Route::put('/rfp-types/{rfpType}', [RfpTypeController::class, 'update'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.update');
+
+            Route::get('/store-names/{storeName}/edit', [StoreNameController::class, 'edit'])
+                ->whereNumber('storeName')
+                ->name('store-names.edit');
+
+            Route::put('/store-names/{storeName}', [StoreNameController::class, 'update'])
+                ->whereNumber('storeName')
+                ->name('store-names.update');
+
+            Route::get('/vehicles/{projectVehicle}/edit', [ProjectVehicleController::class, 'edit'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.edit');
+
+            Route::put('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'update'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.update');
+
+            Route::get('/project-finances/rfps/{projectRfp}/edit', [ProjectRfpController::class, 'edit'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.edit');
+
+            Route::put('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'update'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.update');
+
+            Route::post('/project-finances/rfps/{projectRfp}/approve', [ProjectRfpController::class, 'approve'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.approve');
+
+            Route::post('/project-finances/rfps/{projectRfp}/reject', [ProjectRfpController::class, 'reject'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.reject');
+
+            Route::post('/project-finances/rfps/{projectRfp}/release', [ProjectRfpController::class, 'release'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.release');
+
+            Route::get('/project-finances/expenses/{projectExpense}/edit', [ProjectExpenseController::class, 'edit'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.edit');
+
+            Route::put('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'update'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.update');
+
+            Route::get('/project-finances/gas-slips/{projectGasSlip}/edit', [ProjectGasSlipController::class, 'edit'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.edit');
+
+            Route::put('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'update'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.update');
+
+            Route::post('/project-finances/gas-slips/{projectGasSlip}/toggle-done', [ProjectGasSlipController::class, 'toggleDone'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.toggle-done');
+        });
+
+        Route::middleware(['permission:project_management.delete|projects_mgmt.delete'])->group(function () {
+            Route::delete('/projects/{project}', [ProjectsController::class, 'destroy'])
+                ->whereNumber('project')
+                ->name('projects.destroy');
+
+            Route::delete('/clients/{client}', [ClientController::class, 'destroy'])
+                ->whereNumber('client')
+                ->name('clients.destroy');
+
+            Route::delete('/milestones/{milestone}', [ProjectMilestoneController::class, 'destroy'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.destroy');
+
+            Route::delete('/tasks/{projectTask}', [ProjectTaskController::class, 'destroy'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.destroy');
+
+            Route::delete('/files/{projectFile}', [ProjectFileController::class, 'destroy'])
+                ->whereNumber('projectFile')
+                ->name('project-files.destroy');
+
+            Route::delete('/project-types/{projectType}', [ProjectTypeController::class, 'destroy'])
+                ->whereNumber('projectType')
+                ->name('project-types.destroy');
+
+            Route::delete('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'destroy'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.destroy');
+
+            Route::delete('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'destroy'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.destroy');
+
+            Route::delete('/project-teams/{team}', [TeamController::class, 'destroy'])
+                ->whereNumber('team')
+                ->name('project-teams.destroy');
+
+            Route::delete('/rfp-types/{rfpType}', [RfpTypeController::class, 'destroy'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.destroy');
+
+            Route::delete('/store-names/{storeName}', [StoreNameController::class, 'destroy'])
+                ->whereNumber('storeName')
+                ->name('store-names.destroy');
+
+            Route::delete('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'destroy'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.destroy');
+
+            Route::delete('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'destroy'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.destroy');
+
+            Route::delete('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'destroy'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.destroy');
+
+            Route::delete('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'destroy'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.destroy');
+        });
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROJECTS MANAGEMENT MODULE ROUTES END
+    |--------------------------------------------------------------------------
+    */
+});
+
+Route::get('/pos/serials', [\App\Http\Controllers\POS\POSController::class, 'serials'])->name('pos.serials')->middleware('auth');
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Internal Chat System
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->prefix('chat')->name('chat.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Chat\ChatController::class, 'index'])->name('index');
+    Route::post('/start', [\App\Http\Controllers\Chat\ChatController::class, 'start'])->name('start');
+    Route::get('/feed', [\App\Http\Controllers\Chat\ChatController::class, 'feed'])->name('feed');
+    Route::post('/presence/ping', [\App\Http\Controllers\Chat\ChatController::class, 'presencePing'])->name('presence.ping');
+    Route::get('/{conversation}/messages', [\App\Http\Controllers\Chat\ChatController::class, 'messages'])->name('messages');
+    Route::get('/{conversation}/deleted-ids', [\App\Http\Controllers\Chat\ChatController::class, 'deletedIds'])->name('deleted-ids');
+    Route::delete('/{conversation}/messages/{message}', [\App\Http\Controllers\Chat\ChatController::class, 'destroyMessage'])->name('messages.destroy');
+    Route::get('/unread-count', [\App\Http\Controllers\Chat\ChatController::class, 'unreadCount'])->name('unread-count');
+    Route::get('/{conversation}', [\App\Http\Controllers\Chat\ChatController::class, 'show'])->name('show');
+    Route::post('/{conversation}/send', [\App\Http\Controllers\Chat\ChatController::class, 'send'])->name('send');
+});

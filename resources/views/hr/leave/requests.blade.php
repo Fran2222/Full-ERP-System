@@ -38,18 +38,72 @@
             };
 
             $authUser = auth()->user();
-            $isAdminApprover = $authUser && $authUser->hasAnyRole(['super admin', 'super-admin', 'superadmin', 'admin']);
-            $isHrApprover = $authUser && (
-                $authUser->hasAnyRole(['hr', 'HR', 'human resource', 'human-resource'])
-                || ($authUser->can('hr.leave.requests.view') && !$isAdminApprover)
+
+            $safeCan = function ($permission) use ($authUser) {
+                if (! $authUser) {
+                    return false;
+                }
+
+                try {
+                    return $authUser->can($permission);
+                } catch (\Throwable $e) {
+                    return false;
+                }
+            };
+
+            $normalizeRoleName = function ($role) {
+                $value = strtolower((string) $role);
+                $value = str_replace(['_', '-'], ' ', $value);
+                $value = preg_replace('/\s+/', ' ', $value) ?: '';
+
+                return trim($value);
+            };
+
+            try {
+                $roleNames = $authUser && method_exists($authUser, 'getRoleNames')
+                    ? $authUser->getRoleNames()->map(fn ($role) => $normalizeRoleName($role))->filter()->unique()->values()
+                    : collect();
+            } catch (\Throwable $e) {
+                $roleNames = collect();
+            }
+
+            $hasRoleName = function (array $allowedRoles) use ($roleNames, $normalizeRoleName) {
+                $allowedRoles = collect($allowedRoles)
+                    ->map(fn ($role) => $normalizeRoleName($role))
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                return $roleNames->intersect($allowedRoles)->isNotEmpty();
+            };
+
+            $isAdminApprover = $authUser && (
+                $hasRoleName(['super admin', 'super-admin', 'super_admin', 'superadmin', 'admin', 'administrator', 'bod', 'board of directors'])
+                || $safeCan('hr.leave.admin.approve')
             );
+            $isHrApprover = $authUser && (
+                $hasRoleName(['hr', 'HR', 'human resource', 'human-resource', 'human resources'])
+                || ($safeCan('hr.leave.requests.view') && !$isAdminApprover)
+            );
+            $safeSupervisedEmployeesExists = function () use ($authUser) {
+                if (! $authUser || ! method_exists($authUser, 'supervisedEmployees')) {
+                    return false;
+                }
+
+                try {
+                    return $authUser->supervisedEmployees()->exists();
+                } catch (\Throwable $e) {
+                    return false;
+                }
+            };
+
             $isDepartmentHeadApprover = $authUser && (
-                $authUser->hasAnyRole(['department head', 'department-head', 'department_head', 'departmenthead', 'supervisor', 'head'])
-                || $authUser->supervisedEmployees()->exists()
+                $hasRoleName(['department head', 'department-head', 'department_head', 'departmenthead', 'supervisor', 'head'])
+                || $safeSupervisedEmployeesExists()
             );
 
-            $canApprove = $isAdminApprover || $isHrApprover || $isDepartmentHeadApprover || auth()->user()->can('hr.leave.approve');
-            $canReject = $isAdminApprover || $isHrApprover || $isDepartmentHeadApprover || auth()->user()->can('hr.leave.reject');
+            $canApprove = $isAdminApprover || $isHrApprover || $isDepartmentHeadApprover || $safeCan('hr.leave.approve');
+            $canReject = $isAdminApprover || $isHrApprover || $isDepartmentHeadApprover || $safeCan('hr.leave.reject');
 
             $stepLabels = [
                 'department_head' => 'Department Head',
@@ -485,6 +539,174 @@
             @media (max-width: 1199.98px) {
                 .wmc-leave-request-table {
                     min-width: 980px;
+                }
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | 125% Scale Fit Fix - Leave Request Approval
+            |--------------------------------------------------------------------------
+            | Keeps the original structure intact while making the Status / Action
+            | column visible without dragging on the recommended 125% display scale.
+            */
+            .wmc-leave-request-page {
+                padding-left: 0.35rem !important;
+                padding-right: 0.35rem !important;
+            }
+
+            .wmc-leave-request-card {
+                max-width: 100% !important;
+            }
+
+            .wmc-leave-request-card .card-header,
+            .wmc-leave-request-card .card-body {
+                padding-left: 0.75rem !important;
+                padding-right: 0.75rem !important;
+            }
+
+            .wmc-leave-table-wrap {
+                overflow-x: visible !important;
+            }
+
+            .wmc-leave-request-table {
+                width: 100% !important;
+                min-width: 0 !important;
+                table-layout: fixed !important;
+                font-size: 12px !important;
+            }
+
+            .wmc-leave-request-table th,
+            .wmc-leave-request-table td {
+                padding: 0.62rem 0.48rem !important;
+                vertical-align: middle !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(1),
+            .wmc-leave-request-table td:nth-child(1) {
+                width: 14% !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(2),
+            .wmc-leave-request-table td:nth-child(2) {
+                width: 23% !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(3),
+            .wmc-leave-request-table td:nth-child(3) {
+                width: 8% !important;
+                padding-left: 0.45rem !important;
+                padding-right: 0.35rem !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(4),
+            .wmc-leave-request-table td:nth-child(4) {
+                width: 10% !important;
+                padding-left: 0.45rem !important;
+                padding-right: 0.35rem !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(5),
+            .wmc-leave-request-table td:nth-child(5) {
+                width: 24% !important;
+                text-align: center !important;
+            }
+
+            .wmc-leave-request-table th:nth-child(6),
+            .wmc-leave-request-table td:nth-child(6) {
+                width: 21% !important;
+                padding-left: 0.45rem !important;
+                padding-right: 0.35rem !important;
+            }
+
+            .wmc-leave-request-table td:nth-child(1),
+            .wmc-leave-request-table td:nth-child(2),
+            .wmc-leave-request-table td:nth-child(4),
+            .wmc-leave-request-table td:nth-child(6) {
+                overflow: hidden !important;
+            }
+
+            .wmc-leave-request-table td:nth-child(1) .fw-semibold,
+            .wmc-leave-request-table td:nth-child(1) small,
+            .wmc-leave-request-table td:nth-child(2) .fw-semibold,
+            .wmc-leave-request-table td:nth-child(2) small,
+            .wmc-leave-request-table td:nth-child(4) .fw-semibold,
+            .wmc-leave-request-table td:nth-child(4) small,
+            .wmc-leave-request-table td:nth-child(6) small {
+                display: block !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            .wmc-leave-request-table td:nth-child(2) small,
+            .wmc-leave-request-table td:nth-child(6) small {
+                white-space: normal !important;
+                line-height: 1.35 !important;
+            }
+
+            .wmc-leave-request-table td:nth-child(3) h5 {
+                font-size: 1.03rem !important;
+            }
+
+            .wmc-leave-request-table .badge {
+                max-width: 100% !important;
+                white-space: normal !important;
+                text-align: left !important;
+                line-height: 1.15 !important;
+                padding: 0.28rem 0.45rem !important;
+                font-size: 10.5px !important;
+            }
+
+            .leave-progress-wrap {
+                max-width: 215px !important;
+            }
+
+            .leave-progress-circle {
+                width: 25px !important;
+                height: 25px !important;
+                font-size: 10px !important;
+            }
+
+            .leave-progress-step:not(:last-child)::after {
+                top: 12px !important;
+                left: calc(50% + 13px) !important;
+                right: calc(-50% + 13px) !important;
+            }
+
+            .leave-progress-label {
+                font-size: 9px !important;
+                white-space: normal !important;
+            }
+
+            .leave-progress-date {
+                font-size: 8.6px !important;
+            }
+
+            .leave-status-actions {
+                gap: 0.35rem !important;
+                flex-wrap: nowrap !important;
+            }
+
+            .leave-action-btn {
+                width: 30px !important;
+                height: 30px !important;
+                min-width: 30px !important;
+                border-radius: 9px !important;
+            }
+
+            .leave-action-btn svg {
+                width: 15px !important;
+                height: 15px !important;
+            }
+
+            @media (max-width: 991.98px) {
+                .wmc-leave-table-wrap {
+                    overflow-x: auto !important;
+                }
+
+                .wmc-leave-request-table {
+                    min-width: 980px !important;
                 }
             }
         </style>

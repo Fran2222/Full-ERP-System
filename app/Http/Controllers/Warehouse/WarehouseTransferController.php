@@ -13,18 +13,14 @@ use App\Models\Warehouse\WarehouseTransfer;
 use App\Models\Warehouse\WarehouseTransferItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class WarehouseTransferController extends Controller
 {
     private function access(string $permission): void
     {
-        $user = auth()->user();
-
         abort_unless(
-            $user && (
-                $user->can($permission)
-                || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
-            ),
+            $this->canAccess($permission),
             403,
             'Unauthorized warehouse transfer action.'
         );
@@ -34,9 +30,261 @@ class WarehouseTransferController extends Controller
     {
         $user = auth()->user();
 
-        return $user && (
-            $user->can($permission)
-            || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+        if (! $user) {
+            return false;
+        }
+
+        if (
+            (method_exists($user, 'can') && $user->can($permission))
+            || $this->userHasRoleName($user, ['Super Admin', 'Super Administrator', 'Admin', 'admin', 'super-admin'])
+        ) {
+            return true;
+        }
+
+        if (str_starts_with($permission, 'warehouse.transfer.')) {
+            return $this->userHasWarehouseTransferModuleAccess($user);
+        }
+
+        return false;
+    }
+
+    private function userHasWarehouseTransferModuleAccess($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasModuleAccess')) {
+            foreach (['warehouse', 'inventory'] as $module) {
+                foreach (['staff', 'manager', 'admin'] as $level) {
+                    try {
+                        if ($user->hasModuleAccess($module, $level)) {
+                            return true;
+                        }
+                    } catch (\Throwable $e) {
+                        // Keep checking other access sources.
+                    }
+                }
+            }
+        }
+
+        foreach (['moduleAccesses', 'modules', 'module_accesses'] as $relation) {
+            if (! method_exists($user, $relation)) {
+                continue;
+            }
+
+            try {
+                $hasAccess = $user->{$relation}()->get()->contains(function ($module) {
+                    $moduleText = strtolower(trim(implode(' ', array_filter([
+                        $module->name ?? null,
+                        $module->module ?? null,
+                        $module->module_name ?? null,
+                        $module->title ?? null,
+                        $module->access ?? null,
+                        $module->access_level ?? null,
+                        $module->role ?? null,
+                        $module->role_name ?? null,
+                        $module->type ?? null,
+                        $module->permission ?? null,
+                        $module->permission_name ?? null,
+                    ]))));
+
+                    if ($module->pivot) {
+                        $moduleText .= ' ' . strtolower(trim(implode(' ', array_filter([
+                            $module->pivot->access ?? null,
+                            $module->pivot->access_level ?? null,
+                            $module->pivot->role ?? null,
+                            $module->pivot->role_name ?? null,
+                            $module->pivot->type ?? null,
+                            $module->pivot->permission ?? null,
+                            $module->pivot->permission_name ?? null,
+                        ]))));
+                    }
+
+                    $hasWarehouseModule = str_contains($moduleText, 'warehouse') || str_contains($moduleText, 'inventory');
+                    $hasAllowedLevel = str_contains($moduleText, 'staff') || str_contains($moduleText, 'manager') || str_contains($moduleText, 'admin');
+
+                    return $hasWarehouseModule && $hasAllowedLevel;
+                });
+
+                if ($hasAccess) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                // Keep checking DB tables below.
+            }
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_modules',
+            'module_accesses',
+            'user_module_accesses',
+            'module_user',
+            'assigned_modules',
+            'employee_module_accesses',
+            'system_module_accesses',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+            $userColumn = collect(['user_id', 'employee_id', 'model_id'])->first(fn ($column) => in_array($column, $columns, true));
+
+            if (! $userColumn) {
+                continue;
+            }
+
+            $rows = DB::table($table)->where($userColumn, $user->id)->get();
+
+            foreach ($rows as $row) {
+                $text = strtolower(trim(implode(' ', array_filter(array_map(function ($column) use ($row) {
+                    $value = $row->{$column} ?? null;
+                    return is_scalar($value) ? (string) $value : null;
+                }, $columns)))));
+
+                $hasWarehouseModule = str_contains($text, 'warehouse') || str_contains($text, 'inventory');
+                $hasAllowedLevel = str_contains($text, 'staff') || str_contains($text, 'manager') || str_contains($text, 'admin');
+
+                if ($hasWarehouseModule && $hasAllowedLevel) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function userHasWarehousePageAccess($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->userHasRoleName($user, ['Super Admin', 'Super Administrator', 'Admin'])) {
+            return true;
+        }
+
+        foreach ([
+            'warehouse.dashboard.view',
+            'warehouse.inventory.view',
+            'warehouse.ledger.view',
+            'warehouse.transfer.view',
+            'warehouse.transfer.create',
+            'warehouse.transfer.receive',
+            'inventory.view',
+        ] as $permission) {
+            if (method_exists($user, 'can') && $user->can($permission)) {
+                return true;
+            }
+        }
+
+        if (method_exists($user, 'hasModuleAccess')) {
+            foreach (['viewer', 'staff', 'manager', 'admin'] as $level) {
+                try {
+                    if ($user->hasModuleAccess('warehouse', $level) || $user->hasModuleAccess('inventory', $level)) {
+                        return true;
+                    }
+                } catch (\Throwable $e) {
+                    // Some hasModuleAccess implementations only accept certain levels.
+                }
+            }
+        }
+
+        foreach (['moduleAccesses', 'modules', 'module_accesses'] as $relation) {
+            if (! method_exists($user, $relation)) {
+                continue;
+            }
+
+            $hasAccess = $user->{$relation}()
+                ->get()
+                ->contains(function ($module) {
+                    $moduleText = strtolower(trim(implode(' ', array_filter([
+                        $module->name ?? null,
+                        $module->module ?? null,
+                        $module->module_name ?? null,
+                        $module->title ?? null,
+                        $module->access ?? null,
+                        $module->access_level ?? null,
+                        $module->role ?? null,
+                        $module->role_name ?? null,
+                        $module->type ?? null,
+                        $module->permission ?? null,
+                        $module->permission_name ?? null,
+                    ]))));
+
+                    if ($module->pivot) {
+                        $moduleText .= ' ' . strtolower(trim(implode(' ', array_filter([
+                            $module->pivot->access ?? null,
+                            $module->pivot->access_level ?? null,
+                            $module->pivot->role ?? null,
+                            $module->pivot->role_name ?? null,
+                            $module->pivot->type ?? null,
+                            $module->pivot->permission ?? null,
+                            $module->pivot->permission_name ?? null,
+                        ]))));
+                    }
+
+                    return str_contains($moduleText, 'warehouse') || str_contains($moduleText, 'inventory');
+                });
+
+            if ($hasAccess) {
+                return true;
+            }
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_modules',
+            'module_accesses',
+            'user_module_accesses',
+            'module_user',
+            'assigned_modules',
+            'employee_module_accesses',
+            'system_module_accesses',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+            $userColumn = collect(['user_id', 'employee_id', 'model_id'])->first(fn ($column) => in_array($column, $columns, true));
+
+            if (! $userColumn) {
+                continue;
+            }
+
+            $rows = DB::table($table)->where($userColumn, $user->id)->get();
+
+            foreach ($rows as $row) {
+                $text = strtolower(trim(implode(' ', array_filter(array_map(function ($column) use ($row) {
+                    $value = $row->{$column} ?? null;
+
+                    return is_scalar($value) ? (string) $value : null;
+                }, $columns)))));
+
+                if (str_contains($text, 'warehouse') || str_contains($text, 'inventory')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function accessWarehousePage(): void
+    {
+        abort_unless(
+            $this->userHasWarehousePageAccess(auth()->user()),
+            403,
+            'Unauthorized warehouse transfer page access.'
         );
     }
 
@@ -47,9 +295,780 @@ class WarehouseTransferController extends Controller
             || $this->canAccess('warehouse.stock_in.create');
     }
 
+    private function userBranchId($user): ?int
+    {
+        if (! $user) {
+            return null;
+        }
+
+        foreach (['branch_id', 'organization_id', 'org_id'] as $column) {
+            if (! empty($user->{$column})) {
+                return (int) $user->{$column};
+            }
+        }
+
+        foreach (['employeeProfile', 'employee_profile', 'profile'] as $relation) {
+            if (method_exists($user, $relation)) {
+                $profile = $user->{$relation}()->first();
+
+                foreach (['branch_id', 'organization_id', 'org_id'] as $column) {
+                    if ($profile && ! empty($profile->{$column})) {
+                        return (int) $profile->{$column};
+                    }
+                }
+            }
+        }
+
+        foreach (['employee_profiles', 'employees'] as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+
+            if (! in_array('user_id', $columns, true)) {
+                continue;
+            }
+
+            $profile = DB::table($table)->where('user_id', $user->id)->first();
+
+            if (! $profile) {
+                continue;
+            }
+
+            foreach (['branch_id', 'organization_id', 'org_id'] as $column) {
+                if (in_array($column, $columns, true) && ! empty($profile->{$column})) {
+                    return (int) $profile->{$column};
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function userHasRoleName($user, array $roleNames): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole($roleNames)) {
+            return true;
+        }
+
+        $expected = collect($roleNames)->map(fn ($role) => strtolower(trim($role)))->all();
+
+        if (method_exists($user, 'roles')) {
+            return $user->roles()->pluck('name')->map(fn ($role) => strtolower(trim($role)))->intersect($expected)->isNotEmpty();
+        }
+
+        return false;
+    }
+
+    private function userHasModuleAccess($user, array $moduleNames): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $moduleNames = collect($moduleNames)->map(fn ($module) => strtolower(trim($module)))->all();
+
+        foreach ([
+            'warehouse.transfer.receive',
+            'warehouse.transfer.create',
+            'warehouse.stock_in.create',
+            'warehouse.stock_out.create',
+            'warehouse.inventory.index',
+            'warehouse.inventory.view',
+            'inventory.view',
+            'inventory.create',
+        ] as $permission) {
+            if (method_exists($user, 'can') && $user->can($permission)) {
+                return true;
+            }
+        }
+
+        foreach (['moduleAccesses', 'modules', 'module_accesses'] as $relation) {
+            if (! method_exists($user, $relation)) {
+                continue;
+            }
+
+            $hasAccess = $user->{$relation}()
+                ->get()
+                ->contains(function ($module) use ($moduleNames) {
+                    $name = strtolower(trim((string) ($module->name ?? $module->module ?? $module->module_name ?? $module->title ?? '')));
+
+                    return in_array($name, $moduleNames, true)
+                        || str_contains($name, 'warehouse')
+                        || str_contains($name, 'inventory');
+                });
+
+            if ($hasAccess) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function userHasWarehouseManagerAccessFromDatabase($user): bool
+    {
+        if (! $user || empty($user->id)) {
+            return false;
+        }
+
+        $possibleTables = [
+            'module_accesses',
+            'user_module_accesses',
+            'module_user',
+            'model_has_module_accesses',
+            'assigned_modules',
+            'user_modules',
+            'employee_module_accesses',
+            'system_module_accesses',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+            $userColumn = collect(['user_id', 'employee_id', 'model_id'])->first(fn ($column) => in_array($column, $columns, true));
+
+            if (! $userColumn) {
+                continue;
+            }
+
+            $rows = DB::table($table)->where($userColumn, $user->id)->get();
+
+            foreach ($rows as $row) {
+                $text = strtolower(trim(implode(' ', array_filter(array_map(function ($column) use ($row) {
+                    $value = $row->{$column} ?? null;
+
+                    return is_scalar($value) ? (string) $value : null;
+                }, $columns)))));
+
+                $isWarehouseOrInventory = str_contains($text, 'warehouse')
+                    || str_contains($text, 'inventory');
+
+                $isManagerOrAdmin = str_contains($text, 'manager')
+                    || str_contains($text, 'admin');
+
+                if ($isWarehouseOrInventory && $isManagerOrAdmin) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function userHasWarehouseManagerAccess($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->userHasRoleName($user, ['Super Admin', 'Super Administrator'])) {
+            return true;
+        }
+
+        $managerOrAdminRoles = [
+            'Admin',
+            'Administrator',
+            'Manager',
+            'Branch Admin',
+            'Branch Manager',
+            'Warehouse Admin',
+            'Warehouse Manager',
+            'Inventory Admin',
+            'Inventory Manager',
+        ];
+
+        $hasManagerOrAdminRole = $this->userHasRoleName($user, $managerOrAdminRoles);
+
+        if ($hasManagerOrAdminRole && $this->userHasModuleAccess($user, ['Warehouse', 'Inventory'])) {
+            return true;
+        }
+
+        /*
+         * Some accounts keep the main role as Employee, while the module access
+         * row stores the real authority, for example: "Warehouse - Manager".
+         * This allows those branch/module managers to receive transfers without
+         * making all Employee accounts receive-capable.
+         */
+        return $this->userHasWarehouseManagerModuleAccess($user)
+            || $this->userHasWarehouseManagerAccessFromDatabase($user);
+    }
+
+    private function userHasWarehouseManagerModuleAccess($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        foreach (['moduleAccesses', 'modules', 'module_accesses'] as $relation) {
+            if (! method_exists($user, $relation)) {
+                continue;
+            }
+
+            $hasAccess = $user->{$relation}()
+                ->get()
+                ->contains(function ($module) {
+                    $moduleText = strtolower(trim(implode(' ', array_filter([
+                        $module->name ?? null,
+                        $module->module ?? null,
+                        $module->module_name ?? null,
+                        $module->title ?? null,
+                        $module->access ?? null,
+                        $module->access_level ?? null,
+                        $module->role ?? null,
+                        $module->role_name ?? null,
+                        $module->type ?? null,
+                        $module->permission ?? null,
+                        $module->permission_name ?? null,
+                    ]))));
+
+                    if ($module->pivot) {
+                        $moduleText .= ' ' . strtolower(trim(implode(' ', array_filter([
+                            $module->pivot->access ?? null,
+                            $module->pivot->access_level ?? null,
+                            $module->pivot->role ?? null,
+                            $module->pivot->role_name ?? null,
+                            $module->pivot->type ?? null,
+                            $module->pivot->permission ?? null,
+                            $module->pivot->permission_name ?? null,
+                        ]))));
+                    }
+
+                    $isWarehouseOrInventory = str_contains($moduleText, 'warehouse')
+                        || str_contains($moduleText, 'inventory');
+
+                    $isManagerOrAdmin = str_contains($moduleText, 'manager')
+                        || str_contains($moduleText, 'admin');
+
+                    return $isWarehouseOrInventory && $isManagerOrAdmin;
+                });
+
+            if ($hasAccess) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    private function normalizeBranchText(?string $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $value = strtolower(trim($value));
+        $value = preg_replace('/[^a-z0-9]+/', ' ', $value);
+        $value = preg_replace('/\s+/', ' ', $value);
+
+        return trim($value) ?: null;
+    }
+
+    private function userBranchNames($user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        $names = [];
+
+        foreach (['branch', 'organization', 'department'] as $relation) {
+            if (method_exists($user, $relation)) {
+                $record = $user->{$relation}()->first();
+
+                foreach (['name', 'branch_name', 'organization_name', 'department_name', 'title'] as $column) {
+                    if ($record && ! empty($record->{$column})) {
+                        $names[] = $record->{$column};
+                    }
+                }
+            }
+        }
+
+        foreach (['organization', 'branch', 'department', 'office', 'assigned_branch'] as $column) {
+            if (! empty($user->{$column}) && is_string($user->{$column})) {
+                $names[] = $user->{$column};
+            }
+        }
+
+        foreach (['employeeProfile', 'employee_profile', 'profile'] as $relation) {
+            if (method_exists($user, $relation)) {
+                $profile = $user->{$relation}()->first();
+
+                foreach (['branch', 'organization', 'department'] as $profileRelation) {
+                    if ($profile && method_exists($profile, $profileRelation)) {
+                        $record = $profile->{$profileRelation}()->first();
+
+                        foreach (['name', 'branch_name', 'organization_name', 'department_name', 'title'] as $column) {
+                            if ($record && ! empty($record->{$column})) {
+                                $names[] = $record->{$column};
+                            }
+                        }
+                    }
+                }
+
+                foreach (['branch_name', 'organization_name', 'department_name', 'branch', 'organization', 'department', 'office'] as $column) {
+                    if ($profile && ! empty($profile->{$column}) && is_string($profile->{$column})) {
+                        $names[] = $profile->{$column};
+                    }
+                }
+            }
+        }
+
+        foreach (['employee_profiles', 'employees'] as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+
+            if (! in_array('user_id', $columns, true)) {
+                continue;
+            }
+
+            $profile = DB::table($table)->where('user_id', $user->id)->first();
+
+            if (! $profile) {
+                continue;
+            }
+
+            foreach (['branch_name', 'organization_name', 'department_name', 'branch', 'organization', 'department', 'office'] as $column) {
+                if (in_array($column, $columns, true) && ! empty($profile->{$column}) && is_string($profile->{$column})) {
+                    $names[] = $profile->{$column};
+                }
+            }
+
+            foreach (['branch_id', 'organization_id', 'department_id'] as $foreignColumn) {
+                if (! in_array($foreignColumn, $columns, true) || empty($profile->{$foreignColumn})) {
+                    continue;
+                }
+
+                $lookupTables = match ($foreignColumn) {
+                    'branch_id' => ['branches'],
+                    'organization_id' => ['branches', 'organizations'],
+                    'department_id' => ['departments', 'branches'],
+                    default => [],
+                };
+
+                foreach ($lookupTables as $lookupTable) {
+                    if (! Schema::hasTable($lookupTable)) {
+                        continue;
+                    }
+
+                    $lookupColumns = Schema::getColumnListing($lookupTable);
+
+                    if (! in_array('id', $lookupColumns, true)) {
+                        continue;
+                    }
+
+                    $record = DB::table($lookupTable)->where('id', $profile->{$foreignColumn})->first();
+
+                    foreach (['name', 'branch_name', 'organization_name', 'department_name', 'title'] as $nameColumn) {
+                        if ($record && in_array($nameColumn, $lookupColumns, true) && ! empty($record->{$nameColumn})) {
+                            $names[] = $record->{$nameColumn};
+                        }
+                    }
+                }
+            }
+        }
+
+        return collect($names)
+            ->map(fn ($name) => $this->normalizeBranchText((string) $name))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function transferDestinationNames(WarehouseTransfer $transfer): array
+    {
+        $names = [];
+
+        if (! $transfer->relationLoaded('toBranch')) {
+            $transfer->load('toBranch');
+        }
+
+        if (! $transfer->relationLoaded('toLocation')) {
+            $transfer->load('toLocation');
+        }
+
+        foreach (['name', 'branch_name', 'organization_name', 'title'] as $column) {
+            if ($transfer->toBranch && ! empty($transfer->toBranch->{$column})) {
+                $names[] = $transfer->toBranch->{$column};
+            }
+        }
+
+        foreach (['branch_name', 'organization_name', 'department_name'] as $accessor) {
+            if (! empty($transfer->{$accessor})) {
+                $names[] = $transfer->{$accessor};
+            }
+        }
+
+        if ($transfer->toLocation) {
+            foreach (['branch_name', 'organization_name', 'department_name'] as $column) {
+                if (! empty($transfer->toLocation->{$column})) {
+                    $names[] = $transfer->toLocation->{$column};
+                }
+            }
+
+            if (! empty($transfer->toLocation->branch_id) && Schema::hasTable('branches')) {
+                $branchColumns = Schema::getColumnListing('branches');
+                $branch = DB::table('branches')->where('id', $transfer->toLocation->branch_id)->first();
+
+                foreach (['name', 'branch_name', 'organization_name', 'title'] as $column) {
+                    if ($branch && in_array($column, $branchColumns, true) && ! empty($branch->{$column})) {
+                        $names[] = $branch->{$column};
+                    }
+                }
+            }
+        }
+
+        return collect($names)
+            ->map(fn ($name) => $this->normalizeBranchText((string) $name))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function destinationMatchesUserBranch(WarehouseTransfer $transfer, $user): bool
+    {
+        if (! $transfer->relationLoaded('toLocation')) {
+            $transfer->load('toLocation');
+        }
+
+        $destinationBranchId = $transfer->to_branch_id ?: $transfer->toLocation?->branch_id;
+        $userBranchId = $this->userBranchId($user);
+
+        if ($destinationBranchId && $userBranchId && (int) $destinationBranchId === (int) $userBranchId) {
+            return true;
+        }
+
+        $destinationNames = $this->transferDestinationNames($transfer);
+        $userNames = $this->userBranchNames($user);
+
+        return ! empty(array_intersect($destinationNames, $userNames));
+    }
+
+
+    private function transferDestinationIsWarehouse(WarehouseTransfer $transfer): bool
+    {
+        if (! $transfer->relationLoaded('toLocation')) {
+            $transfer->load('toLocation');
+        }
+
+        $location = $transfer->toLocation;
+
+        if (! $location) {
+            return false;
+        }
+
+        $parts = [];
+
+        foreach (['location_type', 'type', 'name', 'location_name', 'location_code'] as $column) {
+            if (! empty($location->{$column})) {
+                $parts[] = (string) $location->{$column};
+            }
+        }
+
+        $text = strtolower(trim(implode(' ', $parts)));
+
+        return str_contains($text, 'warehouse')
+            || str_contains($text, 'main warehouse')
+            || str_contains($text, 'stock room')
+            || str_contains($text, 'stockroom');
+    }
+
+    private function userHasWarehouseDepartment($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $departmentTexts = [];
+
+        if (! empty($user->department_id) && Schema::hasTable('departments')) {
+            $columns = Schema::getColumnListing('departments');
+
+            if (in_array('id', $columns, true)) {
+                $department = DB::table('departments')->where('id', $user->department_id)->first();
+
+                if ($department) {
+                    foreach (['name', 'department_name', 'title', 'code'] as $column) {
+                        if (in_array($column, $columns, true) && ! empty($department->{$column})) {
+                            $departmentTexts[] = (string) $department->{$column};
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach (['department', 'departmentInfo', 'department_info'] as $relation) {
+            if (method_exists($user, $relation)) {
+                try {
+                    $department = $user->{$relation}()->first();
+
+                    if ($department) {
+                        foreach (['name', 'department_name', 'title', 'code'] as $column) {
+                            if (! empty($department->{$column})) {
+                                $departmentTexts[] = (string) $department->{$column};
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Keep this helper safe across different user model relation names.
+                }
+            }
+        }
+
+        $text = strtolower(trim(implode(' ', $departmentTexts)));
+
+        return str_contains($text, 'warehouse')
+            || str_contains($text, 'inventory');
+    }
+
+        private function wmTransferDestinationIsWarehouse(WarehouseTransfer $transfer): bool
+    {
+        if (! $transfer->relationLoaded('toLocation')) {
+            $transfer->load('toLocation');
+        }
+
+        $location = $transfer->toLocation;
+
+        if (! $location) {
+            return empty($transfer->to_branch_id);
+        }
+
+        $text = strtolower(trim(implode(' ', array_filter([
+            $location->location_type ?? null,
+            $location->location_name ?? null,
+            $location->name ?? null,
+            $location->location_code ?? null,
+        ]))));
+
+        return empty($location->branch_id)
+            || str_contains($text, 'warehouse')
+            || str_contains($text, 'stock room')
+            || str_contains($text, 'stockroom')
+            || str_contains($text, 'main')
+            || str_contains($text, 'central');
+    }
+
+    private function wmUserIsWarehouseDepartmentUser($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->userHasRoleName($user, ['Warehouse Department', 'Warehouse Manager', 'Warehouse Admin'])) {
+            return true;
+        }
+
+        $departmentTexts = [];
+
+        if (method_exists($user, 'department')) {
+            try {
+                $department = $user->department()->first();
+                if ($department) {
+                    $departmentTexts[] = implode(' ', array_filter([
+                        $department->name ?? null,
+                        $department->department_name ?? null,
+                        $department->title ?? null,
+                    ]));
+                }
+            } catch (\Throwable $e) {
+                // Keep checking other sources.
+            }
+        }
+
+        foreach (['department', 'department_name', 'office', 'primary_module'] as $column) {
+            if (! empty($user->{$column}) && is_string($user->{$column})) {
+                $departmentTexts[] = $user->{$column};
+            }
+        }
+
+        if (! empty($user->department_id) && Schema::hasTable('departments')) {
+            $columns = Schema::getColumnListing('departments');
+            if (in_array('id', $columns, true)) {
+                $department = DB::table('departments')->where('id', $user->department_id)->first();
+                foreach (['name', 'department_name', 'title'] as $column) {
+                    if ($department && in_array($column, $columns, true) && ! empty($department->{$column})) {
+                        $departmentTexts[] = $department->{$column};
+                    }
+                }
+            }
+        }
+
+        $text = strtolower(trim(implode(' ', array_filter($departmentTexts))));
+
+        return str_contains($text, 'warehouse');
+    }
+
+    private function wmUserCanReceiveBranchDestinationTransfer($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($this, 'userHasWarehouseTransferModuleAccess') && $this->userHasWarehouseTransferModuleAccess($user)) {
+            return true;
+        }
+
+        return $this->userHasWarehouseManagerAccess($user)
+            || $this->canAccess('warehouse.transfer.receive')
+            || $this->canAccess('warehouse.transfer.create')
+            || $this->canAccess('warehouse.stock_in.create');
+    }
+                private function canReceiveTransfer(WarehouseTransfer $transfer): bool
+    {
+        $user = auth()->user();
+
+        if (! $user || $transfer->status !== 'in_transit') {
+            return false;
+        }
+
+        $transfer->loadMissing(['toLocation', 'toBranch']);
+        $toLocation = $transfer->toLocation;
+
+        $destinationBranchId = null;
+        if ($toLocation && ! empty($toLocation->branch_id)) {
+            $destinationBranchId = (int) $toLocation->branch_id;
+        } elseif (! empty($transfer->to_branch_id)) {
+            $destinationBranchId = (int) $transfer->to_branch_id;
+        }
+
+        // Branch/front-desk destination:
+        // only destination-branch users with warehouse/inventory transfer access can receive.
+        // Admin/BOD/source users are not automatically receive-capable here unless their branch matches.
+        if ($destinationBranchId) {
+            $userBranchId = $this->userBranchId($user);
+
+            return $userBranchId
+                && (int) $destinationBranchId === (int) $userBranchId
+                && $this->wmUserCanReceiveBranchDestinationTransfer($user);
+        }
+
+        // Central/warehouse destination without branch:
+        // actual Warehouse Department users or transfer admins can receive.
+        if ($this->wmTransferDestinationIsWarehouse($transfer)) {
+            return $this->wmUserIsWarehouseDepartmentUser($user)
+                || $this->isTransferAdminUser($user);
+        }
+
+        return false;
+    }
+
+    private function isTransferAdminUser($user): bool
+    {
+        return $this->userHasRoleName($user, [
+            'Super Admin',
+            'Super Administrator',
+            'Admin',
+            'Administrator',
+            'BOD',
+            'Board of Directors',
+        ]);
+    }
+
+    private function isWarehouseDepartmentUserForTransfer($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        $departmentText = '';
+
+        if (! empty($user->department_id) && \Illuminate\Support\Facades\Schema::hasTable('departments')) {
+            $dept = \Illuminate\Support\Facades\DB::table('departments')->where('id', $user->department_id)->first();
+            if ($dept) {
+                $departmentText .= ' ' . strtolower(trim(implode(' ', array_filter([
+                    $dept->name ?? null,
+                    $dept->department_name ?? null,
+                    $dept->title ?? null,
+                ]))));
+            }
+        }
+
+        if (method_exists($user, 'department')) {
+            try {
+                $dept = $user->department()->first();
+                if ($dept) {
+                    $departmentText .= ' ' . strtolower(trim(implode(' ', array_filter([
+                        $dept->name ?? null,
+                        $dept->department_name ?? null,
+                        $dept->title ?? null,
+                    ]))));
+                }
+            } catch (\Throwable $e) {
+                // Ignore relation errors.
+            }
+        }
+
+        return str_contains($departmentText, 'warehouse');
+    }
+
+    private function isWarehouseSourceLocation($location): bool
+    {
+        if (! $location) {
+            return false;
+        }
+
+        $type = strtolower(trim((string) ($location->location_type ?? '')));
+        $name = strtolower(trim((string) (($location->location_name ?? null) ?: ($location->name ?? ''))));
+
+        // Only true warehouse locations are valid source for Warehouse Department users.
+        // Branch stock rooms/front desks must NOT be included here.
+        return $type === 'warehouse'
+            || str_contains($type, 'warehouse')
+            || str_contains($name, 'warehouse');
+    }
+
+    private function assertCanTransferFromSource($fromBranchId, $fromLocationId): void
+    {
+        $user = auth()->user();
+        $location = WarehouseLocation::find($fromLocationId);
+
+        abort_unless($location, 422, 'Invalid source location.');
+
+        if ($this->isTransferAdminUser($user)) {
+            return;
+        }
+
+        if ($this->isWarehouseDepartmentUserForTransfer($user)) {
+            abort_unless(
+                $this->isWarehouseSourceLocation($location),
+                403,
+                'Warehouse Department users can transfer from warehouse locations only.'
+            );
+            return;
+        }
+
+        $userBranchId = $this->userBranchId($user);
+
+        abort_unless(
+            $userBranchId
+            && (int) $location->branch_id === (int) $userBranchId
+            && ! $this->isWarehouseSourceLocation($location),
+            403,
+            'You can transfer from your assigned branch stock only.'
+        );
+
+        if ($fromBranchId !== null && $fromBranchId !== '') {
+            abort_unless((int) $fromBranchId === (int) $userBranchId, 403, 'Invalid source branch for your account.');
+        }
+    }
+
     public function index(Request $request)
     {
-        $this->access('warehouse.transfer.create');
+        $this->accessWarehousePage();
 
         $query = WarehouseTransfer::with(['fromBranch', 'fromLocation', 'toBranch', 'toLocation', 'creator', 'items'])
             ->withCount('items')
@@ -120,6 +1139,14 @@ class WarehouseTransferController extends Controller
             'items.*.serial_ids.*' => ['nullable', 'exists:warehouse_item_serials,id'],
         ]);
 
+        $this->assertCanSourceFromLocation($data['from_location_id']);
+
+        $this->assertUserCanSourceFrom(isset($data['from_branch_id']) ? (int) $data['from_branch_id'] : null, (int) $data['from_location_id']);
+
+        $this->assertCanTransferFromSource($data['from_branch_id'] ?? null, $data['from_location_id']);
+
+        $this->wmcAbortUnlessTransferSourceAllowed($data['from_branch_id'] ?? null, $data['from_location_id']);
+
         $transfer = DB::transaction(function () use ($data) {
             $transfer = WarehouseTransfer::create([
                 'transfer_no' => $this->nextTransferNo(),
@@ -165,7 +1192,7 @@ class WarehouseTransferController extends Controller
 
     public function show(WarehouseTransfer $transfer)
     {
-        $this->access('warehouse.transfer.create');
+        $this->accessWarehousePage();
 
         $transfer->load([
             'fromBranch', 'fromLocation', 'toBranch', 'toLocation', 'creator', 'dispatcher', 'receiver', 'canceller',
@@ -174,7 +1201,7 @@ class WarehouseTransferController extends Controller
 
         $canDispatch = $transfer->status === 'draft' && $this->canAccess('warehouse.transfer.create');
         $canCancel = in_array($transfer->status, ['draft', 'in_transit'], true) && $this->canAccess('warehouse.transfer.create');
-        $canReceive = $transfer->status === 'in_transit' && $this->canReceive();
+        $canReceive = $this->canReceiveTransfer($transfer);
 
         return view('warehouse.transfers.show', compact('transfer', 'canDispatch', 'canCancel', 'canReceive'));
     }
@@ -184,6 +1211,7 @@ class WarehouseTransferController extends Controller
         $this->access('warehouse.transfer.create');
 
         abort_unless($transfer->status === 'draft', 422, 'Only draft transfers can be dispatched.');
+        $this->assertUserCanSourceFrom($transfer->from_branch_id ? (int) $transfer->from_branch_id : null, (int) $transfer->from_location_id);
 
         DB::transaction(function () use ($transfer) {
             $transfer->load(['items.item', 'items.serials']);
@@ -236,12 +1264,15 @@ class WarehouseTransferController extends Controller
             ]);
         });
 
+        $transfer->refresh();
+        \App\Services\SystemNotificationService::notifyWarehouseTransferDispatched($transfer, auth()->id());
+
         return redirect()->route('warehouse.transfer.show', $transfer->id)->with('success', 'Transfer dispatched successfully. Source inventory has been deducted.');
     }
 
     public function receive(WarehouseTransfer $transfer)
     {
-        abort_unless($this->canReceive(), 403, 'Unauthorized warehouse transfer receive action.');
+        abort_unless($this->canReceiveTransfer($transfer), 403, 'Unauthorized warehouse transfer receive action.');
         abort_unless($transfer->status === 'in_transit', 422, 'Only on-going transfers can be received.');
 
         DB::transaction(function () use ($transfer) {
@@ -290,6 +1321,13 @@ class WarehouseTransferController extends Controller
             ]);
         });
 
+
+        if (class_exists(\App\Services\SystemNotificationService::class)) {
+            \App\Services\SystemNotificationService::notifyWarehouseTransferReceived(
+                $transfer->fresh(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']),
+                auth()->id()
+            );
+        }
         return redirect()->route('warehouse.transfer.show', $transfer->id)->with('success', 'Transfer received successfully. Destination inventory has been added.');
     }
 
@@ -346,6 +1384,13 @@ class WarehouseTransferController extends Controller
             ]);
         });
 
+
+        if (class_exists(\App\Services\SystemNotificationService::class)) {
+            \App\Services\SystemNotificationService::notifyWarehouseTransferCancelled(
+                $transfer->fresh(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']),
+                auth()->id()
+            );
+        }
         return redirect()->route('warehouse.transfer.show', $transfer->id)->with('success', 'Transfer cancelled successfully.');
     }
 
@@ -358,42 +1403,424 @@ class WarehouseTransferController extends Controller
         $branchId = $request->input('branch_id');
         $search = trim((string) $request->input('q'));
 
+        $this->assertUserCanSourceFrom($branchId !== null && $branchId !== '' ? (int) $branchId : null, (int) $locationId);
+
         $query = WarehouseItemSerial::query()
             ->where('item_id', $itemId)
             ->where('location_id', $locationId)
             ->where('status', 'available')
             ->orderBy('serial_number');
 
-        if ($branchId) {
+        if ($branchId !== null && $branchId !== '') {
             $query->where('branch_id', $branchId);
-        } else {
-            $query->whereNull('branch_id');
         }
 
         if ($search !== '') {
             $query->where('serial_number', 'ilike', '%' . $search . '%');
         }
 
-        return response()->json($query->limit(100)->get(['id', 'serial_number'])->map(function ($serial) {
+        $limit = min(max((int) $request->input('limit', 1000), 1), 1000);
+
+        return response()->json($query->limit($limit)->get(['id', 'serial_number'])->map(function ($serial) {
             return ['id' => $serial->id, 'text' => $serial->serial_number];
         }));
     }
 
-    private function formData(): array
+
+    private function isWarehouseLocationRecord($location): bool
     {
+        if (! $location) {
+            return false;
+        }
+
+        $type = strtolower(trim((string) ($location->location_type ?? '')));
+        $name = strtolower(trim(implode(' ', array_filter([
+            $location->location_name ?? null,
+            $location->name ?? null,
+            $location->location_code ?? null,
+        ]))));
+
+        // For source control, only real warehouse locations are owned by Warehouse Department.
+        // Branch stock rooms/front desks must stay under their own assigned branch users.
+        return $type === 'warehouse' || str_contains($name, 'warehouse');
+    }
+
+    private function currentUserIsWarehouseDepartment(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->userHasRoleName($user, ['Super Admin', 'Super Administrator', 'Admin'])) {
+            return true;
+        }
+
+        if (Schema::hasTable('departments') && ! empty($user->department_id)) {
+            $department = DB::table('departments')->where('id', $user->department_id)->first();
+            $departmentName = strtolower(trim((string) ($department->name ?? '')));
+
+            if (str_contains($departmentName, 'warehouse')) {
+                return true;
+            }
+        }
+
+        return $this->userHasWarehouseManagerAccess($user);
+    }
+
+    private function currentUserCanSourceFromAnywhere(): bool
+    {
+        $user = auth()->user();
+
+        return $user && $this->userHasRoleName($user, ['Super Admin', 'Super Administrator', 'Admin']);
+    }
+
+    private function scopedSourceLocations()
+    {
+        $user = auth()->user();
+
+        $query = WarehouseLocation::with('branch')
+            ->where('status', true)
+            ->orderBy('location_name');
+
+        if ($this->currentUserCanSourceFromAnywhere()) {
+            return $query->get();
+        }
+
+        if ($this->currentUserIsWarehouseDepartment()) {
+            return $query->get()->filter(function ($location) {
+                return $this->isWarehouseLocationRecord($location);
+            })->values();
+        }
+
+        $branchId = $this->userBranchId($user);
+
+        if (! $branchId) {
+            return collect();
+        }
+
+        return $query->where('branch_id', $branchId)->get()->reject(function ($location) {
+            return $this->isWarehouseLocationRecord($location);
+        })->values();
+    }
+
+    private function scopedSourceBranches($fromLocations)
+    {
+        if ($this->currentUserCanSourceFromAnywhere()) {
+            return Branch::orderBy('name')->get();
+        }
+
+        if ($this->currentUserIsWarehouseDepartment()) {
+            return collect();
+        }
+
+        $branchIds = collect($fromLocations)->pluck('branch_id')->filter()->unique()->values();
+
+        if ($branchIds->isEmpty()) {
+            return collect();
+        }
+
+        return Branch::whereIn('id', $branchIds)->orderBy('name')->get();
+    }
+
+    private function assertCanSourceFromLocation($locationId): void
+    {
+        if ($this->currentUserCanSourceFromAnywhere()) {
+            return;
+        }
+
+        $allowed = $this->scopedSourceLocations()->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        abort_unless(in_array((int) $locationId, $allowed, true), 403, 'Unauthorized source location for this transfer.');
+    }
+
+    private function cleanLocationType($value): string
+    {
+        return strtolower(trim((string) $value));
+    }
+
+        private function isBranchSourceLocation($location): bool
+    {
+        return $location && ! $this->isWarehouseSourceLocation($location);
+    }
+
+    private function userIsWarehouseDepartment($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->userHasWarehouseManagerAccess($user)) {
+            return true;
+        }
+
+        $departmentName = null;
+
+        if (! empty($user->department_id) && Schema::hasTable('departments')) {
+            $departmentName = DB::table('departments')->where('id', $user->department_id)->value('name');
+        }
+
+        if (! $departmentName && method_exists($user, 'department')) {
+            $department = $user->department()->first();
+            $departmentName = $department->name ?? null;
+        }
+
+        return str_contains(strtolower((string) $departmentName), 'warehouse');
+    }
+
+    private function userCanSourceAnyLocation($user): bool
+    {
+        return $this->userHasRoleName($user, ['Super Admin', 'Super Administrator', 'Admin', 'Administrator', 'BOD', 'Board of Directors']);
+    }
+
+    private function sourceLocationsForUser($user)
+    {
+        $query = WarehouseLocation::with('branch')
+            ->where('status', true)
+            ->orderBy('location_name');
+
+        if ($this->userCanSourceAnyLocation($user)) {
+            return $query->get();
+        }
+
+        if ($this->userIsWarehouseDepartment($user)) {
+            return $query->get()->filter(function ($location) {
+                return $this->isWarehouseSourceLocation($location);
+            })->values();
+        }
+
+        $branchId = $this->userBranchId($user);
+
+        return $query->where('branch_id', $branchId)
+            ->get()
+            ->filter(function ($location) {
+                return $this->isBranchSourceLocation($location);
+            })->values();
+    }
+
+    private function sourceBranchesForUser($user)
+    {
+        if ($this->userCanSourceAnyLocation($user)) {
+            return Branch::orderBy('name')->get();
+        }
+
+        if ($this->userIsWarehouseDepartment($user)) {
+            // Warehouse users source from warehouse locations. Keep From Branch as Central/Unassigned only.
+            return collect();
+        }
+
+        $branchId = $this->userBranchId($user);
+
+        return Branch::where('id', $branchId)->orderBy('name')->get();
+    }
+
+    private function userCanSourceFrom(?int $branchId, int $locationId): bool
+    {
+        $user = auth()->user();
+        $location = WarehouseLocation::find($locationId);
+
+        if (! $user || ! $location) {
+            return false;
+        }
+
+        if ($this->userCanSourceAnyLocation($user)) {
+            return true;
+        }
+
+        if ($this->userIsWarehouseDepartment($user)) {
+            return $this->isWarehouseSourceLocation($location);
+        }
+
+        $userBranchId = $this->userBranchId($user);
+
+        return $userBranchId
+            && (int) $location->branch_id === (int) $userBranchId
+            && $this->isBranchSourceLocation($location);
+    }
+
+    private function assertUserCanSourceFrom(?int $branchId, int $locationId): void
+    {
+        abort_unless(
+            $this->userCanSourceFrom($branchId, $locationId),
+            403,
+            'You can only transfer from stock locations assigned to your warehouse/branch scope.'
+        );
+    }
+
+        private function formData(): array
+    {
+        $user = auth()->user();
+
+        $branches = Branch::orderBy('name')->get();
+        $locations = WarehouseLocation::with('branch')
+            ->where('status', true)
+            ->orderBy('location_name')
+            ->get();
+
         return [
             'items' => WarehouseItem::with(['category', 'unit'])
                 ->where('status', true)
                 ->orderBy('name')
                 ->get(),
-            'branches' => Branch::orderBy('name')->get(),
-            'locations' => WarehouseLocation::with('branch')
-                ->where('status', true)
-                ->orderBy('location_name')
-                ->get(),
+            // Used by TO dropdowns. Keep all destinations available.
+            'branches' => $branches,
+            'locations' => $locations,
+            // Used by FROM dropdowns only. This is scoped by logged-in user.
+            'fromBranches' => $this->wmcTransferSourceBranchesForUser($user, $branches),
+            'fromLocations' => $this->wmcTransferSourceLocationsForUser($user),
+            'sourceScopeAllowCentral' => $this->wmcTransferUserCanSourceAnywhere($user) || $this->wmcTransferUserIsWarehouseDepartment($user),
+            'sourceScopeIsWarehouseDepartment' => $this->wmcTransferUserIsWarehouseDepartment($user) && ! $this->wmcTransferUserCanSourceAnywhere($user),
         ];
     }
 
+
+    // WMC TRANSFER SOURCE SCOPE HELPERS START
+    private function wmcTransferUserCanSourceAnywhere($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        try {
+            if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'BOD', 'Board of Directors'])) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // Continue with field-based fallback.
+        }
+
+        $type = strtolower((string) ($user->user_type ?? ''));
+        return in_array($type, ['super-admin', 'super admin', 'admin', 'bod'], true);
+    }
+
+    private function wmcTransferUserDepartmentName($user): string
+    {
+        if (! $user) {
+            return '';
+        }
+
+        try {
+            if (isset($user->department) && $user->department) {
+                return strtolower((string) ($user->department->name ?? $user->department->department_name ?? ''));
+            }
+        } catch (\Throwable $e) {
+            // Fall back to DB lookup.
+        }
+
+        $departmentId = $user->department_id ?? null;
+        if (! $departmentId || ! Schema::hasTable('departments')) {
+            return '';
+        }
+
+        $department = DB::table('departments')->where('id', $departmentId)->first();
+        return strtolower((string) ($department->name ?? $department->department_name ?? ''));
+    }
+
+        private function wmcTransferUserIsWarehouseDepartment($user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        // IMPORTANT:
+        // Warehouse MODULE ACCESS only means the user may use warehouse screens/features.
+        // It must NOT make a branch employee a Warehouse Department source user.
+        // Source scope must be based only on the user's actual Department record.
+        return str_contains($this->wmcTransferUserDepartmentName($user), 'warehouse');
+    }
+
+    private function wmcTransferSourceBranchesForUser($user, $allBranches)
+    {
+        if ($this->wmcTransferUserCanSourceAnywhere($user)) {
+            return $allBranches;
+        }
+
+        if ($this->wmcTransferUserIsWarehouseDepartment($user)) {
+            // Warehouse department sources from central/warehouse locations, not branch source stocks.
+            return collect();
+        }
+
+        $branchId = $user->branch_id ?? null;
+        if (! $branchId) {
+            return collect();
+        }
+
+        return $allBranches->where('id', (int) $branchId)->values();
+    }
+
+    private function wmcTransferLocationIsWarehouseSource($location): bool
+    {
+        if (! $location) {
+            return false;
+        }
+
+        $type = strtolower((string) ($location->location_type ?? ''));
+        $name = strtolower(trim((string) (($location->location_name ?? '') . ' ' . ($location->name ?? ''))));
+
+        return str_contains($type, 'warehouse') || str_contains($name, 'warehouse');
+    }
+
+    private function wmcTransferSourceLocationsForUser($user)
+    {
+        $query = WarehouseLocation::with('branch')
+            ->where('status', true)
+            ->orderBy('location_name');
+
+        if ($this->wmcTransferUserCanSourceAnywhere($user)) {
+            return $query->get();
+        }
+
+        $locations = $query->get();
+
+        if ($this->wmcTransferUserIsWarehouseDepartment($user)) {
+            return $locations->filter(function ($location) {
+                return $this->wmcTransferLocationIsWarehouseSource($location);
+            })->values();
+        }
+
+        $branchId = $user->branch_id ?? null;
+        if (! $branchId) {
+            return collect();
+        }
+
+        return $locations->filter(function ($location) use ($branchId) {
+            return (int) ($location->branch_id ?? 0) === (int) $branchId
+                && ! $this->wmcTransferLocationIsWarehouseSource($location);
+        })->values();
+    }
+
+    private function wmcAbortUnlessTransferSourceAllowed($fromBranchId, $fromLocationId): void
+    {
+        $user = auth()->user();
+        $location = WarehouseLocation::find($fromLocationId);
+
+        abort_unless($user && $location, 403, 'Unauthorized transfer source location.');
+
+        if ($this->wmcTransferUserCanSourceAnywhere($user)) {
+            return;
+        }
+
+        if ($this->wmcTransferUserIsWarehouseDepartment($user)) {
+            abort_unless(
+                empty($fromBranchId) && $this->wmcTransferLocationIsWarehouseSource($location),
+                403,
+                'Warehouse department users can source from warehouse locations only.'
+            );
+            return;
+        }
+
+        $userBranchId = $user->branch_id ?? null;
+        abort_unless(
+            $userBranchId
+                && (int) $fromBranchId === (int) $userBranchId
+                && (int) ($location->branch_id ?? 0) === (int) $userBranchId
+                && ! $this->wmcTransferLocationIsWarehouseSource($location),
+            403,
+            'Branch users can source from their assigned branch stock only.'
+        );
+    }
+    // WMC TRANSFER SOURCE SCOPE HELPERS END
     private function nextTransferNo(): string
     {
         $date = now()->format('Ymd');
@@ -411,10 +1838,8 @@ class WarehouseTransferController extends Controller
     {
         $query = Inventory::where('item_id', $itemId)->where('location_id', $locationId);
 
-        if ($branchId) {
+        if ($branchId !== null && $branchId !== '') {
             $query->where('branch_id', $branchId);
-        } else {
-            $query->whereNull('branch_id');
         }
 
         return $query;
@@ -427,12 +1852,11 @@ class WarehouseTransferController extends Controller
             ->where('location_id', $locationId)
             ->where('status', 'available');
 
-        if ($branchId) {
+        if ($branchId !== null && $branchId !== '') {
             $query->where('branch_id', $branchId);
-        } else {
-            $query->whereNull('branch_id');
         }
 
         abort_unless($query->count() === count($serialIds), 422, 'One or more selected serial numbers are no longer available in the source location.');
     }
 }
+

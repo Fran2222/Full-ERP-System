@@ -98,18 +98,20 @@ class CustomerController extends Controller
                         return '';
                     }
 
-                    $html = '<div class="d-inline-flex gap-1">';
+                    $html = '<div class="d-flex align-items-center justify-content-center gap-2 wmc-action-buttons">';
 
                     if ($canEditCustomer) {
                         $html .= '
                             <a href="' . route('sales.customers.edit', $row) . '"
-                               class="wmc-action-btn wmc-action-edit"
-                               title="Edit">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z"
-                                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
+                               class="btn btn-sm btn-primary wmc-action-btn"
+                               title="Edit"
+                               aria-label="Edit">
+                                <i class="icon d-inline-flex align-items-center justify-content-center">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M13.747 3.41095L20.589 10.2529L7.84302 23H1.00098V16.157L13.747 3.41095Z"
+                                            stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </i>
                             </a>
                         ';
                     }
@@ -117,16 +119,22 @@ class CustomerController extends Controller
                     if ($canDeleteCustomer) {
                         $html .= '
                             <button type="button"
-                                    class="wmc-action-btn wmc-action-delete delete-customer"
+                                    class="btn btn-sm btn-danger wmc-action-btn delete-customer"
                                     data-url="' . route('sales.customers.destroy', $row) . '"
                                     data-name="' . e($row->customer_name) . '"
-                                    title="Delete">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                    <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
+                                    title="Delete"
+                                    aria-label="Delete">
+                                <i class="icon d-inline-flex align-items-center justify-content-center">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M3 6H5H21" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                                        <path d="M19 6L18.2 19C18.1 20.1 17.2 21 16.1 21H7.9C6.8 21 5.9 20.1 5.8 19L5 6"
+                                            stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                                        <path d="M10 11V17" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                                        <path d="M14 11V17" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                                        <path d="M9 6V4C9 3.4 9.4 3 10 3H14C14.6 3 15 3.4 15 4V6"
+                                            stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                                    </svg>
+                                </i>
                             </button>
                         ';
                     }

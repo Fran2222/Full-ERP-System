@@ -83,6 +83,69 @@
             margin: 0 !important;
             min-width: 120px;
         }
+
+        /* Fit Branches table at 125% browser / display scale */
+        .wmc-branch-table {
+            table-layout: fixed;
+            width: 100% !important;
+            min-width: 0 !important;
+            font-size: 0.92rem;
+        }
+
+        .wmc-branch-table th,
+        .wmc-branch-table td {
+            vertical-align: middle !important;
+            padding: 0.8rem 0.85rem;
+        }
+
+        .wmc-branch-table thead th {
+            white-space: nowrap;
+        }
+
+        .wmc-branch-table .wmc-col-id { width: 7%; }
+        .wmc-branch-table .wmc-col-name { width: 21%; }
+        .wmc-branch-table .wmc-col-code { width: 10%; }
+        .wmc-branch-table .wmc-col-address { width: 38%; }
+        .wmc-branch-table .wmc-col-status { width: 11%; }
+        .wmc-branch-table .wmc-col-action { width: 13%; }
+
+        .wmc-branch-table .wmc-branch-name,
+        .wmc-branch-table .wmc-branch-code {
+            overflow-wrap: anywhere;
+            word-break: normal;
+            line-height: 1.35;
+        }
+
+        .wmc-branch-table .wmc-branch-address {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            line-height: 1.35;
+        }
+
+        .wmc-branch-table .wmc-branch-code,
+        .wmc-branch-table .wmc-branch-status-cell,
+        .wmc-branch-table .wmc-branch-action-cell {
+            text-align: center !important;
+        }
+
+        .wmc-branch-table .badge {
+            white-space: nowrap;
+        }
+
+        @media (min-width: 1200px) {
+            .wmc-branch-table-wrap.table-responsive {
+                overflow-x: visible;
+            }
+        }
+
+        @media (max-width: 1199.98px) {
+            .wmc-branch-table {
+                min-width: 980px !important;
+            }
+        }
     </style>
 
     <div class="container-fluid content-inner mt-n5 py-0">
@@ -184,11 +247,19 @@
                             };
                         @endphp
 
-                        <div class="table-responsive">
+                        <div class="table-responsive wmc-branch-table-wrap">
                             <table class="table table-striped table-bordered align-middle mb-0 wmc-branch-table">
+                                <colgroup>
+                                    <col class="wmc-col-id">
+                                    <col class="wmc-col-name">
+                                    <col class="wmc-col-code">
+                                    <col class="wmc-col-address">
+                                    <col class="wmc-col-status">
+                                    <col class="wmc-col-action">
+                                </colgroup>
                                 <thead>
                                     <tr>
-                                        <th style="width: 70px;">
+                                        <th>
                                             <a href="{{ $sortUrl('id') }}" class="wmc-sort-link">
                                                 ID {!! $sortIconSvg('id') !!}
                                             </a>
@@ -200,7 +271,7 @@
                                             </a>
                                         </th>
 
-                                        <th style="width: 120px;">
+                                        <th class="text-center">
                                             <a href="{{ $sortUrl('code') }}" class="wmc-sort-link">
                                                 Code {!! $sortIconSvg('code') !!}
                                             </a>
@@ -212,19 +283,19 @@
                                             </a>
                                         </th>
 
-                                        <th style="width: 130px;">Status</th>
-                                        <th style="width: 120px;" class="text-center">Action</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Action</th>
                                     </tr>
                                 </thead>
 
                                 <tbody>
                                     @forelse($branches as $branch)
                                         <tr>
-                                            <td>{{ $branch->id }}</td>
-                                            <td>{{ $branch->name }}</td>
-                                            <td>{{ $branch->code }}</td>
-                                            <td>{{ $branch->address ?: '—' }}</td>
-                                            <td>
+                                            <td class="text-center">{{ $branch->id }}</td>
+                                            <td class="wmc-branch-name">{{ $branch->name }}</td>
+                                            <td class="wmc-branch-code">{{ $branch->code }}</td>
+                                            <td><span class="wmc-branch-address" title="{{ $branch->address ?: '—' }}">{{ $branch->address ?: '—' }}</span></td>
+                                            <td class="wmc-branch-status-cell">
                                                 <span class="badge {{ $branch->status === 'active' ? 'bg-success' : 'bg-danger' }}">
                                                     {{ ucfirst($branch->status) }}
                                                 </span>

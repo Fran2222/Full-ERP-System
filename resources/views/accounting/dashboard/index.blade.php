@@ -110,15 +110,26 @@
         }
 
         .wmc-stat-icon {
-            width: 38px;
-            height: 38px;
-            border-radius: .85rem;
+            width: 42px;
+            height: 42px;
+            border-radius: .9rem;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
             font-size: .72rem;
             letter-spacing: .02em;
+            flex: 0 0 auto;
+        }
+
+        .wmc-stat-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
         }
 
         .wmc-stat-icon.primary {
@@ -205,6 +216,67 @@
         .wmc-table {
             width: 100%;
             margin-bottom: 0;
+        }
+
+        .wmc-recent-journals-wrap {
+            overflow-x: hidden;
+        }
+
+        .wmc-recent-journals-table {
+            table-layout: fixed;
+            min-width: 0;
+        }
+
+        .wmc-recent-journals-table th:nth-child(1),
+        .wmc-recent-journals-table td:nth-child(1) {
+            width: 22%;
+            white-space: nowrap;
+            padding-right: 1.45rem;
+        }
+
+        .wmc-recent-journals-table th:nth-child(2),
+        .wmc-recent-journals-table td:nth-child(2) {
+            width: 18%;
+            white-space: nowrap;
+            padding-left: 1.25rem;
+            padding-right: 1.25rem;
+        }
+
+        .wmc-recent-journals-table th:nth-child(3),
+        .wmc-recent-journals-table td:nth-child(3) {
+            width: 26%;
+            padding-left: 1.1rem;
+            padding-right: 1.1rem;
+        }
+
+        .wmc-recent-journals-table th:nth-child(4),
+        .wmc-recent-journals-table td:nth-child(4),
+        .wmc-recent-journals-table th:nth-child(5),
+        .wmc-recent-journals-table td:nth-child(5) {
+            width: 10%;
+            white-space: nowrap;
+        }
+
+        .wmc-recent-journals-table th:nth-child(6),
+        .wmc-recent-journals-table td:nth-child(6) {
+            width: 14%;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .wmc-recent-journals-table .wmc-journal-description {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wmc-recent-journals-table td:nth-child(3),
+        .wmc-recent-journals-table td:nth-child(4),
+        .wmc-recent-journals-table td:nth-child(5),
+        .wmc-recent-journals-table td:nth-child(6) {
+            overflow: hidden;
         }
 
         .wmc-table thead th {
@@ -355,7 +427,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon primary">COA</span>
+                                <span class="wmc-stat-icon primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>
                                 <span class="wmc-badge primary">{{ number_format($activeAccounts ?? 0) }} active</span>
                             </div>
                             <p class="wmc-stat-label">Total Accounts</p>
@@ -367,7 +439,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon success">C/B</span>
+                                <span class="wmc-stat-icon success"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3M15.5 15h1.5"/></svg></span>
                                 <span class="wmc-badge success">{{ number_format($bankAccounts ?? 0) }} account</span>
                             </div>
                             <p class="wmc-stat-label">Cash / Bank Balance</p>
@@ -379,7 +451,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon primary">JE</span>
+                                <span class="wmc-stat-icon primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></span>
                                 <span class="wmc-badge success">{{ number_format($postedJournalEntries ?? 0) }} posted</span>
                             </div>
                             <p class="wmc-stat-label">Journal Entries</p>
@@ -391,7 +463,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon danger">EXP</span>
+                                <span class="wmc-stat-icon danger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14.5a3.5 3.5 0 0 1 0 7H6"/><path d="M19 15l2 2 2-2"/></svg></span>
                                 <span class="wmc-badge muted">this month</span>
                             </div>
                             <p class="wmc-stat-label">Expenses This Month</p>
@@ -405,7 +477,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon success">COL</span>
+                                <span class="wmc-stat-icon success"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4z"/><path d="M8 7V5h8v2M8 13h8M12 10v6"/></svg></span>
                                 <span class="wmc-badge success">received</span>
                             </div>
                             <p class="wmc-stat-label">Collections This Month</p>
@@ -417,7 +489,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon warning">REV</span>
+                                <span class="wmc-stat-icon warning"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16M6 17V9M12 17V5M18 17v-6"/><path d="M8 7l4-4 4 4"/></svg></span>
                                 <span class="wmc-badge warning">month</span>
                             </div>
                             <p class="wmc-stat-label">Net Cash Movement</p>
@@ -431,7 +503,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon primary">AST</span>
+                                <span class="wmc-stat-icon primary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-4 7 4v13"/><path d="M9 21v-7h6v7M9 10h.01M15 10h.01"/></svg></span>
                                 <span class="wmc-badge primary">accounts</span>
                             </div>
                             <p class="wmc-stat-label">Asset Accounts</p>
@@ -443,7 +515,7 @@
                     <div class="col-xl-3 col-md-6">
                         <div class="wmc-stat-card">
                             <div class="wmc-stat-top">
-                                <span class="wmc-stat-icon warning">EXP</span>
+                                <span class="wmc-stat-icon warning"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 19V5h12v14"/><path d="M9 9h6M9 13h6M9 17h3"/></svg></span>
                                 <span class="wmc-badge warning">accounts</span>
                             </div>
                             <p class="wmc-stat-label">Expense Accounts</p>
@@ -464,8 +536,8 @@
                                 <a href="{{ url('/accounting/journal-entries') }}" class="wmc-btn-light">View All</a>
                             </div>
 
-                            <div class="table-responsive">
-                                <table class="wmc-table">
+                            <div class="table-responsive wmc-recent-journals-wrap">
+                                <table class="wmc-table wmc-recent-journals-table">
                                     <thead>
                                         <tr>
                                             <th>Entry No.</th>
@@ -485,7 +557,12 @@
                                                     </a>
                                                 </td>
                                                 <td>{{ ! empty($entry->entry_date) ? \Carbon\Carbon::parse($entry->entry_date)->format('M d, Y') : '-' }}</td>
-                                                <td>{{ $entry->description ?? $entry->memo ?? '-' }}</td>
+                                                <td>
+                                                    @php($journalDescription = $entry->description ?? $entry->memo ?? '-')
+                                                    <span class="wmc-journal-description" title="{{ $journalDescription }}">
+                                                        {{ \Illuminate\Support\Str::words($journalDescription, 2, '...') }}
+                                                    </span>
+                                                </td>
                                                 <td class="text-end fw-bold">{{ number_format($entry->total_debit ?? 0, 2) }}</td>
                                                 <td class="text-end fw-bold">{{ number_format($entry->total_credit ?? 0, 2) }}</td>
                                                 <td>

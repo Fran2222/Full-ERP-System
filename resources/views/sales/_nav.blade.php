@@ -1,56 +1,41 @@
 @php
-    $user = auth()->user();
-
-    $canAccess = function ($permission) use ($user) {
-        return $user && (
-            $user->can($permission)
-            || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
-        );
-    };
-
-    $salesTabs = [
+    $purchasingTabs = [
         [
             'label' => 'Dashboard',
             'route' => 'sales.dashboard',
             'active' => request()->routeIs('sales.dashboard') || request()->is('sales'),
-            'permission' => 'sales.dashboard.view',
         ],
         [
             'label' => 'Customers',
             'route' => 'sales.customers.index',
             'active' => request()->routeIs('sales.customers.*'),
-            'permission' => 'sales.customers.view',
         ],
         [
             'label' => 'Invoices',
             'route' => 'sales.invoices.index',
             'active' => request()->routeIs('sales.invoices.*'),
-            'permission' => 'sales.invoices.view',
         ],
         [
             'label' => 'Receive Payments',
             'route' => 'sales.receive-payments.index',
             'active' => request()->routeIs('sales.receive-payments.*'),
-            'permission' => 'sales.payments.view',
-        ],
-        [
-            'label' => 'Sales Receipts',
-            'route' => 'sales.sales-receipts.index',
-            'active' => request()->routeIs('sales.sales-receipts.*'),
-            'permission' => 'sales.receipts.view',
         ],
     ];
 @endphp
 
-<div class="sales-nav-shell mb-4">
-    <div class="sales-nav-card">
-        <div class="sales-nav-scroll">
-            @foreach ($salesTabs as $tab)
-                @if($canAccess($tab['permission']) && Route::has($tab['route']))
+<div class="purchasing-nav-shell mb-4">
+    <div class="purchasing-nav-card">
+        <div class="purchasing-nav-scroll">
+            @foreach ($purchasingTabs as $tab)
+                @if(Route::has($tab['route']))
                     <a href="{{ route($tab['route']) }}"
-                       class="sales-nav-link {{ $tab['active'] ? 'active' : '' }}">
+                       class="purchasing-nav-link {{ $tab['active'] ? 'active' : '' }}">
                         {{ $tab['label'] }}
                     </a>
+                @else
+                    <span class="purchasing-nav-link disabled">
+                        {{ $tab['label'] }}
+                    </span>
                 @endif
             @endforeach
         </div>
@@ -58,72 +43,245 @@
 </div>
 
 <style>
-    .sales-nav-shell {
-        position: relative;
-    }
+    .purchasing-nav-shell { position: relative; }
 
-    .sales-nav-card {
-        background: rgba(255, 255, 255, 0.96);
-        border: 1px solid rgba(226, 232, 240, 0.9);
-        border-radius: 20px;
-        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.07);
-        backdrop-filter: blur(10px);
+    .purchasing-nav-card {
+        background: #ffffff;
+        border: 1px solid #edf0f5;
+        border-radius: 18px;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
         overflow: hidden;
     }
 
-    .sales-nav-scroll {
+    .purchasing-nav-scroll {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
-        padding: 14px;
+        padding: 12px;
     }
 
-    .sales-nav-link {
+    .purchasing-nav-link {
         min-height: 38px;
-        padding: 9px 16px;
+        padding: 10px 18px;
         border: 1px solid transparent;
-        border-radius: 12px;
+        border-radius: 11px;
         background: transparent;
         color: #475569;
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 700;
         line-height: 1;
-        text-decoration: none;
+        text-decoration: none !important;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         white-space: nowrap;
-        transition: all 0.18s ease-in-out;
+        cursor: pointer;
+        transition: all .18s ease-in-out;
     }
 
-    .sales-nav-link:hover {
+    .purchasing-nav-link:hover {
         background: #eef4ff;
-        color: #2f4cff;
+        color: #315cf6;
         border-color: #dce6ff;
+    }
+
+    .purchasing-nav-link.active {
+        background: #3f5cff;
+        color: #ffffff !important;
+        border-color: #3f5cff;
+        box-shadow: 0 10px 20px rgba(63, 92, 255, .24);
+    }
+
+    .purchasing-nav-link.disabled {
+        opacity: .45;
+        cursor: not-allowed;
+        background: #f3f4f6;
+        pointer-events: none;
+    }
+
+    .purchasing-panel {
+        background: #ffffff;
+        border-radius: 18px !important;
+        border: 1px solid #edf0f5 !important;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055) !important;
+        overflow: hidden;
+    }
+
+    .purchasing-soft-btn {
+        border-radius: 10px !important;
+        padding: 10px 18px !important;
+        font-weight: 700 !important;
+    }
+
+    .purchasing-summary-card {
+        border: 1px solid #edf0f5;
+        border-radius: 14px;
+        padding: 16px;
+        height: 100%;
+        background: #ffffff;
+    }
+
+    .purchasing-summary-card small {
+        color: #8a94a6;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .purchasing-summary-card h3 {
+        color: #111827;
+        font-size: 25px;
+        font-weight: 800;
+        line-height: 1.15;
+        margin-bottom: 0;
+    }
+
+    .purchasing-table-wrap {
+        border: 1px solid #edf0f5;
+        border-radius: 16px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+    .purchasing-table {
+        width: 100% !important;
+    }
+
+    .purchasing-table thead th {
+        background: #f4f6fb !important;
+        color: #111827 !important;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        border-bottom: 0 !important;
+        padding: 14px 16px !important;
+        white-space: nowrap;
+    }
+
+    .purchasing-table tbody td {
+        padding: 15px 16px !important;
+        border-bottom: 1px solid #edf0f5;
+        vertical-align: middle;
+        color: #334155;
+    }
+
+    .purchasing-table tbody tr:hover {
+        background: #f8faff;
+    }
+
+    .purchasing-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .purchasing-badge-success { background: #eaf8f0; color: #078642; }
+    .purchasing-badge-primary,
+    .purchasing-badge-info { background: #eef4ff; color: #315cf6; }
+    .purchasing-badge-warning { background: #fff7e6; color: #b45309; }
+    .purchasing-badge-danger { background: #fff1f0; color: #d92d20; }
+    .purchasing-badge-muted { background: #f3f4f6; color: #6b7280; }
+
+    .wmc-action-btn,
+    .purchasing-action-btn {
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        padding: 0 !important;
+        border-radius: 9px !important;
+        background: #ffffff !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border: 1px solid transparent !important;
+        transition: all .18s ease-in-out !important;
+        text-decoration: none !important;
+        line-height: 1 !important;
+        box-shadow: none !important;
+        font-size: 0 !important;
+    }
+
+    .wmc-action-btn svg,
+    .purchasing-action-btn svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+    }
+
+    .wmc-action-view,
+    .purchasing-action-view {
+        border-color: #3f5cff !important;
+        color: #3f5cff !important;
+    }
+
+    .wmc-action-view:hover,
+    .purchasing-action-view:hover {
+        background: #eef2ff !important;
+        color: #2442d8 !important;
         transform: translateY(-1px);
     }
 
-    .sales-nav-link.active {
-        background: linear-gradient(135deg, #3f5cff 0%, #2448e8 100%);
-        color: #ffffff;
-        border-color: #3f5cff;
-        box-shadow: 0 10px 20px rgba(63, 92, 255, 0.24);
+    .wmc-action-delete,
+    .purchasing-action-delete {
+        border-color: #f04438 !important;
+        color: #f04438 !important;
+    }
+
+    .wmc-action-delete:hover,
+    .purchasing-action-delete:hover {
+        background: #fff1f0 !important;
+        color: #d92d20 !important;
+        transform: translateY(-1px);
+    }
+
+    .purchasing-filter-row .form-control,
+    .purchasing-filter-row .form-select {
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        min-height: 42px;
+        font-size: 14px;
+    }
+
+    div.dataTables_wrapper div.dataTables_filter input {
+        min-width: 360px;
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        padding: 9px 12px;
+        margin-left: 8px;
+    }
+
+    div.dataTables_wrapper div.dataTables_length select {
+        border-radius: 10px;
+        border: 1px solid #e5e7eb;
+        padding: 7px 32px 7px 10px;
+    }
+
+    .dataTables_info {
+        color: #64748b;
+        font-size: 13px;
+    }
+
+    .pagination {
+        margin-bottom: 0;
+        justify-content: flex-end;
     }
 
     @media (max-width: 768px) {
-        .sales-nav-card {
-            border-radius: 16px;
-        }
-
-        .sales-nav-scroll {
+        .purchasing-nav-scroll {
             flex-wrap: nowrap;
             overflow-x: auto;
-            padding: 12px;
+            padding: 10px;
             scrollbar-width: thin;
         }
 
-        .sales-nav-link {
+        .purchasing-nav-link {
             flex: 0 0 auto;
             min-height: 36px;
             padding: 9px 14px;

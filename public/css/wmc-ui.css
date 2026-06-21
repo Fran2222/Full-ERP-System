@@ -1,0 +1,359 @@
+/* ===============================
+   WMC GLOBAL DATATABLE UI
+================================ */
+
+.wmc-table.table {
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border: 0 !important;
+}
+
+.wmc-table.table thead th {
+    background: #f5f6fa !important;
+    color: #8a92a6 !important;
+    font-weight: 700 !important;
+    padding: 16px !important;
+    white-space: nowrap !important;
+    text-transform: uppercase !important;
+    font-size: 13px !important;
+}
+
+.wmc-table.table tbody td {
+    padding: 14px 16px !important;
+    color: #232d42 !important;
+    vertical-align: middle !important;
+}
+
+.wmc-table tbody tr {
+    cursor: pointer !important;
+}
+
+.wmc-table.table tbody tr:hover {
+    background: #f8faff !important;
+}
+
+.wmc-table.table tbody tr.row-active {
+    background: #eef5ff !important;
+}
+
+/* REMOVE ALL TABLE LINES */
+.wmc-table.table,
+.wmc-table.table th,
+.wmc-table.table td,
+.wmc-table.table tr,
+.wmc-table.table thead,
+.wmc-table.table tbody,
+.wmc-table.table > :not(caption) > * > * {
+    border: 0 !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
+table.dataTable.no-footer {
+    border-bottom: 0 !important;
+}
+
+/* ===============================
+   WMC DATATABLE CLICKABLE ROW
+================================ */
+
+.wmc-table tbody tr,
+.wmc-table tbody tr td {
+    cursor: pointer !important;
+}
+
+/* ===============================
+   DATATABLE SORTING ARROWS
+================================ */
+
+table.dataTable thead > tr > th {
+    position: relative !important;
+    padding-right: 34px !important;
+}
+
+table.dataTable thead .sorting:before,
+table.dataTable thead .sorting:after,
+table.dataTable thead .sorting_asc:before,
+table.dataTable thead .sorting_asc:after,
+table.dataTable thead .sorting_desc:before,
+table.dataTable thead .sorting_desc:after {
+    display: none !important;
+}
+
+table.dataTable thead > tr > th::after {
+    content: "↕";
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    color: #c5c9d6;
+}
+
+table.dataTable thead > tr > th.sorting_asc::after {
+    content: "↑";
+    color: #8a92a6;
+}
+
+table.dataTable thead > tr > th.sorting_desc::after {
+    content: "↓";
+    color: #8a92a6;
+}
+
+table.dataTable thead > tr > th:last-child::after {
+    content: "";
+}
+
+
+
+/* ===============================
+   DATATABLE CONTROLS
+================================ */
+
+.dataTables_length label,
+.dataTables_filter label,
+.dataTables_info {
+    color: #8a92a6;
+}
+
+.dataTables_length select {
+    width: 70px;
+    height: 38px;
+    border: 1px solid #e0e5f2;
+    border-radius: 4px;
+}
+
+.dataTables_filter input {
+    width: 230px;
+    height: 38px;
+    border: 1px solid #e0e5f2;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+
+.dataTables_paginate .page-link {
+    border: 1px solid #e0e5f2;
+    color: #3a57e8;
+}
+
+.dataTables_paginate .page-item.active .page-link {
+    background: #3a57e8;
+    border-color: #3a57e8;
+    color: #fff;
+}
+
+/* ===============================
+   FILTER FIX
+================================ */
+
+.filter-holder {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.filter-holder select {
+    width: 220px !important;
+    height: 38px !important;
+    padding: 6px 35px 6px 12px !important;
+    border: 1px solid #e0e5f2 !important;
+    border-radius: 4px !important;
+    color: #8a92a6 !important;
+    background-color: #fff !important;
+    font-size: 14px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+}
+
+.filter-holder .wmc-filter-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-holder label {
+    color: #8a92a6;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.filter-holder .filter-select-wrap {
+    position: relative;
+}
+
+.filter-holder .filter-select-wrap::after {
+    content: "⌄";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-55%);
+    color: #8a92a6;
+    pointer-events: none;
+    font-size: 18px;
+}
+
+/* ===============================
+   ACTION BUTTONS
+================================ */
+
+.action-btn,
+.wmc-action-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+    padding: 0;
+}
+
+/* =========================================================
+   WMC LOGO SIZE FIX
+   Prevent sidebar/header logo from overflowing
+========================================================= */
+
+.sidebar .navbar-brand,
+.sidebar-header .navbar-brand,
+.iq-navbar-logo .navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.sidebar .navbar-brand img,
+.sidebar-header .navbar-brand img,
+.iq-navbar-logo .navbar-brand img,
+.sidebar img.logo,
+.sidebar img.logo-main,
+.sidebar img.logo-normal,
+.sidebar .logo-main img,
+.sidebar .logo-normal img {
+    width: 42px !important;
+    height: 42px !important;
+    max-width: 42px !important;
+    max-height: 42px !important;
+    object-fit: contain !important;
+    flex-shrink: 0;
+}
+
+.sidebar .navbar-brand span,
+.sidebar-header .navbar-brand span,
+.iq-navbar-logo .navbar-brand span {
+    font-size: 16px !important;
+    line-height: 1.1 !important;
+    font-weight: 700;
+    white-space: normal;
+}
+
+/* Collapsed / mini sidebar logo */
+.sidebar-mini .sidebar .navbar-brand img,
+.sidebar-mini .sidebar-header .navbar-brand img {
+    width: 38px !important;
+    height: 38px !important;
+    max-width: 38px !important;
+    max-height: 38px !important;
+}
+
+.wmc-sidebar-logo {
+    width: 42px !important;
+    height: 42px !important;
+    max-width: 42px !important;
+    max-height: 42px !important;
+    object-fit: contain !important;
+}
+
+/* ===============================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 991px) {
+    .filter-holder {
+        justify-content: flex-start !important;
+    }
+
+    .dataTables_filter input {
+        width: 100%;
+    }
+}
+
+.wmc-checkbox-dropdown { position: relative; width: 100%; }
+.wmc-checkbox-dropdown-toggle {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #e0e5f2;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #8a92a6;
+}
+.wmc-checkbox-dropdown-menu {
+    display: none;
+    position: absolute;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e0e5f2;
+    border-radius: 8px;
+    margin-top: 6px;
+    z-index: 50;
+    box-shadow: 0 12px 30px rgba(0,0,0,.08);
+    padding: 10px;
+}
+.wmc-checkbox-dropdown.open .wmc-checkbox-dropdown-menu { display: block; }
+.wmc-checkbox-options {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+.wmc-checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.wmc-checkbox-option:hover { background: #f5f7fb; }
+#assignUsersText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 95%;
+}
+
+/* ===============================
+   MEMBER AVATAR STACK
+================================ */
+
+.member-stack {
+    display: flex;
+    align-items: center;
+    min-width: 90px;
+}
+
+.member-avatar,
+.member-more {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: -8px;
+    background: #fff;
+    color: #3a57e8;
+    border: 2px solid #3a57e8;
+}
+
+.member-avatar:first-child {
+    margin-left: 0;
+}
+
+.member-more {
+    background: #3a57e8;
+    color: #fff;
+}

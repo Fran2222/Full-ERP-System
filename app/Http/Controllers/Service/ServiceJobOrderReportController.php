@@ -1,0 +1,225 @@
+<?php
+
+namespace App\Http\Controllers\Service;
+
+use App\Support\ServiceOperationsPhase3Helper;
+use App\Http\Controllers\Controller;
+use App\Models\ServiceJobOrderReport;
+use App\Models\ServiceJobOrderReportPhoto;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class ServiceJobOrderReportController extends Controller
+{
+
+
+    public function create($jobOrder)
+    {
+        $jobOrder = $this->jobOrderRow($jobOrder);
+        abort_if(! $jobOrder, 404);
+
+        $statuses = Schema::hasTable('service_statuses')
+            ? DB::table('service_statuses')
+                ->when(Schema::hasColumn('service_statuses', 'status'), function ($query) {
+                    $query->where(function ($statusQuery) {
+                        $statusQuery->where('status', true)->orWhereNull('status');
+                    });
+                })
+                ->orderBy(Schema::hasColumn('service_statuses', 'sort_order') ? 'sort_order' : 'id')
+                ->get()
+            : collect();
+
+        try {
+            $inventoryOptions = ServiceOperationsPhase3Helper::inventoryOptions();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Report create inventory dropdown failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            $inventoryOptions = collect();
+        }
+
+        try {
+            $serialOptions = ServiceOperationsPhase3Helper::serialOptions();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Report create serial dropdown failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            $serialOptions = collect();
+        }
+
+        $assets = [];
+
+        return view('service.job-orders.reports.create', compact('jobOrder', 'statuses', 'inventoryOptions', 'serialOptions', 'assets'));
+    }
+
+
+
+    public function store(Request $request, $jobOrder)
+    {
+        $jobOrder = $this->jobOrderRow($jobOrder);
+        abort_if(! $jobOrder, 404);
+
+        $validated = $request->validate([
+            'started_at' => ['nullable', 'date'],
+            'completed_at' => ['nullable', 'date'],
+            'status_update_id' => ['nullable', 'integer'],
+            'findings' => ['nullable', 'string'],
+            'work_done' => ['nullable', 'string'],
+            'recommendations' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
+            'materials' => ['nullable', 'array'],
+            'materials.*.warehouse_inventory_id' => ['nullable', 'integer'],
+            'materials.*.warehouse_item_serial_id' => ['nullable', 'integer'],
+            'materials.*.quantity' => ['nullable', 'numeric', 'min:0'],
+            'materials.*.unit' => ['nullable', 'string', 'max:100'],
+            'materials.*.remarks' => ['nullable', 'string'],
+            'photos' => ['nullable', 'array', 'max:5'],
+            'photos.*' => ['file', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+
+        $normalizeDate = function ($value) {
+            if (empty($value)) {
+                return null;
+            }
+
+            try {
+                return \Carbon\Carbon::parse($value)->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {
+                return null;
+            }
+        };
+
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('service_job_order_reports')) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['report' => 'Report table is missing. Please run the service report repair script.']);
+            }
+
+            if (! \Illuminate\Support\Facades\Schema::hasTable('service_job_order_report_materials')) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['report' => 'Materials table is missing. Please run Phase 3 package again.']);
+            }
+
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            $now = now();
+
+            $reportId = \Illuminate\Support\Facades\DB::table('service_job_order_reports')->insertGetId([
+                'service_job_order_id' => $jobOrder->id,
+                'reported_by_user_id' => \Illuminate\Support\Facades\Auth::id(),
+                'status_update_id' => !empty($validated['status_update_id']) ? $validated['status_update_id'] : null,
+                'started_at' => $normalizeDate($validated['started_at'] ?? null),
+                'completed_at' => $normalizeDate($validated['completed_at'] ?? null),
+                'findings' => $validated['findings'] ?? null,
+                'work_done' => $validated['work_done'] ?? null,
+                'recommendations' => $validated['recommendations'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            foreach (($validated['materials'] ?? []) as $material) {
+                $inventoryId = $material['warehouse_inventory_id'] ?? null;
+                $qty = (float) ($material['quantity'] ?? 0);
+
+                if (!$inventoryId || $qty <= 0) {
+                    continue;
+                }
+
+                ServiceOperationsPhase3Helper::deductMaterial($material, (int) $jobOrder->id, (int) $reportId, $now);
+            }
+
+            if ($request->hasFile('photos') && \Illuminate\Support\Facades\Schema::hasTable('service_job_order_report_photos')) {
+                foreach ($request->file('photos') as $photo) {
+                    if (! $photo || ! $photo->isValid()) {
+                        continue;
+                    }
+
+                    $path = $photo->store('service-job-order-reports', 'public');
+
+                    \Illuminate\Support\Facades\DB::table('service_job_order_report_photos')->insert([
+                        'service_job_order_report_id' => $reportId,
+                        'file_path' => $path,
+                        'original_name' => $photo->getClientOriginalName(),
+                        'mime_type' => $photo->getClientMimeType(),
+                        'file_size' => $photo->getSize(),
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+            }
+
+            $update = [];
+            $startedAt = $normalizeDate($validated['started_at'] ?? null);
+            $completedAt = $normalizeDate($validated['completed_at'] ?? null);
+
+            if (!empty($validated['status_update_id']) && \Illuminate\Support\Facades\Schema::hasColumn('service_job_orders', 'service_status_id')) {
+                $update['service_status_id'] = $validated['status_update_id'];
+            }
+
+            if ($startedAt && \Illuminate\Support\Facades\Schema::hasColumn('service_job_orders', 'started_at')) {
+                $update['started_at'] = $startedAt;
+            }
+
+            if ($completedAt && \Illuminate\Support\Facades\Schema::hasColumn('service_job_orders', 'completed_at')) {
+                $update['completed_at'] = $completedAt;
+            }
+
+            if ($update) {
+                $update['updated_at'] = $now;
+                \Illuminate\Support\Facades\DB::table('service_job_orders')
+                    ->where('id', $jobOrder->id)
+                    ->update($update);
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            return redirect()
+                ->route('service.job-orders.show', $jobOrder->id)
+                ->with('success', 'Technician report saved successfully.');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+
+            \Illuminate\Support\Facades\Log::error('Service technician report save failed', [
+                'job_order_id' => $jobOrder->id ?? null,
+                'message' => $e->getMessage(),
+                'class' => get_class($e),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->withErrors(['report' => 'Unable to save technician report: ' . $e->getMessage()]);
+        }
+    }
+
+    private function jobOrderRow($id)
+    {
+        if (! Schema::hasTable('service_job_orders')) {
+            return null;
+        }
+
+        return DB::table('service_job_orders as jo')
+            ->leftJoin('customers as c', 'c.id', '=', 'jo.customer_id')
+            ->leftJoin('service_types as st', 'st.id', '=', 'jo.service_type_id')
+            ->leftJoin('service_statuses as ss', 'ss.id', '=', 'jo.service_status_id')
+            ->where('jo.id', $id)
+            ->select([
+                'jo.*',
+                'c.customer_code',
+                'c.customer_name',
+                'st.name as service_type_name',
+                'ss.name as service_status_name',
+            ])
+            ->first();
+    }
+}

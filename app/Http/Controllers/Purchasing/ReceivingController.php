@@ -185,7 +185,14 @@ class ReceivingController extends Controller
                 ->with('error', 'The receiving location has no assigned branch. Please assign a branch to this warehouse location first.');
         }
 
-        DB::transaction(function () use ($validated, $po, $location) {
+        $existingPurchaseBillIds = \Illuminate\Support\Facades\Schema::hasTable('purchase_bills')
+            ? DB::table('purchase_bills')->where('purchase_order_id', $po->id)->pluck('id')->all()
+            : [];
+
+        $receivingId = null;
+        $poStatusAfterReceiving = null;
+
+        DB::transaction(function () use ($validated, $po, $location, &$receivingId, &$poStatusAfterReceiving) {
             $receivingNo = $this->generateReceivingNo();
 
             $receivingId = DB::table('warehouse_receivings')->insertGetId([
@@ -297,10 +304,12 @@ class ReceivingController extends Controller
                 return (float) $item->received_quantity >= (float) $item->quantity;
             });
 
+            $poStatusAfterReceiving = $allReceived ? 'received' : 'partially_received';
+
             DB::table('purchase_orders')
                 ->where('id', $po->id)
                 ->update([
-                    'status' => $allReceived ? 'received' : 'partially_received',
+                    'status' => $poStatusAfterReceiving,
                     'updated_at' => now(),
                 ]);
 
@@ -311,6 +320,24 @@ class ReceivingController extends Controller
                 amount: $totalReceivedCost
             );
         });
+
+        $freshPo = $po->fresh();
+        \App\Services\SystemNotificationService::notifyPurchaseOrderReceived($freshPo, $receivingId, $poStatusAfterReceiving, Auth::id());
+
+        if ($poStatusAfterReceiving === 'received' && class_exists(\App\Services\Purchasing\PurchaseBillAutoService::class)) {
+            app(\App\Services\Purchasing\PurchaseBillAutoService::class)->createMissingBillsForFullyReceivedPurchaseOrders();
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('purchase_bills')) {
+                $newBills = DB::table('purchase_bills')
+                    ->where('purchase_order_id', $po->id)
+                    ->when(! empty($existingPurchaseBillIds), fn ($query) => $query->whereNotIn('id', $existingPurchaseBillIds))
+                    ->get();
+
+                foreach ($newBills as $newBill) {
+                    \App\Services\SystemNotificationService::notifyPurchaseBillCreated($newBill, Auth::id());
+                }
+            }
+        }
 
         return redirect()
             ->route('purchasing.receiving.index')

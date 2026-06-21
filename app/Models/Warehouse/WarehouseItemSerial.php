@@ -15,6 +15,7 @@ class WarehouseItemSerial extends Model
         'branch_id',
         'location_id',
         'serial_number',
+        'serial_no',
         'status',
         'stock_in_movement_id',
         'stock_out_movement_id',

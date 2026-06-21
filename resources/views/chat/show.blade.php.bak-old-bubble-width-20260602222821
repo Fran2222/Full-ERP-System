@@ -1,0 +1,484 @@
+@extends('layouts.chat-dashboard')
+
+@section('content')
+@php
+    $onlineCutoff = now()->subMinutes(2);
+    $other = $conversation->otherParticipantFor(auth()->id());
+
+    $formatUserName = function ($user) {
+        return $user ? ($user->full_name ?: $user->email ?: 'User') : 'User';
+    };
+
+    $isOnline = $other && $other->last_seen_at && $other->last_seen_at->greaterThanOrEqualTo($onlineCutoff);
+    $presenceText = ! $other || ! $other->last_seen_at
+        ? 'Offline'
+        : ($isOnline ? 'Active now' : 'Active ' . $other->last_seen_at->diffForHumans());
+@endphp
+
+<style>
+    .wmc-chat-show-card {
+        border: 0;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .08);
+        background: #fff;
+    }
+
+    .wmc-chat-thread-header {
+        min-height: 78px;
+        border-bottom: 1px solid #edf0f5;
+        background: #fff;
+    }
+
+    .wmc-chat-icon-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        border: 1px solid #e6eaf2;
+        background: #f8f9fc;
+        color: #344054;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        transition: all .15s ease;
+        flex: 0 0 auto;
+    }
+
+    .wmc-chat-icon-btn:hover {
+        background: #eef2ff;
+        color: #3f51f4;
+        border-color: #dfe4ff;
+    }
+
+    .wmc-chat-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 999px;
+        background: #e9edff;
+        color: #3f51f4;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    .wmc-chat-online-dot,
+    .wmc-chat-offline-dot {
+        width: 13px;
+        height: 13px;
+        border: 2px solid #fff;
+        border-radius: 999px;
+        position: absolute;
+        right: 0;
+        bottom: 1px;
+    }
+
+    .wmc-chat-online-dot { background: #22c55e; }
+    .wmc-chat-offline-dot { background: #cbd5e1; }
+
+    .wmc-chat-messages {
+        height: 430px;
+        min-height: 360px;
+        overflow-y: auto;
+        background:
+            radial-gradient(circle at top left, rgba(63, 81, 244, .08), transparent 28%),
+            linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+    }
+
+    .wmc-bubble-wrap {
+        display: flex;
+        margin-bottom: 12px;
+    }
+
+    .wmc-bubble-wrap.mine {
+        justify-content: flex-end;
+    }
+
+    .wmc-bubble {
+        display: inline-block;
+        width: auto;
+        min-width: 44px;
+        max-width: min(680px, 78vw);
+        border-radius: 20px;
+        padding: 10px 14px;
+        white-space: pre-wrap;
+        word-break: normal;
+        overflow-wrap: anywhere;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, .07);
+    }
+
+    .wmc-bubble.mine {
+        background: #3f51f4;
+        color: #fff;
+        border-bottom-right-radius: 6px;
+    }
+
+    .wmc-bubble.other {
+        background: #fff;
+        color: #172033;
+        border-bottom-left-radius: 6px;
+    }
+
+    .wmc-chat-composer {
+        border-top: 1px solid #edf0f5;
+        background: #fff;
+    }
+
+    .wmc-chat-input {
+        border-radius: 18px;
+        resize: none;
+        background: #f4f6fb;
+        border: 1px solid transparent;
+        min-height: 46px;
+        max-height: 140px;
+    }
+
+    .wmc-chat-input:focus {
+        background: #fff;
+        border-color: #3f51f4;
+        box-shadow: 0 0 0 .2rem rgba(63, 81, 244, .08);
+    }
+
+    .wmc-chat-send-btn {
+        width: 48px;
+        height: 48px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+    }
+
+    .wmc-chat-send-btn:disabled {
+        opacity: .65;
+        cursor: not-allowed;
+    }
+
+    /* WMC_CHAT_BUBBLE_FIX */
+    .wmc-bubble-wrap > div {
+        max-width: 78%;
+    }
+
+    .wmc-bubble-wrap.mine > div {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+
+    .wmc-bubble-wrap.other > div {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .wmc-bubble {
+        line-height: 1.45;
+    }
+
+    @media (max-width: 768px) {
+        .wmc-chat-messages {
+            height: 380px;
+            min-height: 340px;
+        }
+
+        .wmc-bubble-wrap > div {
+            max-width: 88%;
+        }
+    }
+
+    /* WMC_CHAT_SEND_ICON_FIX */
+    .wmc-chat-send-btn {
+        color: #ffffff !important;
+        background: #3f51f4 !important;
+        border-color: #3f51f4 !important;
+        padding: 0 !important;
+    }
+
+    .wmc-chat-send-btn svg {
+        display: block !important;
+        width: 22px !important;
+        height: 22px !important;
+        flex: 0 0 auto !important;
+    }
+
+    .wmc-chat-send-btn:hover {
+        background: #2f3fd8 !important;
+        border-color: #2f3fd8 !important;
+    }
+
+    /* WMC_CHAT_SERVER_BUBBLE_WIDTH_FIX */
+    .wmc-bubble {
+        width: fit-content !important;
+        max-width: 100% !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+    }
+
+    .wmc-bubble-wrap > div {
+        max-width: 78% !important;
+    }
+
+    .wmc-bubble-wrap.mine > div {
+        align-items: flex-end !important;
+    }
+
+    .wmc-bubble-wrap.other > div {
+        align-items: flex-start !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="wmc-chat-show-card">
+        <div class="wmc-chat-thread-header d-flex align-items-center justify-content-between px-4 py-3">
+            <div class="d-flex align-items-center gap-3 min-w-0">
+                <a href="{{ route('chat.index') }}" class="wmc-chat-icon-btn" title="Back to chats" aria-label="Back to chats">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </a>
+
+                @php $title = $conversation->displayTitleFor(auth()->id()); @endphp
+                <div class="wmc-chat-avatar">
+                    {{ strtoupper(substr($title, 0, 1)) }}
+                    <span class="{{ $isOnline ? 'wmc-chat-online-dot' : 'wmc-chat-offline-dot' }}"></span>
+                </div>
+                <div class="min-w-0">
+                    <h4 class="fw-bold mb-0 text-truncate">{{ $title }}</h4>
+                    <div class="small {{ $isOnline ? 'text-success' : 'text-muted' }}">{{ $presenceText }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="wmcChatMessages" class="wmc-chat-messages p-4">
+            @forelse($messages as $chatMessage)
+                @php
+                    $mine = (int) $chatMessage->sender_id === (int) auth()->id();
+                    $senderName = $formatUserName($chatMessage->sender);
+                @endphp
+
+                <div class="wmc-bubble-wrap {{ $mine ? 'mine' : 'other' }}" data-message-id="{{ $chatMessage->id }}">
+                    <div>
+                        @unless($mine)
+                            <div class="small text-muted ms-2 mb-1">{{ $senderName }}</div>
+                        @endunless
+                        <div class="wmc-bubble {{ $mine ? 'mine' : 'other' }}">{!! nl2br(e($chatMessage->body)) !!}</div>
+                        <div class="small text-muted mt-1 {{ $mine ? 'text-end me-2' : 'ms-2' }}">
+                            {{ $chatMessage->created_at->format('h:i A') }}
+                        </div>
+                    </div>
+                </div>
+            @empty
+                <div id="wmcChatEmptyState" class="text-center text-muted py-5">
+                    No messages yet. Send the first message below.
+                </div>
+            @endforelse
+        </div>
+
+        <div class="wmc-chat-composer p-3">
+            <form id="wmcChatSendForm" action="{{ route('chat.send', $conversation) }}" method="POST" class="d-flex align-items-end gap-2">
+                @csrf
+                <textarea id="wmcChatInput" name="body" rows="1" class="form-control wmc-chat-input" required maxlength="5000"
+                          placeholder="Type a message...">{{ old('body') }}</textarea>
+                                <button id="wmcChatSendButton" type="submit" class="btn btn-primary wmc-chat-send-btn" title="Send" aria-label="Send message">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="display:block;">
+                        <path d="M3.8 11.2L19.6 4.1C20.25 3.81 20.92 4.48 20.63 5.13L13.53 20.93C13.22 21.62 12.22 21.56 12 20.84L10.05 14.5L3.71 12.55C2.99 12.33 2.93 11.51 3.8 11.2Z" fill="#ffffff"/>
+                        <path d="M10.25 14.25L14.25 10.25" stroke="#3f51f4" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </form>
+            <div class="small text-muted mt-2 ms-1">Press Enter to send. Shift + Enter for a new line.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const messages = document.getElementById('wmcChatMessages');
+    const form = document.getElementById('wmcChatSendForm');
+    const textarea = document.getElementById('wmcChatInput');
+    const sendButton = document.getElementById('wmcChatSendButton');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const wmcChatMessagesEndpoint = "{{ route('chat.messages', $conversation) }}";
+    let wmcLastMessageId = {{ (int) ($messages->max('id') ?? 0) }};
+    let wmcIsPolling = false;
+
+    function scrollToBottom() {
+        if (messages) {
+            messages.scrollTop = messages.scrollHeight;
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function isNearBottom() {
+        if (!messages) return true;
+        return (messages.scrollHeight - messages.scrollTop - messages.clientHeight) < 120;
+    }
+
+    function appendMessage(message) {
+        if (!messages || !message) return;
+
+        if (message.id && document.querySelector(`[data-message-id="${message.id}"]`)) {
+            return;
+        }
+
+        const empty = document.getElementById('wmcChatEmptyState');
+        if (empty) empty.remove();
+
+        const shouldScroll = isNearBottom();
+        const mine = !!message.is_mine;
+        const wrapper = document.createElement('div');
+        wrapper.className = `wmc-bubble-wrap ${mine ? 'mine' : 'other'}`;
+
+        if (message.id) {
+            wrapper.setAttribute('data-message-id', message.id);
+        }
+
+        wrapper.innerHTML = `
+            <div>
+                ${mine ? '' : `<div class="small text-muted ms-2 mb-1">${escapeHtml(message.sender_name || 'User')}</div>`}
+                <div class="wmc-bubble ${mine ? 'mine' : 'other'}">${escapeHtml(message.body || '')}</div>
+                <div class="small text-muted mt-1 ${mine ? 'text-end me-2' : 'ms-2'}">${escapeHtml(message.time || '')}</div>
+            </div>
+        `;
+
+        messages.appendChild(wrapper);
+
+        if (message.id) {
+            wmcLastMessageId = Math.max(wmcLastMessageId, parseInt(message.id, 10) || 0);
+        }
+
+        if (shouldScroll || mine) {
+            scrollToBottom();
+        }
+    }
+
+    function appendMineMessage(body, time, id = null) {
+        appendMessage({
+            id: id,
+            body: body,
+            time: time,
+            sender_name: 'You',
+            is_mine: true
+        });
+    }
+
+    function autoResize() {
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 140) + 'px';
+    }
+
+    async function sendMessage() {
+        if (!form || !textarea || !csrfToken) return;
+
+        const body = textarea.value.trim();
+        if (!body) return;
+
+        sendButton.disabled = true;
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ body })
+            });
+
+            if (!response.ok) {
+                throw new Error('Send failed');
+            }
+
+            const data = await response.json();
+            appendMineMessage(data.message?.body || body, data.message?.time || '', data.message?.id || null);
+            textarea.value = '';
+            autoResize();
+            textarea.focus();
+
+            if (window.wmcRefreshChatBadge) {
+                window.wmcRefreshChatBadge();
+            }
+        } catch (error) {
+            alert('Message failed to send. Please try again.');
+        } finally {
+            sendButton.disabled = false;
+        }
+    }
+
+    scrollToBottom();
+
+    textarea?.addEventListener('input', autoResize);
+
+    textarea?.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+
+    form?.addEventListener('submit', function (event) {
+        event.preventDefault();
+        sendMessage();
+    });
+
+    async function wmcPollNewMessages() {
+        if (!wmcChatMessagesEndpoint || wmcIsPolling) return;
+
+        wmcIsPolling = true;
+
+        try {
+            const separator = wmcChatMessagesEndpoint.includes('?') ? '&' : '?';
+            const response = await fetch(`${wmcChatMessagesEndpoint}${separator}after_id=${wmcLastMessageId}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json();
+
+            if (Array.isArray(data.messages)) {
+                data.messages.forEach(appendMessage);
+
+                if (data.messages.length > 0 && window.wmcRefreshChatBadge) {
+                    window.wmcRefreshChatBadge();
+                }
+            }
+
+            if (data.latest_id) {
+                wmcLastMessageId = Math.max(wmcLastMessageId, parseInt(data.latest_id, 10) || 0);
+            }
+        } catch (error) {
+            // Silent fail to avoid interrupting typing.
+        } finally {
+            wmcIsPolling = false;
+        }
+    }
+
+    setInterval(wmcPollNewMessages, 3000);
+    setTimeout(wmcPollNewMessages, 1200);
+})();
+</script>
+@endsection

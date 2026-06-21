@@ -19,6 +19,10 @@
             $canEditItem = $canAccess('warehouse.items.edit');
             $canDeleteItem = $canAccess('warehouse.items.delete');
             $showItemActions = true;
+            $canViewCostPrice = $user && (
+                (method_exists($user, 'canViewCostPrice') && $user->canViewCostPrice())
+                || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'BOD', 'Bod', 'Board of Directors', 'Board Of Directors'])
+            );
         @endphp
 
         <div class="card rounded-4 border-0 shadow-sm warehouse-card">
@@ -62,7 +66,13 @@
                                 <th>Category</th>
                                 <th>Unit</th>
                                 <th>Supplier</th>
-                                <th class="text-end">Cost</th>
+                                @if($canViewCostPrice)
+                                    @if($canViewCostPrice)
+                                    @if($canViewCostPrice)
+                                    <th class="text-end">Cost</th>
+                                @endif
+                                @endif
+                                @endif
                                 <th class="text-end">Price</th>
                                 <th style="width: 120px;">Status</th>
 
@@ -180,10 +190,12 @@
                             name: 'supplier.supplier_name',
                             orderable: false
                         },
+                        @if($canViewCostPrice)
                         {
                             data: 'cost_price',
                             name: 'cost_price'
                         },
+                        @endif
                         {
                             data: 'selling_price',
                             name: 'selling_price'

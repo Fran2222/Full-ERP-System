@@ -675,6 +675,170 @@
             white-space: pre-line;
         }
 
+
+        /* WMC ANNOUNCEMENT MEMO PAYSLIP HEADER - SAFE INLINE VERSION */
+        .wiz-announcement-memo-paper {
+            border: 1px solid #dbe5f2;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .wiz-memo-company-header {
+            border-top: 5px solid #0f4595;
+            border-bottom: 3px solid #0f4595;
+            background: #ffffff;
+            padding: 22px 26px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .wiz-memo-brand-left {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            min-width: 0;
+        }
+
+        .wiz-memo-logo {
+            width: 90px;
+            height: 90px;
+            object-fit: contain;
+            flex: 0 0 auto;
+        }
+
+        .wiz-memo-brand-title {
+            margin: 0;
+            line-height: 1;
+            font-size: 34px;
+            font-weight: 950;
+            letter-spacing: .08em;
+            color: #123f91;
+            text-transform: uppercase;
+        }
+
+        .wiz-memo-brand-corp {
+            margin-top: 7px;
+            color: #d9232e;
+            font-size: 23px;
+            font-weight: 950;
+            letter-spacing: .22em;
+            line-height: 1;
+        }
+
+        .wiz-memo-brand-sub {
+            margin-top: 9px;
+            color: #17213a;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: .22em;
+        }
+
+        .wiz-memo-company-info {
+            color: #1e3357;
+            font-size: 12px;
+            line-height: 1.45;
+            text-align: right;
+            max-width: 450px;
+        }
+
+        .wiz-memo-company-info strong {
+            font-weight: 950;
+            text-transform: uppercase;
+        }
+
+        .wiz-memo-title-strip {
+            padding: 18px 26px 12px;
+            border-bottom: 1px solid #eef2f7;
+            background: #fbfdff;
+        }
+
+        .wiz-memo-title-strip h4 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 20px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .wiz-memo-title-strip div {
+            color: #64748b;
+            font-weight: 800;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .wiz-memo-details {
+            padding: 18px 26px 8px;
+        }
+
+        .wiz-memo-detail-row {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            gap: 14px;
+            padding: 5px 0;
+            color: #334155;
+            font-size: 14px;
+        }
+
+        .wiz-memo-detail-row strong {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .wiz-memo-content-box {
+            margin: 8px 26px 24px;
+            padding: 18px;
+            border-radius: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            font-size: 14px;
+            line-height: 1.75;
+            white-space: normal;
+        }
+
+        .wiz-memo-signoff {
+            padding: 0 26px 26px;
+            color: #334155;
+            font-size: 14px;
+            line-height: 1.65;
+        }
+
+        @media (max-width: 767.98px) {
+            .wiz-memo-company-header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 18px;
+            }
+
+            .wiz-memo-company-info {
+                text-align: left;
+                max-width: 100%;
+            }
+
+            .wiz-memo-logo {
+                width: 70px;
+                height: 70px;
+            }
+
+            .wiz-memo-brand-title {
+                font-size: 24px;
+            }
+
+            .wiz-memo-brand-corp {
+                font-size: 17px;
+            }
+
+            .wiz-memo-detail-row {
+                grid-template-columns: 1fr;
+                gap: 2px;
+            }
+        }
+
         @media (max-width: 1399.98px) {
             .wiz-bar-chart {
                 gap: 16px;
@@ -920,6 +1084,8 @@
                     $announcementTitle = $displayValue($announcement, ['title'], 'Announcement');
                     $announcementDate = $displayDate($displayValue($announcement, ['published_at', 'created_at'], null));
                     $announcementBody = $displayValue($announcement, ['body', 'content', 'message', 'description'], 'No announcement details available.');
+                    $announcementTo = $displayValue($announcement, ['recipient_text', 'recipients', 'to'], 'All Employees');
+                    $announcementFrom = $displayValue($announcement, ['from', 'author_name', 'created_by_name'], 'Human Resource Department');
                 @endphp
 
                 <div class="modal fade wiz-announcement-modal"
@@ -927,18 +1093,9 @@
                      tabindex="-1"
                      aria-labelledby="dashboardAnnouncementModalLabel{{ $index }}"
                      aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-dialog modal-dialog-centered modal-xl">
                         <div class="modal-content">
-                            <div class="modal-header">
-                                <div>
-                                    <h5 class="wiz-announcement-modal-title" id="dashboardAnnouncementModalLabel{{ $index }}">
-                                        {{ $announcementTitle }}
-                                    </h5>
-                                    <div class="wiz-announcement-modal-date">
-                                        {{ $announcementDate }}
-                                    </div>
-                                </div>
-
+                            <div class="modal-header justify-content-end py-3">
                                 <button type="button"
                                         class="btn-close"
                                         data-bs-dismiss="modal"
@@ -946,8 +1103,61 @@
                             </div>
 
                             <div class="modal-body">
-                                <div class="wiz-announcement-modal-content">
-                                    {{ $announcementBody }}
+                                <div class="wiz-announcement-memo-paper" id="dashboardAnnouncementModalLabel{{ $index }}">
+                                    <div class="wiz-memo-company-header">
+                                        <div class="wiz-memo-brand-left">
+                                            <img src="{{ asset('images/wizmaster-logo.png') }}"
+                                                 alt="Wizmaster Logo"
+                                                 class="wiz-memo-logo"
+                                                 onerror="this.style.display='none'">
+
+                                            <div>
+                                                <h3 class="wiz-memo-brand-title">WIZMASTER</h3>
+                                                <div class="wiz-memo-brand-corp">Corporation</div>
+                                                <div class="wiz-memo-brand-sub">Computer Sales &amp; Services</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="wiz-memo-company-info">
+                                            <div><strong>Address</strong> 1/F Solana District, Andres Bonifacio Ave., San Miguel, Iligan City</div>
+                                            <div><strong>Tel. Number</strong> (063) 222-4277 / (063) 915-501-4668</div>
+                                            <div><strong>Email</strong> sales@wizmaster.com.co</div>
+                                            <div><strong>Website</strong> http://wizmaster.com.co</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="wiz-memo-title-strip">
+                                        <h4>Official Memorandum</h4>
+                                        <div>Company Announcement</div>
+                                    </div>
+
+                                    <div class="wiz-memo-details">
+                                        <div class="wiz-memo-detail-row">
+                                            <strong>To:</strong>
+                                            <span>{{ $announcementTo }}</span>
+                                        </div>
+                                        <div class="wiz-memo-detail-row">
+                                            <strong>From:</strong>
+                                            <span>{{ $announcementFrom }}</span>
+                                        </div>
+                                        <div class="wiz-memo-detail-row">
+                                            <strong>Date:</strong>
+                                            <span>{{ $announcementDate }}</span>
+                                        </div>
+                                        <div class="wiz-memo-detail-row">
+                                            <strong>Subject:</strong>
+                                            <span>{{ $announcementTitle }}</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="wiz-memo-content-box">
+                                        {!! nl2br(e($announcementBody)) !!}
+                                    </div>
+
+                                    <div class="wiz-memo-signoff">
+                                        <div>Sincerely,</div>
+                                        <strong>Wizmaster Corporation</strong>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -4,4 +4,972 @@
 <div class="card wmc-card"><div class="card-header bg-white border-0"><h4 class="mb-0">Stock Transfer</h4><small class="text-muted">Move stock between branches or locations.</small></div><div class="card-body">
 <form method="POST" action="{{ route('warehouse.transfer.store') }}">@csrf
 @include('warehouse.movements._form', ['mode' => 'transfer', 'buttonText' => 'Save Transfer'])
-</form></div></div></div></x-app-layout>
+</form></div></div></div>{{-- wmc-transfer-regular-qty-force-unlock-start --}}
+<script>
+(function () {
+    'use strict';
+
+    if (window.__WMC_TRANSFER_REGULAR_QTY_FORCE_UNLOCK__) return;
+    window.__WMC_TRANSFER_REGULAR_QTY_FORCE_UNLOCK__ = true;
+
+    function isTransferPage() {
+        return String(window.location.pathname || '').indexOf('/warehouse/transfer') !== -1;
+    }
+
+    function qtyInputs() {
+        return Array.from(document.querySelectorAll('input[type="number"], input[name*="quantity"], input[name*="qty"]')).filter(function (input) {
+            var name = String(input.getAttribute('name') || '').toLowerCase();
+            var id = String(input.id || '').toLowerCase();
+            var label = '';
+            try {
+                label = String(input.closest('.col-md-1,.col-md-2,.col-md-3,.col-md-4,.col-md-5,.col-md-6,.col-lg-1,.col-lg-2,.col-lg-3,.col-lg-4,.col-lg-5,.col-lg-6,.mb-3,.form-group,div')?.querySelector('label')?.textContent || '').toLowerCase();
+            } catch (e) {}
+
+            return name.indexOf('quantity') !== -1 || name.indexOf('qty') !== -1 || id.indexOf('quantity') !== -1 || id.indexOf('qty') !== -1 || label.indexOf('qty') !== -1 || label.indexOf('quantity') !== -1;
+        });
+    }
+
+    function closestTransferLine(input) {
+        var node = input.parentElement;
+        while (node && node !== document.body) {
+            var text = String(node.textContent || '').toLowerCase();
+            var qtyCount = node.querySelectorAll('input[type="number"], input[name*="quantity"], input[name*="qty"]').length;
+            var hasItemPicker = text.indexOf('search / select item') !== -1 || text.indexOf('item line') !== -1 || text.indexOf('no item selected') !== -1;
+
+            // Pick the smallest wrapper that looks like one transfer line.
+            if (qtyCount === 1 && hasItemPicker) return node;
+            if (node.matches && node.matches('[data-transfer-line], .transfer-line, .transfer-item-line, .warehouse-transfer-line, .warehouse-transfer-item-line, .item-line')) return node;
+
+            node = node.parentElement;
+        }
+
+        return input.closest('form') || input.parentElement;
+    }
+
+    function lineText(input) {
+        var line = closestTransferLine(input);
+        return String(line ? line.textContent || '' : '').toLowerCase();
+    }
+
+    function isSerializedLine(input) {
+        var text = lineText(input);
+        // Serialized lines explicitly show Serialized and/or visible Serial Numbers section.
+        // Regular/non-serialized lines usually show Regular and should stay editable.
+        if (text.indexOf('regular') !== -1) return false;
+        if (text.indexOf('serialized') !== -1) return true;
+        if (text.indexOf('serial numbers') !== -1 && text.indexOf('no item selected') === -1) return true;
+        return false;
+    }
+
+    function unlock(input) {
+        if (!input || isSerializedLine(input)) return;
+
+        input.disabled = false;
+        input.readOnly = false;
+        input.removeAttribute('disabled');
+        input.removeAttribute('readonly');
+        input.classList.remove('disabled');
+        input.style.pointerEvents = 'auto';
+        input.style.cursor = 'text';
+        input.style.opacity = '';
+
+        // If the picker left regular item qty as 0, clear it so user can type normally.
+        if (String(input.value || '').trim() === '0') {
+            input.value = '';
+        }
+    }
+
+    function syncAll() {
+        if (!isTransferPage()) return;
+        qtyInputs().forEach(unlock);
+    }
+
+    document.addEventListener('wmc:item-picker:selected', function (event) {
+        var detail = event.detail || {};
+        var item = detail.item || {};
+        var isSerialized = !!item.is_serialized;
+
+        // Wait for the existing picker scripts to finish setting values/readonly, then override for regular items only.
+        setTimeout(syncAll, 30);
+        setTimeout(syncAll, 150);
+        setTimeout(syncAll, 500);
+
+        if (!isSerialized) {
+            setTimeout(function () {
+                qtyInputs().forEach(function (input) {
+                    if (!isSerializedLine(input)) unlock(input);
+                });
+            }, 700);
+        }
+    });
+
+    ['click', 'change', 'input', 'keyup'].forEach(function (eventName) {
+        document.addEventListener(eventName, function () {
+            setTimeout(syncAll, 20);
+        }, true);
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncAll);
+    } else {
+        syncAll();
+    }
+
+    setTimeout(syncAll, 300);
+    setTimeout(syncAll, 1000);
+    setInterval(syncAll, 1000);
+})();
+</script>
+{{-- wmc-transfer-regular-qty-force-unlock-end --}}
+</x-app-layout>
+
+{{-- force-transfer-global-item-picker-phase6-start --}}
+<x-warehouse.item-picker-modal />
+
+<script>
+    window.WMC_ITEM_PICKER_BASE = "{{ url('') }}";
+</script>
+<script src="{{ asset('assets/js/wmc-item-picker.js') }}"></script>
+
+<script>
+(function () {
+    function qs(selector, root) {
+        return (root || document).querySelector(selector);
+    }
+
+    function qsa(selector, root) {
+        return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+    }
+
+    function onTransferPage() {
+        return window.location.pathname.indexOf('/warehouse/transfer') !== -1;
+    }
+
+    function lowerText(el) {
+        return el ? (el.textContent || '').trim().toLowerCase() : '';
+    }
+
+    function fieldWrap(el) {
+        return el ? (el.closest('.form-group, .mb-3, .col-md-6, .col-md-4, .col, .row, div') || el.parentElement) : null;
+    }
+
+    function labelNear(el) {
+        var wrap = fieldWrap(el);
+        var label = wrap ? qs('label', wrap) : null;
+        return lowerText(label);
+    }
+
+    function findItemLabel() {
+        return qsa('label').find(function (label) {
+            var t = lowerText(label);
+            return t === 'item' || t.indexOf('item') !== -1 || t.indexOf('product') !== -1;
+        });
+    }
+
+    function findItemSelect() {
+        var label = findItemLabel();
+
+        if (label) {
+            var forId = label.getAttribute('for');
+            if (forId) {
+                var byFor = qs('#' + CSS.escape(forId));
+                if (byFor && byFor.tagName && byFor.tagName.toLowerCase() === 'select') {
+                    return byFor;
+                }
+            }
+
+            var wrap = fieldWrap(label);
+            if (wrap) {
+                var selectInWrap = qs('select', wrap);
+                if (selectInWrap) {
+                    return selectInWrap;
+                }
+            }
+        }
+
+        return qsa('select').find(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+            var txt = lowerText(select);
+
+            if (name.indexOf('location') !== -1 || id.indexOf('location') !== -1 || label.indexOf('location') !== -1) return false;
+            if (name.indexOf('branch') !== -1 || id.indexOf('branch') !== -1 || label.indexOf('branch') !== -1) return false;
+            if (name.indexOf('status') !== -1 || id.indexOf('status') !== -1) return false;
+
+            return (
+                name.indexOf('item') !== -1 ||
+                id.indexOf('item') !== -1 ||
+                label.indexOf('item') !== -1 ||
+                txt.indexOf('item-') !== -1 ||
+                txt.indexOf('serialized') !== -1 ||
+                txt.indexOf('pcs') !== -1
+            );
+        });
+    }
+
+    function findSourceLocationSelect() {
+        var candidates = qsa('select').filter(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+
+            return (
+                name.indexOf('from') !== -1 ||
+                name.indexOf('source') !== -1 ||
+                name.indexOf('origin') !== -1 ||
+                id.indexOf('from') !== -1 ||
+                id.indexOf('source') !== -1 ||
+                id.indexOf('origin') !== -1 ||
+                label.indexOf('from') !== -1 ||
+                label.indexOf('source') !== -1 ||
+                label.indexOf('origin') !== -1 ||
+                label.indexOf('current location') !== -1
+            ) && (
+                name.indexOf('location') !== -1 ||
+                id.indexOf('location') !== -1 ||
+                label.indexOf('location') !== -1 ||
+                label.indexOf('warehouse') !== -1
+            );
+        });
+
+        if (candidates.length) {
+            return candidates[0];
+        }
+
+        // Fallback: first location select, but avoid "to/destination" labels.
+        return qsa('select').find(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+
+            var isLocation = name.indexOf('location') !== -1 || id.indexOf('location') !== -1 || label.indexOf('location') !== -1 || label.indexOf('warehouse') !== -1;
+            var isDestination = name.indexOf('to') !== -1 || name.indexOf('destination') !== -1 || id.indexOf('to') !== -1 || id.indexOf('destination') !== -1 || label.indexOf('to') !== -1 || label.indexOf('destination') !== -1;
+
+            return isLocation && !isDestination;
+        });
+    }
+
+    function findQtyInput() {
+        return qsa('input').find(function (input) {
+            var name = (input.getAttribute('name') || '').toLowerCase();
+            var id = (input.getAttribute('id') || '').toLowerCase();
+            return name === 'quantity' || name.indexOf('quantity') !== -1 || name.indexOf('qty') !== -1 || id.indexOf('quantity') !== -1 || id.indexOf('qty') !== -1;
+        });
+    }
+
+    function setSelectValue(select, value, label) {
+        if (!select || value === null || value === undefined || value === '') return;
+
+        var has = false;
+        qsa('option', select).forEach(function (opt) {
+            if (String(opt.value) === String(value)) has = true;
+        });
+
+        if (!has) {
+            var opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label || String(value);
+            select.appendChild(opt);
+        }
+
+        select.value = String(value);
+
+        if (window.jQuery) {
+            window.jQuery(select).val(String(value)).trigger('change');
+        }
+
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function hideSelectAndSelect2(select) {
+        if (!select) return;
+
+        select.style.display = 'none';
+        select.classList.add('d-none');
+
+        if (select.id) {
+            var container = qs('#select2-' + select.id + '-container');
+            if (container) {
+                var s2wrap = container.closest('.select2, .select2-container');
+                if (s2wrap) {
+                    s2wrap.style.display = 'none';
+                    s2wrap.classList.add('d-none');
+                }
+            }
+
+            qsa('.select2, .select2-container').forEach(function (s2) {
+                if (qs('#select2-' + select.id + '-container', s2)) {
+                    s2.style.display = 'none';
+                    s2.classList.add('d-none');
+                }
+            });
+        }
+
+        var parent = select.parentElement;
+        if (parent) {
+            qsa('.select2, .select2-container', parent).forEach(function (s2) {
+                s2.style.display = 'none';
+                s2.classList.add('d-none');
+            });
+        }
+    }
+
+    function ensureSerialField(form) {
+        var serial =
+            qs('input[name="warehouse_item_serial_id"]', form) ||
+            qs('select[name="warehouse_item_serial_id"]', form) ||
+            qs('input[name="serial_id"]', form) ||
+            qs('select[name="serial_id"]', form);
+
+        if (serial) return serial;
+
+        serial = document.createElement('input');
+        serial.type = 'hidden';
+        serial.name = 'warehouse_item_serial_id';
+        serial.id = 'transfer_picker_serial_id';
+        form.appendChild(serial);
+
+        return serial;
+    }
+
+    function ensurePickerTargetRow(form) {
+        var row = qs('#transferGlobalPickerTargetRow', form);
+        if (row) return row;
+
+        row = document.createElement('div');
+        row.id = 'transferGlobalPickerTargetRow';
+        row.className = 'd-none';
+        row.setAttribute('data-material-row', '1');
+
+        var inv = document.createElement('select');
+        inv.name = '_transfer_picker[warehouse_inventory_id]';
+        inv.className = 'd-none';
+
+        var serial = document.createElement('select');
+        serial.name = '_transfer_picker[warehouse_item_serial_id]';
+        serial.className = 'd-none';
+
+        row.appendChild(inv);
+        row.appendChild(serial);
+        form.appendChild(row);
+
+        return row;
+    }
+
+    function createPickerUI(itemSelect) {
+        if (!itemSelect || itemSelect.dataset.transferPickerReady === '1') return;
+
+        var form = itemSelect.closest('form');
+        if (!form) return;
+
+        itemSelect.dataset.transferPickerReady = '1';
+
+        hideSelectAndSelect2(itemSelect);
+        ensurePickerTargetRow(form);
+        ensureSerialField(form);
+
+        var holder = document.createElement('div');
+        holder.id = 'transferPickerVisibleBox';
+        holder.className = 'transfer-picker-visible-box';
+
+        holder.innerHTML =
+            '<div class="transfer-picker-summary" id="transferPickerSummary">' +
+                '<div class="text-muted">No item selected.</div>' +
+            '</div>' +
+            '<button type="button" class="btn btn-outline-primary btn-sm mt-2 transfer-open-picker-btn" id="transferOpenPickerBtn">' +
+                'Search / Select Item' +
+            '</button>' +
+            '<div class="small text-muted mt-1">Search item, view details, select serial if required.</div>';
+
+        var label = findItemLabel();
+
+        if (label && label.parentElement) {
+            label.parentElement.insertBefore(holder, itemSelect);
+        } else if (itemSelect.parentElement) {
+            itemSelect.parentElement.insertBefore(holder, itemSelect);
+        }
+
+        var btn = qs('#transferOpenPickerBtn', holder);
+        if (btn) {
+            btn.addEventListener('click', function () {
+                var targetRow = qs('#transferGlobalPickerTargetRow', form);
+
+                if (window.WMCItemPicker && typeof window.WMCItemPicker.open === 'function') {
+                    window.WMCItemPicker.open(targetRow);
+                    return;
+                }
+
+                if (window.WMCItemPicker && typeof window.WMCItemPicker.initRows === 'function') {
+                    window.WMCItemPicker.initRows();
+                    setTimeout(function () {
+                        var generatedBtn = qs('.wmc-open-item-picker', targetRow);
+                        if (generatedBtn) {
+                            generatedBtn.click();
+                        } else {
+                            alert('Item picker loaded but cannot open. Send wmc-item-picker.js if this appears.');
+                        }
+                    }, 100);
+                    return;
+                }
+
+                alert('Global item picker script not loaded. Please refresh with CTRL + F5.');
+            });
+        }
+
+        if (window.WMCItemPicker && typeof window.WMCItemPicker.initRows === 'function') {
+            window.WMCItemPicker.initRows();
+        }
+    }
+
+    function updateSummary(item, serialLabel, qty) {
+        var box = qs('#transferPickerSummary');
+        if (!box || !item) return;
+
+        var photo = item.photo_url || item.image_url || '';
+        var photoHtml = photo
+            ? '<img src="' + photo + '" alt="" style="width:46px;height:46px;object-fit:contain;border:1px solid rgba(58,87,232,.25);border-radius:8px;background:#fff;">'
+            : '<div style="width:46px;height:46px;border:1px solid rgba(58,87,232,.18);border-radius:8px;background:#f7f8fb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a92a6;">No Photo</div>';
+
+        box.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                photoHtml +
+                '<div class="flex-grow-1">' +
+                    '<div class="fw-semibold text-dark">' + (item.item_code || 'ITEM') + ' - ' + (item.item_name || '') + '</div>' +
+                    '<div class="small text-muted">' + (item.category_name || '-') + ' | Source: ' + (item.location_name || '-') + '</div>' +
+                    '<div class="small text-muted">Available: ' + (item.available_qty ?? '-') + ' | Serial: ' + (serialLabel || '-') + ' | Qty: ' + (qty || 1) + '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function applyPickedItem(detail) {
+        if (!onTransferPage() || !detail || !detail.item) return;
+
+        var item = detail.item;
+        var form = qs('form');
+        if (!form) return;
+
+        var itemSelect = findItemSelect();
+        var sourceLocation = findSourceLocationSelect();
+        var qtyInput = findQtyInput();
+        var serialField = ensureSerialField(form);
+
+        var itemLabel = (item.item_code || 'ITEM') + ' - ' + (item.item_name || '');
+        var sourceLabel = item.location_name || 'Selected Source Location';
+
+        if (itemSelect) {
+            setSelectValue(itemSelect, item.item_id, itemLabel);
+            hideSelectAndSelect2(itemSelect);
+        }
+
+        if (sourceLocation && item.location_id) {
+            setSelectValue(sourceLocation, item.location_id, sourceLabel);
+        }
+
+        if (qtyInput) {
+            qtyInput.value = detail.quantity || 1;
+            qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+            qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (serialField) {
+            serialField.value = detail.serial_id || '';
+            serialField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        updateSummary(item, detail.serial_label || detail.serial_id || '', detail.quantity || 1);
+    }
+
+    function bootTransferPicker() {
+        if (!onTransferPage()) return;
+
+        var itemSelect = findItemSelect();
+        if (!itemSelect) return;
+
+        createPickerUI(itemSelect);
+        hideSelectAndSelect2(itemSelect);
+    }
+
+    document.addEventListener('wmc:item-picker:selected', function (event) {
+        applyPickedItem(event.detail || {});
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootTransferPicker);
+    } else {
+        bootTransferPicker();
+    }
+
+    setTimeout(bootTransferPicker, 300);
+    setTimeout(bootTransferPicker, 1000);
+
+    setInterval(function () {
+        if (onTransferPage()) {
+            var itemSelect = findItemSelect();
+            if (itemSelect) hideSelectAndSelect2(itemSelect);
+        }
+    }, 1000);
+})();
+</script>
+
+<style>
+    .transfer-picker-visible-box {
+        border: 1px solid rgba(58, 87, 232, .18);
+        border-radius: 10px;
+        padding: 10px;
+        background: linear-gradient(145deg, #fbfcff, #ffffff);
+        box-shadow: 0 8px 18px rgba(35, 45, 66, .045);
+    }
+
+    .transfer-picker-summary {
+        min-height: 44px;
+    }
+
+    .transfer-open-picker-btn {
+        width: 100%;
+        border-color: #3a57e8 !important;
+        color: #3a57e8 !important;
+        font-weight: 600;
+        border-radius: 8px;
+    }
+
+    .transfer-open-picker-btn:hover {
+        background: #3a57e8 !important;
+        color: #fff !important;
+        box-shadow: 0 8px 18px rgba(58, 87, 232, .22);
+    }
+
+    /* Same picker modal UI/photo zoom consistency */
+    #wmcItemPickerModal .modal-content {
+        border: 1px solid rgba(58, 87, 232, 0.24) !important;
+        border-top: 5px solid #3a57e8 !important;
+        border-radius: 18px !important;
+        box-shadow: 0 25px 70px rgba(35, 45, 66, 0.28) !important;
+        overflow: hidden !important;
+    }
+
+    #wmcItemPickerModal .modal-header {
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1)) !important;
+        border-bottom: 1px solid rgba(58, 87, 232, 0.14) !important;
+        padding-bottom: 14px !important;
+    }
+
+    #wmcItemPickerModal .card,
+    #wmcItemPickerModal .wmc-picker-info-box {
+        border: 1px solid rgba(58, 87, 232, 0.13) !important;
+        box-shadow: 0 10px 24px rgba(35, 45, 66, 0.06) !important;
+    }
+
+    #wmcItemPickerResults tr:hover {
+        background: rgba(58, 87, 232, 0.06) !important;
+    }
+
+    #wmcItemPickerResults tr.wmc-picker-active,
+    #wmcItemPickerResults tr.table-active,
+    #wmcItemPickerResults tr.active {
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.14), rgba(58, 87, 232, 0.04)) !important;
+        box-shadow: inset 4px 0 0 #3a57e8 !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo {
+        border: 2px solid rgba(58, 87, 232, 0.35) !important;
+        background: linear-gradient(145deg, #f7f9ff, #ffffff) !important;
+        box-shadow: 0 10px 22px rgba(58, 87, 232, 0.16) !important;
+        cursor: pointer !important;
+        position: relative !important;
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo:hover {
+        transform: translateY(-1px) !important;
+        border-color: rgba(58, 87, 232, 0.95) !important;
+        box-shadow: 0 16px 32px rgba(58, 87, 232, 0.25) !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo::after {
+        content: "Zoom";
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        background: #3a57e8;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 5px 7px;
+        border-radius: 999px;
+        opacity: 0;
+        transform: translateY(3px);
+        transition: opacity .16s ease, transform .16s ease;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo.wmc-force-has-photo::after {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    #wmcItemPickerUseBtn {
+        border-radius: 10px !important;
+        box-shadow: 0 10px 22px rgba(58, 87, 232, 0.26) !important;
+    }
+
+    .wmc-force-photo-zoom-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 24, 38, 0.76);
+        backdrop-filter: blur(3px);
+        z-index: 99999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .wmc-force-photo-zoom-overlay.show {
+        display: flex;
+    }
+
+    .wmc-force-photo-zoom-panel {
+        width: min(900px, 96vw);
+        max-height: 90vh;
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid rgba(58, 87, 232, 0.25);
+        border-top: 5px solid #3a57e8;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+        overflow: hidden;
+        position: relative;
+    }
+
+    .wmc-force-photo-zoom-close {
+        position: absolute;
+        top: 13px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        border: 0;
+        background: rgba(58, 87, 232, 0.10);
+        color: #232d42;
+        border-radius: 999px;
+        font-size: 26px;
+        line-height: 30px;
+        cursor: pointer;
+        z-index: 2;
+    }
+
+    .wmc-force-photo-zoom-close:hover {
+        background: rgba(58, 87, 232, 0.18);
+    }
+
+    .wmc-force-photo-zoom-header {
+        padding: 18px 62px 14px 22px;
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1));
+        border-bottom: 1px solid rgba(58, 87, 232, 0.14);
+    }
+
+    .wmc-force-photo-zoom-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #232d42;
+    }
+
+    .wmc-force-photo-zoom-subtitle {
+        font-size: 13px;
+        color: #6c757d;
+        margin-top: 2px;
+    }
+
+    .wmc-force-photo-zoom-body {
+        min-height: 420px;
+        max-height: calc(90vh - 90px);
+        overflow: auto;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+            linear-gradient(45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+            linear-gradient(-45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%),
+            linear-gradient(-45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    }
+
+    .wmc-force-photo-zoom-body img {
+        max-width: 100%;
+        max-height: calc(90vh - 150px);
+        object-fit: contain;
+        border-radius: 12px;
+        background: #fff;
+    }
+</style>
+
+<div id="wmcTransferPhotoZoomOverlay" class="wmc-force-photo-zoom-overlay" aria-hidden="true">
+    <div class="wmc-force-photo-zoom-panel">
+        <button type="button" class="wmc-force-photo-zoom-close" aria-label="Close preview">&times;</button>
+        <div class="wmc-force-photo-zoom-header">
+            <div class="wmc-force-photo-zoom-title">Item Photo Preview</div>
+            <div class="wmc-force-photo-zoom-subtitle" id="wmcTransferPhotoZoomSubtitle">Warehouse item image</div>
+        </div>
+        <div class="wmc-force-photo-zoom-body">
+            <img id="wmcTransferPhotoZoomImg" src="" alt="Item Photo Preview">
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    function qs(selector, root) {
+        return (root || document).querySelector(selector);
+    }
+
+    function getVisiblePhoto() {
+        var img = qs('#wmcItemPickerPhoto');
+        if (!img) return null;
+        if (img.classList.contains('d-none')) return null;
+        if (!img.getAttribute('src')) return null;
+        return img;
+    }
+
+    function refreshPhotoBox() {
+        var box = qs('#wmcItemPickerModal .wmc-item-picker-photo');
+        var img = getVisiblePhoto();
+
+        if (!box) return;
+
+        if (img) {
+            box.classList.add('wmc-force-has-photo');
+            box.setAttribute('title', 'Click to zoom item photo');
+            box.setAttribute('role', 'button');
+            box.setAttribute('tabindex', '0');
+        } else {
+            box.classList.remove('wmc-force-has-photo');
+            box.removeAttribute('title');
+            box.removeAttribute('role');
+            box.removeAttribute('tabindex');
+        }
+    }
+
+    function openZoom() {
+        var img = getVisiblePhoto();
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        var zoomImg = qs('#wmcTransferPhotoZoomImg');
+        var subtitle = qs('#wmcTransferPhotoZoomSubtitle');
+        var code = qs('#wmcItemPickerCode');
+        var name = qs('#wmcItemPickerName');
+
+        if (!img || !overlay || !zoomImg) return;
+
+        zoomImg.src = img.src;
+
+        var label = '';
+        if (code && code.textContent.trim()) label += code.textContent.trim();
+        if (name && name.textContent.trim()) label += (label ? ' - ' : '') + name.textContent.trim();
+
+        if (subtitle) subtitle.textContent = label || 'Warehouse item image';
+
+        overlay.classList.add('show');
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeZoom() {
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        if (!overlay) return;
+
+        overlay.classList.remove('show');
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function bindEvents() {
+        var box = qs('#wmcItemPickerModal .wmc-item-picker-photo');
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        var closeBtn = qs('#wmcTransferPhotoZoomOverlay .wmc-force-photo-zoom-close');
+
+        if (box && box.dataset.transferZoomBound !== '1') {
+            box.dataset.transferZoomBound = '1';
+
+            box.addEventListener('click', openZoom);
+
+            box.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openZoom();
+                }
+            });
+        }
+
+        if (overlay && overlay.dataset.transferZoomBound !== '1') {
+            overlay.dataset.transferZoomBound = '1';
+
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) closeZoom();
+            });
+        }
+
+        if (closeBtn && closeBtn.dataset.transferZoomBound !== '1') {
+            closeBtn.dataset.transferZoomBound = '1';
+            closeBtn.addEventListener('click', closeZoom);
+        }
+
+        if (document.body.dataset.transferZoomEscBound !== '1') {
+            document.body.dataset.transferZoomEscBound = '1';
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') closeZoom();
+            });
+        }
+    }
+
+    function bootZoom() {
+        bindEvents();
+        refreshPhotoBox();
+        setInterval(refreshPhotoBox, 700);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootZoom);
+    } else {
+        bootZoom();
+    }
+
+    document.addEventListener('click', function () {
+        setTimeout(function () {
+            bindEvents();
+            refreshPhotoBox();
+        }, 80);
+    });
+})();
+</script>
+{{-- force-transfer-global-item-picker-phase6-end --}}
+{{-- wmc-transfer-regular-qty-force-guard-start --}}
+<script>
+(function () {
+    'use strict';
+
+    if (window.__WMC_TRANSFER_REGULAR_QTY_FORCE_GUARD__) return;
+    window.__WMC_TRANSFER_REGULAR_QTY_FORCE_GUARD__ = true;
+
+    function onTransferCreatePage() {
+        return /\/warehouse\/transfer(\/create)?/i.test(window.location.pathname || '');
+    }
+
+    function isQtyInput(el) {
+        if (!el || !el.matches) return false;
+        const name = String(el.getAttribute('name') || '').toLowerCase();
+        const id = String(el.getAttribute('id') || '').toLowerCase();
+        const cls = String(el.className || '').toLowerCase();
+        return el.matches('input[type="number"], input:not([type]), input[type="text"]') &&
+            (name === 'quantity' || name.includes('[quantity]') || name.includes('qty') || id.includes('quantity') || id.includes('qty') || cls.includes('qty') || cls.includes('quantity'));
+    }
+
+    function rowText(row) {
+        return String(row ? row.textContent || '' : '').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function isSerializedRow(row) {
+        const text = rowText(row);
+        if (!text) return false;
+
+        // Explicit regular labels must win. Your UI shows "Regular" for non-serialized rows.
+        if (text.includes('regular') || text.includes('non-serialized') || text.includes('non serialized')) return false;
+
+        // Serialized section / serial checklist belongs only to serialized rows.
+        if (text.includes('serialized') || text.includes('serial numbers') || text.includes('selected:') || text.includes('select all visible')) return true;
+
+        return false;
+    }
+
+    function findLineContainer(input) {
+        return input.closest('.item-line, .transfer-item-line, [data-transfer-line], .warehouse-transfer-line, .border, .card, .row, .col-12') || input.parentElement;
+    }
+
+    function unlockRegularQty(input) {
+        if (!input) return;
+        const row = findLineContainer(input);
+        if (!row || isSerializedRow(row)) return;
+
+        input.disabled = false;
+        input.readOnly = false;
+        input.removeAttribute('disabled');
+        input.removeAttribute('readonly');
+        input.classList.remove('disabled');
+        input.style.pointerEvents = 'auto';
+        input.style.userSelect = 'auto';
+        input.style.backgroundColor = '';
+        input.style.cursor = '';
+
+        if (!input.getAttribute('step')) input.setAttribute('step', '0.01');
+        if (!input.getAttribute('min')) input.setAttribute('min', '0.01');
+
+        // Do NOT force overwrite a user's typed value. Only change blank/zero after item select.
+        const v = String(input.value || '').trim();
+        if ((v === '' || v === '0' || v === '0.00') && rowText(row).includes('available:')) {
+            input.value = '1';
+        }
+    }
+
+    function lockSerializedQty(input) {
+        const row = findLineContainer(input);
+        if (!row || !isSerializedRow(row)) return;
+        input.readOnly = true;
+        // use readonly, not disabled, so Laravel can still submit the selected serial count
+        input.removeAttribute('disabled');
+        input.disabled = false;
+    }
+
+    function syncQtyInputs() {
+        if (!onTransferCreatePage()) return;
+        document.querySelectorAll('input').forEach(function (input) {
+            if (!isQtyInput(input)) return;
+            const row = findLineContainer(input);
+            if (isSerializedRow(row)) {
+                lockSerializedQty(input);
+            } else {
+                unlockRegularQty(input);
+            }
+        });
+    }
+
+    document.addEventListener('input', function (e) {
+        if (isQtyInput(e.target)) unlockRegularQty(e.target);
+    }, true);
+
+    document.addEventListener('focusin', function (e) {
+        if (isQtyInput(e.target)) unlockRegularQty(e.target);
+    }, true);
+
+    document.addEventListener('wmc:item-picker:selected', function () {
+        setTimeout(syncQtyInputs, 0);
+        setTimeout(syncQtyInputs, 100);
+        setTimeout(syncQtyInputs, 350);
+        setTimeout(syncQtyInputs, 900);
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncQtyInputs);
+    } else {
+        syncQtyInputs();
+    }
+
+    const observer = new MutationObserver(function (mutations) {
+        let shouldSync = false;
+        mutations.forEach(function (m) {
+            if (m.type === 'childList') shouldSync = true;
+            if (m.type === 'attributes' && isQtyInput(m.target)) shouldSync = true;
+        });
+        if (shouldSync) setTimeout(syncQtyInputs, 0);
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['disabled', 'readonly', 'class', 'value']
+    });
+
+    setInterval(syncQtyInputs, 800);
+})();
+</script>
+{{-- wmc-transfer-regular-qty-force-guard-end --}}

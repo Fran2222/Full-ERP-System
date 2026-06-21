@@ -159,11 +159,13 @@
 
         $aliases = [
             'sales' => ['sales', 'sales manage', 'sales management'],
+                'pos' => ['pos', 'point of sale', 'point-of-sale', 'point_of_sale', 'front desk pos', 'frontdesk pos'],
             'warehouse' => ['warehouse'],
             'inventory' => ['inventory'],
             'purchasing' => ['purchasing', 'procurement', 'purchase', 'purchase management'],
             'accounting' => ['accounting', 'accounting module'],
             'project management' => ['project management', 'project-management', 'projects', 'project'],
+            'vehicle management' => ['vehicle management', 'vehicle-management', 'vehicle', 'vehicles'],
         ];
 
         foreach (($aliases[$module] ?? [$module]) as $alias) {
@@ -359,17 +361,20 @@
     };
 
     $hasSalesModule = $userHasAssignedBusinessModule('sales');
+    $hasPosModule = $userHasAssignedBusinessModule('pos');
     $hasWarehouseModule = $userHasAssignedBusinessModule('warehouse');
     $hasInventoryModule = $userHasAssignedBusinessModule('inventory');
     $hasPurchasingModule = $userHasAssignedBusinessModule('purchasing');
     $hasAccountingModule = $userHasAssignedBusinessModule('accounting');
     $hasProjectManagementModule = $userHasAssignedBusinessModule('project management');
+    $hasVehicleManagementModule = $userHasAssignedBusinessModule('vehicle management');
     $hasBusinessModuleAssignment = $hasSalesModule
         || $hasWarehouseModule
         || $hasInventoryModule
         || $hasPurchasingModule
         || $hasAccountingModule
-        || $hasProjectManagementModule;
+        || $hasProjectManagementModule
+        || $hasVehicleManagementModule;
 
     $dashboardRoute = $useHrAsMainDashboard
         ? $safeRoute('hr.dashboard', [], $safeRoute('dashboard'))
@@ -510,6 +515,13 @@
             'purchasing.receiving.view',
         ]);
 
+        $showPOS = $hasPosModule || $isAdminAccess || $canAny([
+            'pos.view',
+            'pos.access',
+            'pos.terminal.view',
+            'pos.sales.create',
+        ]);
+
         $showSales = $hasSalesModule || $isAdminAccess || $canAny([
             'sales.dashboard.view',
             'sales.customers.view',
@@ -539,6 +551,19 @@
             'projects.view',
             'project.dashboard.view',
             'project_management.dashboard.view',
+            'project_dashboard.view',
+            'projects_mgmt.view',
+        ]);
+
+        $showVehicleManagement = $hasVehicleManagementModule || $isAdminAccess || $canAny([
+            'vehicle.view',
+            'vehicle.dashboard.view',
+            'vehicle.vehicles.view',
+            'vehicle.assignments.view',
+            'vehicle.maintenance.view',
+            'vehicle.documents.view',
+            'vehicle.reports.view',
+            'vehicle.setup.manage',
         ]);
     } else {
         $showInventory = $isAdminAccess || $canAny([
@@ -571,6 +596,13 @@
             'purchasing.receiving.view',
         ]);
 
+        $showPOS = $isAdminAccess || $canAny([
+            'pos.view',
+            'pos.access',
+            'pos.terminal.view',
+            'pos.sales.create',
+        ]);
+
         $showSales = $isAdminAccess || $canAny([
             'sales.dashboard.view',
             'sales.customers.view',
@@ -597,6 +629,19 @@
             'projects.view',
             'project.dashboard.view',
             'project_management.dashboard.view',
+            'project_dashboard.view',
+            'projects_mgmt.view',
+        ]);
+
+        $showVehicleManagement = $isAdminAccess || $canAny([
+            'vehicle.view',
+            'vehicle.dashboard.view',
+            'vehicle.vehicles.view',
+            'vehicle.assignments.view',
+            'vehicle.maintenance.view',
+            'vehicle.documents.view',
+            'vehicle.reports.view',
+            'vehicle.setup.manage',
         ]);
     }
 
@@ -633,16 +678,90 @@
     $hrEvaluationMenuOpen = request()->is('hr/evaluation')
         || request()->is('hr/evaluation/*')
         || request()->routeIs('hr.evaluation.*');
+    
+    $hrAttendanceMenuOpen = request()->is('hr/attendance')
+        || request()->is('hr/attendance/*')
+        || request()->is('hr/attendance-batches')
+        || request()->is('hr/attendance-batches/*')
+        || request()->routeIs('hr.attendance.*')
+        || request()->routeIs('hr.attendance-batches.*')
+        || request()->routeIs('hr.attendance-reports.*');
 
     $warehouseMenuOpen = request()->is('warehouse') || request()->is('warehouse/*');
     $salesMenuOpen = request()->is('sales') || request()->is('sales/*');
+
+    // WMC_POS_ASSIGNED_MODULE_ONLY
+    // POS sidebar should show only when the user is assigned to the POS module.
+    // Sales Receipts/POS create flow remains hidden from Sales module nav/dashboard.
+    // WMC_POS_DIRECT_MODULE_CHECK_V2
+    // POS sidebar should show only for users explicitly assigned to POS module.
+    $showPOS = false;
+
+    if ($user) {
+        $showPOS = (bool) \Illuminate\Support\Facades\DB::table('user_module_accesses')
+            ->where('user_id', $user->id)
+            ->whereRaw('LOWER(TRIM(module)) = ?', ['pos'])
+            ->exists();
+    }
     $purchasingMenuOpen = request()->is('purchasing') || request()->is('purchasing/*');
     $accountingMenuOpen = request()->is('accounting') || request()->is('accounting/*') || request()->routeIs('accounting.*');
     $usersMenuOpen = request()->is('users') || request()->is('users/*');
+
+    $showProjectDashboard = ($showProjectManagement ?? false) || $hasProjectManagementModule || $isAdminAccess || $canAny([
+        'project_dashboard.view',
+        'project_management.dashboard.view',
+        'project_management.view',
+    ]);
+
+    $showProjectsMgmt = ($showProjectManagement ?? false) || $hasProjectManagementModule || $isAdminAccess || $canAny([
+        'projects_mgmt.view',
+        'projects.view',
+        'project_management.view',
+    ]);
+
+    $showProjectNavigation = $showProjectDashboard || $showProjectsMgmt || ($showProjectManagement ?? false) || $hasProjectManagementModule;
+
+    $crmMenuOpen = request()->is('crm*') || request()->routeIs('crm.*');
+
+    $projectSetupOpen = request()->routeIs('project-types.*')
+        || request()->routeIs('project-priorities.*')
+        || request()->routeIs('project-statuses.*')
+        || request()->routeIs('project-teams.*')
+        || request()->routeIs('rfp-types.*')
+        || request()->routeIs('document-controls.*')
+        || request()->routeIs('store-names.*')
+        || request()->routeIs('project-vehicles.*')
+        || request()->is('project-types*')
+        || request()->is('project-priorities*')
+        || request()->is('project-statuses*')
+        || request()->is('project-teams*')
+        || request()->is('rfp-types*')
+        || request()->is('document-controls*')
+        || request()->is('store-names*')
+        || request()->is('vehicles*');
+
+    $projectFinanceOpen = request()->routeIs('project-rfps.*')
+        || request()->routeIs('project-expenses.*')
+        || request()->routeIs('project-gas-slips.*')
+        || request()->is('project-management/project-finances*');
+
+    $projectMgmtOpen = request()->routeIs('pm_dashboard')
+        || request()->routeIs('projects.*')
+        || request()->routeIs('project-tasks.*')
+        || request()->routeIs('project-milestones.*')
+        || request()->routeIs('clients.*')
+        || request()->routeIs('project-files.*')
+        || $projectSetupOpen
+        || $projectFinanceOpen
+        || request()->is('project-management')
+        || request()->is('project-management/*')
+        || request()->is('projects*')
+        || request()->is('project-milestones*')
+        || request()->is('clients*');
+
 @endphp
 
 <ul class="navbar-nav iq-main-menu" id="sidebar">
-
 @if($isHrEmployeeSidebar)
     {{-- =========================================================
        HR EMPLOYEE SELF-SERVICE SIDEBAR
@@ -734,7 +853,7 @@
     </li>
 
 
-    @if($showProjectManagement || $showWarehouse || $showInventory || $showPurchasing || $showSales || $showAccounting)
+    @if($showProjectManagement || $showWarehouse || $showInventory || $showPurchasing || $showPOS || $showSales || $showAccounting)
     <li class="nav-item static-item">
         <a class="nav-link static-item disabled" href="#" tabindex="-1">
             <span class="default-icon">Modules</span>
@@ -743,11 +862,140 @@
     </li>
     @endif
 
-    @if($showProjectManagement)
+    @if($showProjectNavigation)
     <li class="nav-item">
-        <a class="nav-link {{ request()->is('project-management') || request()->is('project-management/*') || request()->is('module/project-management') || request()->routeIs('projects.*') ? 'active' : '' }}" href="{{ $safeRoute('module.project-management') }}">
-            <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4H19C20.1 4 21 4.9 21 6V18C21 19.1 20.1 20 19 20H5C3.9 20 3 19.1 3 18V6C3 4.9 3.9 4 5 4Z" stroke="currentColor" stroke-width="1.7"/><path d="M7 8H17M7 12H13M7 16H10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>
+        <a class="nav-link {{ $projectMgmtOpen ? '' : 'collapsed' }}"
+           data-bs-toggle="collapse"
+           href="#projectMgmtMenu"
+           role="button"
+           aria-expanded="{{ $projectMgmtOpen ? 'true' : 'false' }}"
+           aria-controls="projectMgmtMenu">
+            <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 6H5C3.9 6 3 6.9 3 8V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V8C21 6.9 20.1 6 19 6H14M10 6V5C10 3.9 10.9 3 12 3C13.1 3 14 3.9 14 5V6M10 6H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
             <span class="item-name">Project Management</span>
+            <i class="right-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></i>
+        </a>
+
+        <ul class="sub-nav collapse {{ $projectMgmtOpen ? 'show' : '' }}" id="projectMgmtMenu" data-bs-parent="#sidebar">
+            @if($showProjectDashboard)
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('pm_dashboard') || request()->is('project-management/dashboard') ? 'active' : '' }}" href="{{ $safeRoute('pm_dashboard', [], url('/project-management/dashboard')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M4 13H10V20H4V13Z" stroke="currentColor" stroke-width="1.7"/><path d="M14 4H20V20H14V4Z" stroke="currentColor" stroke-width="1.7"/><path d="M4 4H10V9H4V4Z" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Dashboard</span></a></li>
+            @endif
+
+            @if($showProjectsMgmt)
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('projects.*') || request()->is('projects*') ? 'active' : '' }}" href="{{ $safeRoute('projects.index', [], url('/projects')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M8 6V5C8 3.9 8.9 3 10 3H14C15.1 3 16 3.9 16 5V6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 8C4 6.9 4.9 6 6 6H18C19.1 6 20 6.9 20 8V18C20 19.1 19.1 20 18 20H6C4.9 20 4 19.1 4 18V8Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 12H15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Projects</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-tasks.*') || request()->is('project-management/tasks*') ? 'active' : '' }}" href="{{ $safeRoute('project-tasks.index', [], url('/project-management/tasks')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M7 3V6M17 3V6M4 9H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5 5H19C20.1 5 21 5.9 21 7V19C21 20.1 20.1 21 19 21H5C3.9 21 3 20.1 3 19V7C3 5.9 3.9 5 5 5Z" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Tasks</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-milestones.*') || request()->is('project-milestones*') ? 'active' : '' }}" href="{{ $safeRoute('project-milestones.index', [], url('/project-milestones')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M6 21V4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 4H17L15 8L17 12H6V4Z" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Milestones</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('clients.*') || request()->is('clients*') ? 'active' : '' }}" href="{{ $safeRoute('clients.index', [], url('/clients')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M16 21V19C16 16.8 14.2 15 12 15H7C4.8 15 3 16.8 3 19V21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M9.5 11C11.4 11 13 9.4 13 7.5C13 5.6 11.4 4 9.5 4C7.6 4 6 5.6 6 7.5C6 9.4 7.6 11 9.5 11Z" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Clients</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-files.*') ? 'active' : '' }}" href="{{ $safeRoute('project-files.index', [], url('/project-management/files')) }}"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M3 7C3 5.9 3.9 5 5 5H9L11 7H19C20.1 7 21 7.9 21 9V18C21 19.1 20.1 20 19 20H5C3.9 20 3 19.1 3 18V7Z" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Files</span></a></li>
+
+            <li class="nav-item">
+                <a class="nav-link {{ $projectFinanceOpen ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#projectFinanceMenu" role="button" aria-expanded="{{ $projectFinanceOpen ? 'true' : 'false' }}" aria-controls="projectFinanceMenu"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M4 6H20V18H4V6Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 10H16M8 14H13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Project Finances</span><i class="right-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></i></a>
+                <ul class="sub-nav collapse {{ $projectFinanceOpen ? 'show' : '' }}" id="projectFinanceMenu" data-bs-parent="#projectMgmtMenu">
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-rfps.*') ? 'active' : '' }}" href="{{ $safeRoute('project-rfps.index', [], url('/project-management/project-finances/rfps')) }}"><span class="item-name">RFP</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-expenses.*') ? 'active' : '' }}" href="{{ $safeRoute('project-expenses.index', [], url('/project-management/project-finances/expenses')) }}"><span class="item-name">Expenses</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-gas-slips.*') ? 'active' : '' }}" href="{{ $safeRoute('project-gas-slips.index', [], url('/project-management/project-finances/gas-slips')) }}"><span class="item-name">Gas Slips</span></a></li>
+                </ul>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link {{ $projectSetupOpen ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#projectSetupMenu" role="button" aria-expanded="{{ $projectSetupOpen ? 'true' : 'false' }}" aria-controls="projectSetupMenu"><i class="icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M12 15.5C13.9 15.5 15.5 13.9 15.5 12C15.5 10.1 13.9 8.5 12 8.5C10.1 8.5 8.5 10.1 8.5 12C8.5 13.9 10.1 15.5 12 15.5Z" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15A1.7 1.7 0 0 0 19.7 13.1L18.8 11.5L19.7 9.9A1.7 1.7 0 0 0 19.4 8L18 6.6A1.7 1.7 0 0 0 16.1 6.3L14.5 7.2L12.9 6.3A1.7 1.7 0 0 0 11 6.6L9.6 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></i><span class="item-name">Project Setup</span><i class="right-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></i></a>
+                <ul class="sub-nav collapse {{ $projectSetupOpen ? 'show' : '' }}" id="projectSetupMenu" data-bs-parent="#projectMgmtMenu">
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-types.*') ? 'active' : '' }}" href="{{ $safeRoute('project-types.index', [], url('/project-types')) }}"><span class="item-name">Types</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-priorities.*') ? 'active' : '' }}" href="{{ $safeRoute('project-priorities.index', [], url('/project-priorities')) }}"><span class="item-name">Priorities</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-statuses.*') ? 'active' : '' }}" href="{{ $safeRoute('project-statuses.index', [], url('/project-statuses')) }}"><span class="item-name">Statuses</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-teams.*') ? 'active' : '' }}" href="{{ $safeRoute('project-teams.index', [], url('/project-teams')) }}"><span class="item-name">Teams</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('document-controls.*') ? 'active' : '' }}" href="{{ $safeRoute('document-controls.index', [], url('/document-controls')) }}"><span class="item-name">Document Control</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('rfp-types.*') ? 'active' : '' }}" href="{{ $safeRoute('rfp-types.index', [], url('/rfp-types')) }}"><span class="item-name">RFP Types</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('store-names.*') ? 'active' : '' }}" href="{{ $safeRoute('store-names.index', [], url('/store-names')) }}"><span class="item-name">Store Names</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-vehicles.*') ? 'active' : '' }}" href="{{ $safeRoute('project-vehicles.index', [], url('/vehicles')) }}"><span class="item-name">Vehicle List</span></a></li>
+                </ul>
+            </li>
+            @endif
+        </ul>
+    </li>
+    @endif
+
+
+
+    @if((isset($isAdminAccess) && $isAdminAccess) || (isset($canAny) && $canAny(['crm_dashboard.view', 'crm_pipeline.view'])))
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('crm.*') || request()->is('crm*') ? 'active' : '' }}" href="{{ $safeRoute('crm.dashboard', [], $safeRoute('crm.pipeline')) }}">
+            <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 19V5C4 3.9 4.9 3 6 3H18C19.1 3 20 3.9 20 5V19C20 20.1 19.1 21 18 21H6C4.9 21 4 20.1 4 19Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 16V12M12 16V8M16 16V10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i>
+            <span class="item-name">CRM</span>
+        </a>
+    </li>
+    @endif
+
+    @if($showVehicleManagement ?? false)
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('vehicle.*') || request()->is('vehicle-management') || request()->is('vehicle-management/*') ? 'active' : '' }}" href="{{ $safeRoute('vehicle.dashboard', [], url('/vehicle-management')) }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 15H20L18.5 10.5C18.2 9.6 17.4 9 16.5 9H7.5C6.6 9 5.8 9.6 5.5 10.5L4 15Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M6 15V18M18 15V18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <circle cx="7.5" cy="18" r="1.5" fill="currentColor"/>
+                    <circle cx="16.5" cy="18" r="1.5" fill="currentColor"/>
+                    <path d="M8 6H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+            </i>
+            <span class="item-name">Vehicle Management</span>
+        </a>
+    </li>
+    @endif
+
+    {{-- WMC_POS_ASSIGNED_NON_ADMIN_V9 --}}
+    @php
+        $wmcCurrentUserForPos = auth()->user();
+
+        $wmcShowAssignedPosOnly = false;
+
+        if ($wmcCurrentUserForPos) {
+            $wmcIsSystemAdminForPos =
+                ($isAdminAccess ?? false)
+                || $wmcCurrentUserForPos->hasAnyRole([
+                    'Super Admin',
+                    'Super Administrator',
+                    'super-admin',
+                    'super admin',
+                    'superadmin',
+                    'Admin',
+                    'admin',
+                    'Administrator',
+                    'administrator',
+                    'BOD',
+                    'Bod',
+                    'bod',
+                    'Board of Directors',
+                    'Board Of Directors',
+                    'board of directors',
+                ]);
+
+            $wmcHasAssignedPosAccess =
+                $wmcCurrentUserForPos->can('pos.view')
+                || $wmcCurrentUserForPos->can('pos.access')
+                || $wmcCurrentUserForPos->can('pos.terminal.view')
+                || $wmcCurrentUserForPos->can('pos.sales.create')
+                || $wmcCurrentUserForPos->can('pos.transactions.view')
+                || \Illuminate\Support\Facades\DB::table('user_module_accesses')
+                    ->where('user_id', $wmcCurrentUserForPos->id)
+                    ->whereRaw('LOWER(TRIM(module)) = ?', ['pos'])
+                    ->exists();
+
+            // Non-admin POS users like Rina render here.
+            // Admin/BOD/Super Admin keep the original POS block, so Ivan will not be affected.
+            $wmcShowAssignedPosOnly = (! $wmcIsSystemAdminForPos) && $wmcHasAssignedPosAccess;
+        }
+    @endphp
+
+    @if($wmcShowAssignedPosOnly)
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('pos.*') ? 'active' : '' }}" href="{{ $safeRoute('pos.index') }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path opacity="0.4" d="M3 7C3 4.79086 4.79086 3 7 3H17C19.2091 3 21 4.79086 21 7V17C21 19.2091 19.2091 21 17 21H7C4.79086 21 3 19.2091 3 17V7Z" fill="currentColor"/>
+                    <path d="M7 8.5C7 7.67157 7.67157 7 8.5 7H15.5C16.3284 7 17 7.67157 17 8.5C17 9.32843 16.3284 10 15.5 10H8.5C7.67157 10 7 9.32843 7 8.5Z" fill="currentColor"/>
+                </svg>
+            </i>
+            <span class="item-name">POS</span>
         </a>
     </li>
     @endif
@@ -1093,13 +1341,125 @@
                     <i class="right-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></i>
                 </a>
                 <ul class="sub-nav collapse {{ $hrLeaveMenuOpen ? 'show' : '' }}" id="adminHrLeaveMenu">
-                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.leave-types.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.leave-types.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 12L12 4H20V12L12 20L4 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/></svg></i><span class="item-name">Leave Types</span></a></li>
-                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.leave.credit-management') || request()->routeIs('hr.leave.credit-management.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.leave.credit-management', [], $safeRoute('hr.leave.credits', [], $safeRoute('hr.leave.index'))) }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7H19C20.1 7 21 7.9 21 9V17C21 18.1 20.1 19 19 19H5C3.9 19 3 18.1 3 17V9C3 7.9 3.9 7 5 7Z" stroke="currentColor" stroke-width="1.7"/><path d="M7 12H13M7 15H10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 13L17.3 14.3L20 11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></i><span class="item-name">Leave Credits</span></a></li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.leave.requests') ? 'active' : '' }}" href="{{ $safeRoute('hr.leave.requests') }}">
+                            <i class="icon">
+                                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 4H16C17.1 4 18 4.9 18 6V20H6V6C6 4.9 6.9 4 8 4Z" stroke="currentColor" stroke-width="1.7"/>
+                                    <path d="M9 8H15M9 12H15M9 16H12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Leave Requests</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.leave-types.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.leave-types.index') }}">
+                            <i class="icon">
+                                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M4 12L12 4H20V12L12 20L4 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                                    <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Leave Types</span>
+                        </a>    
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.leave.credit-management') || request()->routeIs('hr.leave.credit-management.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.leave.credit-management', [], $safeRoute('hr.leave.credits', [], $safeRoute('hr.leave.index'))) }}">
+                            <i class="icon">
+                                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M5 7H19C20.1 7 21 7.9 21 9V17C21 18.1 20.1 19 19 19H5C3.9 19 3 18.1 3 17V9C3 7.9 3.9 7 5 7Z" stroke="currentColor" stroke-width="1.7"/>
+                                    <path d="M7 12H13M7 15H10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                                    <path d="M16 13L17.3 14.3L20 11.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Leave Credits</span>
+                        </a>
+                    </li>
                 </ul>
             </li>
             @endif
 
-            @if($showHrAttendance)<li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.attendance.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.attendance.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M12 8V12L15 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></i><span class="item-name">Attendance</span></a></li>@endif
+            @if($showHrAttendance)
+            <li class="nav-item">
+                <a class="nav-link {{ $hrAttendanceMenuOpen ? 'active' : 'collapsed' }}"
+                data-bs-toggle="collapse"
+                href="#hr-attendance-menu"
+                role="button"
+                aria-expanded="{{ $hrAttendanceMenuOpen ? 'true' : 'false' }}"
+                aria-controls="hr-attendance-menu">
+                    <i class="icon">
+                        <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M8 2V5M16 2V5M4 9H20M5 4H19C20.1046 4 21 4.89543 21 6V20C21 21.1046 20.1046 22 19 22H5C3.89543 22 3 21.1046 3 20V6C3 4.89543 3.89543 4 5 4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        </svg>
+                    </i>
+                    <span class="item-name">Attendance</span>
+                    <i class="right-icon">
+                        <svg width="18" viewBox="0 0 24 24" fill="none">
+                            <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </i>
+                </a>
+
+                <ul class="sub-nav collapse {{ $hrAttendanceMenuOpen ? 'show' : '' }}" id="hr-attendance-menu">
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.attendance.index') ? 'active' : '' }}"
+                        href="{{ $safeRoute('hr.attendance.index') }}">
+                            <i class="icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M7 4.75H17C18.2426 4.75 19.25 5.75736 19.25 7V17C19.25 18.2426 18.2426 19.25 17 19.25H7C5.75736 19.25 4.75 18.2426 4.75 17V7C4.75 5.75736 5.75736 4.75 7 4.75Z"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                    <path d="M8.75 8.75H15.25M8.75 12H15.25M8.75 15.25H12.75"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Encoding</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.attendance-batches.*') ? 'active' : '' }}"
+                        href="{{ $safeRoute('hr.attendance-batches.index') }}">
+                            <i class="icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M6.75 5.75H17.25C18.3546 5.75 19.25 6.64543 19.25 7.75V17.25C19.25 18.3546 18.3546 19.25 17.25 19.25H6.75C5.64543 19.25 4.75 18.3546 4.75 17.25V7.75C4.75 6.64543 5.64543 5.75 6.75 5.75Z"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                    <path d="M8.25 4.25V7.25M15.75 4.25V7.25M4.75 9.75H19.25"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M8.75 13H10.25M13.75 13H15.25M8.75 16H10.25"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Batches</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link {{ request()->routeIs('hr.attendance-reports.*') ? 'active' : '' }}"
+                        href="{{ route('hr.attendance-reports.index') }}">
+                            <i class="icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M7 3.75H14.25L19.25 8.75V20.25H7C5.75736 20.25 4.75 19.2426 4.75 18V6C4.75 4.75736 5.75736 3.75 7 3.75Z"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                    <path d="M14.25 3.75V8.75H19.25"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                                    <path d="M8.75 13H15.25"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M8.75 16H13.25"
+                                        stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                            </i>
+                            <span class="item-name">Reports</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            @endif
+            
             @if($showHrTravelOrders)<li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.travel-orders.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.travel-orders.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 18L4 20V6L9 4L15 6L20 4V18L15 20L9 18Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 4V18M15 6V20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Travel Order</span></a></li>@endif
             @if($showHrOvertimeRequests)<li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.overtime-requests.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.overtime-requests.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M12 7V12H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 17.5L20 20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Overtime Request</span></a></li>@endif
             @if($showHrPayroll)<li class="nav-item"><a class="nav-link {{ request()->routeIs('hr.payroll.*') ? 'active' : '' }}" href="{{ $safeRoute('hr.payroll.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M14.5 9.5C14.1 8.8 13.2 8.4 12.1 8.4C10.8 8.4 9.8 9 9.8 10C9.8 12.5 14.5 11.2 14.5 14C14.5 15.1 13.5 15.7 12.1 15.7C11 15.7 10.1 15.3 9.5 14.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 7V17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Payroll</span></a></li>@endif
@@ -1107,20 +1467,384 @@
     </li>
     @endif
 
-    @if($showProjectManagement)
-    <li class="nav-item"><a class="nav-link" href="{{ $safeRoute('module.project-management') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 4H19C20.1 4 21 4.9 21 6V18C21 19.1 20.1 20 19 20H5C3.9 20 3 19.1 3 18V6C3 4.9 3.9 4 5 4Z" stroke="currentColor" stroke-width="1.7"/><path d="M7 8H17M7 12H13M7 16H10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></i><span class="item-name">Project Management</span></a></li>
+    {{-- WMC PM FORCE VISIBLE NAV: fallback Project Management menu after user assignment merge --}}
+    @php
+        $wmcForceShowProjectManagement = (isset($isAdminAccess) && $isAdminAccess)
+            || (isset($hasProjectManagementModule) && $hasProjectManagementModule)
+            || (isset($showProjectManagement) && $showProjectManagement)
+            || (isset($canAny) && $canAny([
+                'project_management.view',
+                'project_management.dashboard.view',
+                'project_dashboard.view',
+                'projects_mgmt.view',
+                'projects.view',
+            ]));
+
+        $wmcProjectMenuOpen = request()->is('project-management')
+            || request()->is('project-management/*')
+            || request()->is('projects')
+            || request()->is('projects/*')
+            || request()->is('clients')
+            || request()->is('clients/*')
+            || request()->is('project-types')
+            || request()->is('project-types/*')
+            || request()->is('project-priorities')
+            || request()->is('project-priorities/*')
+            || request()->is('project-statuses')
+            || request()->is('project-statuses/*')
+            || request()->is('project-teams')
+            || request()->is('project-teams/*')
+            || request()->is('document-controls')
+            || request()->is('document-controls/*')
+            || request()->routeIs('pm_dashboard')
+            || request()->routeIs('projects.*')
+            || request()->routeIs('project-tasks.*')
+            || request()->routeIs('project-milestones.*')
+            || request()->routeIs('clients.*')
+            || request()->routeIs('project-files.*')
+            || request()->routeIs('project-rfps.*')
+            || request()->routeIs('project-expenses.*')
+            || request()->routeIs('project-gas-slips.*')
+            || request()->routeIs('project-types.*')
+            || request()->routeIs('project-priorities.*')
+            || request()->routeIs('project-statuses.*')
+            || request()->routeIs('project-teams.*')
+            || request()->routeIs('document-controls.*')
+            || request()->routeIs('rfp-types.*')
+            || request()->routeIs('store-names.*')
+            || request()->routeIs('project-vehicles.*');
+
+        $wmcProjectFinanceOpen = request()->is('project-management/project-finances/*')
+            || request()->routeIs('project-rfps.*')
+            || request()->routeIs('project-expenses.*')
+            || request()->routeIs('project-gas-slips.*');
+
+        $wmcProjectSetupOpen = request()->is('project-types*')
+            || request()->is('project-priorities*')
+            || request()->is('project-statuses*')
+            || request()->is('project-teams*')
+            || request()->is('document-controls*')
+            || request()->is('rfp-types*')
+            || request()->is('store-names*')
+            || request()->is('vehicles*')
+            || request()->routeIs('project-types.*')
+            || request()->routeIs('project-priorities.*')
+            || request()->routeIs('project-statuses.*')
+            || request()->routeIs('project-teams.*')
+            || request()->routeIs('document-controls.*')
+            || request()->routeIs('rfp-types.*')
+            || request()->routeIs('store-names.*')
+            || request()->routeIs('project-vehicles.*');
+    @endphp
+
+    @if($wmcForceShowProjectManagement)
+    <li class="nav-item">
+        <a class="nav-link {{ $wmcProjectMenuOpen ? '' : 'collapsed' }}"
+           data-bs-toggle="collapse"
+           href="#wmcProjectManagementMenu"
+           role="button"
+           aria-expanded="{{ $wmcProjectMenuOpen ? 'true' : 'false' }}"
+           aria-controls="wmcProjectManagementMenu">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 6H5C3.9 6 3 6.9 3 8V18C3 19.1 3.9 20 5 20H19C20.1 20 21 19.1 21 18V8C21 6.9 20.1 6 19 6H14M10 6V5C10 3.9 10.9 3 12 3C13.1 3 14 3.9 14 5V6M10 6H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </i>
+            <span class="item-name">Project Management</span>
+            <i class="right-icon">
+                <svg width="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </i>
+        </a>
+        <ul class="sub-nav collapse {{ $wmcProjectMenuOpen ? 'show' : '' }}" id="wmcProjectManagementMenu">
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('pm_dashboard') || request()->is('project-management/dashboard') ? 'active' : '' }}" href="{{ $safeRoute('pm_dashboard', [], url('/project-management/dashboard')) }}">
+                    <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M4 13H10V20H4V13Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M14 4H20V20H14V4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M4 4H10V9H4V4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            </svg>
+                        </i>
+                        <i class="sidenav-mini-icon"> D </i>
+                    <span class="item-name">Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('projects.*') || request()->is('projects*') ? 'active' : '' }}" href="{{ $safeRoute('projects.index', [], url('/projects')) }}">
+                          <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M8 6V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V6"
+                                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <path d="M4 8C4 6.89543 4.89543 6 6 6H18C19.1046 6 20 6.89543 20 8V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V8Z"
+                                    stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M9 12H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </i>
+                        <i class="sidenav-mini-icon"> P </i>
+                    <span class="item-name">Projects</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('project-tasks.*') || request()->is('project-management/tasks*') ? 'active' : '' }}" href="{{ $safeRoute('project-tasks.index', [], url('/project-management/tasks')) }}">
+                    <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M7 3V6M17 3V6M4 9H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <path d="M5 5H19C20.1046 5 21 5.89543 21 7V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V7C3 5.89543 3.89543 5 5 5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M8 14H12M8 17H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </i>
+
+                        <i class="sidenav-mini-icon"> T </i>
+                    <span class="item-name">Tasks</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('project-milestones.*') || request()->is('project-milestones*') ? 'active' : '' }}" href="{{ $safeRoute('project-milestones.index', [], url('/project-milestones')) }}">
+                    <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M6 21V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <path d="M6 4H17L15 8L17 12H6V4Z"
+                                    stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            </svg>
+                        </i>
+
+                        <i class="sidenav-mini-icon"> M </i>
+                    <span class="item-name">Milestones</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('clients.*') || request()->is('clients*') ? 'active' : '' }}" href="{{ $safeRoute('clients.index', [], url('/clients')) }}">
+                    <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M16 21V19C16 16.7909 14.2091 15 12 15H7C4.79086 15 3 16.7909 3 19V21"
+                                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <path d="M9.5 11C11.433 11 13 9.433 13 7.5C13 5.567 11.433 4 9.5 4C7.567 4 6 5.567 6 7.5C6 9.433 7.567 11 9.5 11Z"
+                                    stroke="currentColor" stroke-width="1.8"/>
+                                <path d="M17 11L19 13L22 9"
+                                    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </i>
+
+                        <i class="sidenav-mini-icon"> C </i>
+                    <span class="item-name">Clients</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ request()->routeIs('project-files.*') ? 'active' : '' }}" href="{{ $safeRoute('project-files.index', [], url('/project-management/files')) }}">
+                      <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M3 7C3 5.89543 3.89543 5 5 5H9L11 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z"
+                                      stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M7 13H17M7 16H13"
+                                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </i>
+
+                        <i class="sidenav-mini-icon"> F </i>
+                    <span class="item-name">Files</span>
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link {{ $wmcProjectFinanceOpen ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#wmcProjectFinanceMenu" role="button" aria-expanded="{{ $wmcProjectFinanceOpen ? 'true' : 'false' }}" aria-controls="wmcProjectFinanceMenu">
+                       <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M4 6H20V18H4V6Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                <path d="M8 10H16M8 14H13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                <path d="M18 6V4M6 6V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                        </i>
+                    <span class="item-name">Project Finances</span>
+                    <i class="right-icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
+                </a>
+                <ul class="sub-nav collapse {{ $wmcProjectFinanceOpen ? 'show' : '' }}" id="wmcProjectFinanceMenu">
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-rfps.*') ? 'active' : '' }}" href="{{ $safeRoute('project-rfps.index', [], url('/project-management/project-finances/rfps')) }}"><span class="item-name">RFP</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-expenses.*') ? 'active' : '' }}" href="{{ $safeRoute('project-expenses.index', [], url('/project-management/project-finances/expenses')) }}"><span class="item-name">Expenses</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-gas-slips.*') ? 'active' : '' }}" href="{{ $safeRoute('project-gas-slips.index', [], url('/project-management/project-finances/gas-slips')) }}"><span class="item-name">Gas Slips</span></a></li>
+                </ul>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link {{ $wmcProjectSetupOpen ? '' : 'collapsed' }}" data-bs-toggle="collapse" href="#wmcProjectSetupMenu" role="button" aria-expanded="{{ $wmcProjectSetupOpen ? 'true' : 'false' }}" aria-controls="wmcProjectSetupMenu">
+                     <i class="icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z"
+                                    stroke="currentColor" stroke-width="1.8"/>
+                                <path d="M19.4 15C19.1277 15.6171 19.2119 16.3368 19.616 16.876L19.7 16.988C20.221 17.6826 20.1518 18.6545 19.5355 19.2708C18.9192 19.8871 17.9473 19.9563 17.2527 19.4353L17.1407 19.3513C16.6015 18.9472 15.8818 18.863 15.2647 19.1353C14.6476 19.4076 14.25 20.0189 14.25 20.6938V20.8333C14.25 21.7538 13.5038 22.5 12.5833 22.5H11.4167C10.4962 22.5 9.75 21.7538 9.75 20.8333V20.6938C9.75 20.0189 9.3524 19.4076 8.7353 19.1353C8.1182 18.863 7.3985 18.9472 6.8593 19.3513L6.7473 19.4353C6.0527 19.9563 5.0808 19.8871 4.4645 19.2708C3.8482 18.6545 3.779 17.6826 4.3 16.988L4.384 16.876C4.7881 16.3368 4.8723 15.6171 4.6 15C4.3277 14.3829 3.7164 13.9853 3.0415 13.9853H2.9167C1.9962 13.9853 1.25 13.2391 1.25 12.3186V11.6814C1.25 10.7609 1.9962 10.0147 2.9167 10.0147H3.0415C3.7164 10.0147 4.3277 9.6171 4.6 9C4.8723 8.3829 4.7881 7.6632 4.384 7.124L4.3 7.012C3.779 6.3174 3.8482 5.3455 4.4645 4.7292C5.0808 4.1129 6.0527 4.0437 6.7473 4.5647L6.8593 4.6487C7.3985 5.0528 8.1182 5.137 8.7353 4.8647C9.3524 4.5924 9.75 3.9811 9.75 3.3062V3.1667C9.75 2.2462 10.4962 1.5 11.4167 1.5H12.5833C13.5038 1.5 14.25 2.2462 14.25 3.1667V3.3062C14.25 3.9811 14.6476 4.5924 15.2647 4.8647C15.8818 5.137 16.6015 5.0528 17.1407 4.6487L17.2527 4.5647C17.9473 4.0437 18.9192 4.1129 19.5355 4.7292C20.1518 5.3455 20.221 6.3174 19.7 7.012L19.616 7.124C19.2119 7.6632 19.1277 8.3829 19.4 9C19.6723 9.6171 20.2836 10.0147 20.9585 10.0147H21.0833C22.0038 10.0147 22.75 10.7609 22.75 11.6814V12.3186C22.75 13.2391 22.0038 13.9853 21.0833 13.9853H20.9585C20.2836 13.9853 19.6723 14.3829 19.4 15Z"
+                                    stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </i>
+                    <span class="item-name">Project Setup</span>
+                    <i class="right-icon"><svg width="16" viewBox="0 0 24 24" fill="none"><path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
+                </a>
+                <ul class="sub-nav collapse {{ $wmcProjectSetupOpen ? 'show' : '' }}" id="wmcProjectSetupMenu">
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-types.*') ? 'active' : '' }}" href="{{ $safeRoute('project-types.index', [], url('/project-types')) }}"><span class="item-name">Types</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-priorities.*') ? 'active' : '' }}" href="{{ $safeRoute('project-priorities.index', [], url('/project-priorities')) }}"><span class="item-name">Priorities</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-statuses.*') ? 'active' : '' }}" href="{{ $safeRoute('project-statuses.index', [], url('/project-statuses')) }}"><span class="item-name">Statuses</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-teams.*') ? 'active' : '' }}" href="{{ $safeRoute('project-teams.index', [], url('/project-teams')) }}"><span class="item-name">Teams</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('document-controls.*') ? 'active' : '' }}" href="{{ $safeRoute('document-controls.index', [], url('/document-controls')) }}"><span class="item-name">Document Control</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('rfp-types.*') ? 'active' : '' }}" href="{{ $safeRoute('rfp-types.index', [], url('/rfp-types')) }}"><span class="item-name">RFP Types</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('store-names.*') ? 'active' : '' }}" href="{{ $safeRoute('store-names.index', [], url('/store-names')) }}"><span class="item-name">Store Names</span></a></li>
+                    <li class="nav-item"><a class="nav-link {{ request()->routeIs('project-vehicles.*') ? 'active' : '' }}" href="{{ $safeRoute('project-vehicles.index', [], url('/vehicles')) }}"><span class="item-name">Vehicle List</span></a></li>
+                </ul>
+            </li>
+        </ul>
+    </li>
+    @endif
+
+    @if($showVehicleManagement ?? false)
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('vehicle.*') || request()->is('vehicle-management') || request()->is('vehicle-management/*') ? 'active' : '' }}" href="{{ $safeRoute('vehicle.dashboard', [], url('/vehicle-management')) }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 15H20L18.5 10.5C18.2 9.6 17.4 9 16.5 9H7.5C6.6 9 5.8 9.6 5.5 10.5L4 15Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M6 15V18M18 15V18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <circle cx="7.5" cy="18" r="1.5" fill="currentColor"/>
+                    <circle cx="16.5" cy="18" r="1.5" fill="currentColor"/>
+                    <path d="M8 6H16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                </svg>
+            </i>
+            <span class="item-name">Vehicle Management</span>
+        </a>
+    </li>
+    @endif
+    {{-- fix-vertical-nav-warehouse-modules-v1 --}}
+    {{-- WMC_POS_ASSIGNED_NON_ADMIN_V9 --}}
+    @php
+        $wmcCurrentUserForPos = auth()->user();
+
+        $wmcShowAssignedPosOnly = false;
+
+        if ($wmcCurrentUserForPos) {
+            $wmcIsSystemAdminForPos =
+                ($isAdminAccess ?? false)
+                || $wmcCurrentUserForPos->hasAnyRole([
+                    'Super Admin',
+                    'Super Administrator',
+                    'super-admin',
+                    'super admin',
+                    'superadmin',
+                    'Admin',
+                    'admin',
+                    'Administrator',
+                    'administrator',
+                    'BOD',
+                    'Bod',
+                    'bod',
+                    'Board of Directors',
+                    'Board Of Directors',
+                    'board of directors',
+                ]);
+
+            $wmcHasAssignedPosAccess =
+                $wmcCurrentUserForPos->can('pos.view')
+                || $wmcCurrentUserForPos->can('pos.access')
+                || $wmcCurrentUserForPos->can('pos.terminal.view')
+                || $wmcCurrentUserForPos->can('pos.sales.create')
+                || $wmcCurrentUserForPos->can('pos.transactions.view')
+                || \Illuminate\Support\Facades\DB::table('user_module_accesses')
+                    ->where('user_id', $wmcCurrentUserForPos->id)
+                    ->whereRaw('LOWER(TRIM(module)) = ?', ['pos'])
+                    ->exists();
+
+            // Non-admin POS users like Rina render here.
+            // Admin/BOD/Super Admin keep the original POS block, so Ivan will not be affected.
+            $wmcShowAssignedPosOnly = (! $wmcIsSystemAdminForPos) && $wmcHasAssignedPosAccess;
+        }
+    @endphp
+
+    @if($wmcShowAssignedPosOnly)
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('pos.*') ? 'active' : '' }}" href="{{ $safeRoute('pos.index') }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path opacity="0.4" d="M3 7C3 4.79086 4.79086 3 7 3H17C19.2091 3 21 4.79086 21 7V17C21 19.2091 19.2091 21 17 21H7C4.79086 21 3 19.2091 3 17V7Z" fill="currentColor"/>
+                    <path d="M7 8.5C7 7.67157 7.67157 7 8.5 7H15.5C16.3284 7 17 7.67157 17 8.5C17 9.32843 16.3284 10 15.5 10H8.5C7.67157 10 7 9.32843 7 8.5Z" fill="currentColor"/>
+                </svg>
+            </i>
+            <span class="item-name">POS</span>
+        </a>
+    </li>
     @endif
 
     @if($showWarehouse)
-    <li class="nav-item"><a class="nav-link {{ request()->routeIs('warehouse.*') && !request()->routeIs('warehouse.inventory') ? 'active' : '' }}" href="{{ $safeRoute('warehouse.dashboard') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 10L12 3L21 10V21H3V10Z" fill="currentColor" opacity="0.4"/><path d="M9 21V14H15V21" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Warehouse</span></a></li>
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('warehouse.*') && ! request()->routeIs('warehouse.inventory') ? 'active' : '' }}" href="{{ $safeRoute('warehouse.dashboard') }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 10L12 3L21 10V21H3V10Z" fill="currentColor" opacity="0.4"/>
+                    <path d="M9 21V14H15V21" stroke="currentColor" stroke-width="1.7"/>
+                </svg>
+            </i>
+            <span class="item-name">Warehouse</span>
+        </a>
+    </li>
     @endif
 
-    @if($showInventory)
+    @if((isset($isAdminAccess) && $isAdminAccess) || (auth()->check() && auth()->user()->can('service.view')))
+    <li class="nav-item">
+        <a class="nav-link {{ request()->routeIs('service.*') ? 'active' : '' }}" href="{{ $safeRoute('service.dashboard') }}">
+            <i class="icon">
+                <svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 7H20V17H4V7Z" fill="currentColor" opacity="0.35"/>
+                    <path d="M7 10H17M7 14H13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    <path d="M4 7L12 3L20 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </i>
+            <span class="item-name">Service Operations</span>
+        </a>
+    </li>
+    @endif
+@if($showInventory)
     <li class="nav-item"><a class="nav-link {{ request()->routeIs('warehouse.inventory') ? 'active' : '' }}" href="{{ $safeRoute('warehouse.inventory') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3L21 8L12 13L3 8L12 3Z" stroke="currentColor" stroke-width="1.7"/><path d="M3 12L12 17L21 12" stroke="currentColor" stroke-width="1.7"/><path d="M3 16L12 21L21 16" stroke="currentColor" stroke-width="1.7"/></svg></i><span class="item-name">Inventory</span></a></li>
     @endif
 
     @if($showPurchasing)
     <li class="nav-item"><a class="nav-link {{ request()->routeIs('purchasing.*') ? 'active' : '' }}" href="{{ $safeRoute('purchasing.dashboard') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 5H6L8 16H18L21 8H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="20" r="1" fill="currentColor"/><circle cx="18" cy="20" r="1" fill="currentColor"/></svg></i><span class="item-name">Procurement</span></a></li>
+    @endif
+
+    {{-- WMC_POS_SIDEBAR_CLEAN_V8 --}}
+    @php
+        $wmcPosSidebarUser = auth()->user();
+        $wmcShowPOSClean = false;
+
+        if ($wmcPosSidebarUser) {
+            $wmcShowPOSClean =
+                ($isAdminAccess ?? false)
+                || $wmcPosSidebarUser->hasAnyRole([
+                    'Super Admin',
+                    'Super Administrator',
+                    'super-admin',
+                    'super admin',
+                    'superadmin',
+                    'Admin',
+                    'admin',
+                    'Administrator',
+                    'administrator',
+                    'BOD',
+                    'Bod',
+                    'bod',
+                    'Board of Directors',
+                    'Board Of Directors',
+                    'board of directors',
+                ])
+                || $wmcPosSidebarUser->can('pos.view')
+                || $wmcPosSidebarUser->can('pos.access')
+                || $wmcPosSidebarUser->can('pos.terminal.view')
+                || $wmcPosSidebarUser->can('pos.sales.create')
+                || $wmcPosSidebarUser->can('pos.transactions.view')
+                || $wmcPosSidebarUser->can('pos.credit_sales.view')
+                || \Illuminate\Support\Facades\DB::table('user_module_accesses')
+                    ->where('user_id', $wmcPosSidebarUser->id)
+                    ->whereRaw('LOWER(TRIM(module)) = ?', ['pos'])
+                    ->exists();
+        }
+    @endphp
+
+    @if($wmcShowPOSClean)
+<li class="nav-item"><a class="nav-link {{ request()->routeIs('pos.*') ? 'active' : '' }}" href="{{ $safeRoute('pos.index') }}"><i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path opacity="0.4" d="M3 7C3 4.79086 4.79086 3 7 3H17C19.2091 3 21 4.79086 21 7V17C21 19.2091 19.2091 21 17 21H7C4.79086 21 3 19.2091 3 17V7Z" fill="currentColor"/><path d="M7 8.5C7 7.67157 7.67157 7 8.5 7H15.5C16.3284 7 17 7.67157 17 8.5C17 9.32843 16.3284 10 15.5 10H8.5C7.67157 10 7 9.32843 7 8.5Z" fill="currentColor"/></svg></i><span class="item-name">POS</span></a></li>
     @endif
 
     @if($showSales)

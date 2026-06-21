@@ -2,8 +2,8 @@
     <div class="container-fluid content-inner mt-n5 py-0 wmc-announcement-page">
         <style>
             .wmc-announcement-page {
-                padding-left: 0.75rem !important;
-                padding-right: 0.75rem !important;
+                padding-left: 0.55rem !important;
+                padding-right: 0.55rem !important;
                 padding-bottom: 60px !important;
             }
 
@@ -15,40 +15,41 @@
 
             .wmc-announcement-card .card-header,
             .wmc-announcement-card .card-body {
-                padding-left: 1rem;
-                padding-right: 1rem;
+                padding-left: 0.85rem;
+                padding-right: 0.85rem;
             }
 
             .wmc-announcement-table-wrap {
                 width: 100%;
-                overflow-x: auto;
+                overflow-x: hidden;
                 padding-bottom: 0.25rem;
             }
 
             .wmc-announcement-table {
                 width: 100%;
-                min-width: 100%;
+                min-width: 0;
                 table-layout: fixed;
-                font-size: 13px;
+                font-size: 12.6px;
             }
 
             .wmc-announcement-table th,
             .wmc-announcement-table td {
-                padding: 0.75rem 0.65rem !important;
+                padding: 0.68rem 0.52rem !important;
                 vertical-align: middle;
                 white-space: normal !important;
                 word-break: normal;
-                overflow-wrap: anywhere;
+                overflow-wrap: normal;
             }
 
             .wmc-announcement-table th {
                 color: #64748b;
-                font-size: 11.5px;
+                font-size: 10.8px;
                 font-weight: 700;
                 text-transform: uppercase;
-                letter-spacing: .02em;
+                letter-spacing: .015em;
                 background: #f5f7fb;
                 border-color: #eef2f7 !important;
+                text-align: left;
             }
 
             .wmc-announcement-table td {
@@ -78,7 +79,7 @@
 
             .wmc-announcement-table th:nth-child(5),
             .wmc-announcement-table td:nth-child(5) {
-                width: 9%;
+                width: 8%;
                 text-align: center;
             }
 
@@ -95,12 +96,13 @@
 
             .wmc-announcement-table th:nth-child(8),
             .wmc-announcement-table td:nth-child(8) {
-                width: 10%;
+                width: 9%;
             }
 
             .wmc-announcement-table th:nth-child(9),
             .wmc-announcement-table td:nth-child(9) {
-                width: 6%;
+                width: 8%;
+                min-width: 82px;
                 text-align: center;
             }
 
@@ -108,16 +110,23 @@
                 font-weight: 700;
                 color: #0f172a;
                 line-height: 1.25;
+                display: block;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .wmc-announcement-preview {
                 max-width: 100%;
                 color: #64748b;
-                line-height: 1.35;
+                line-height: 1.3;
                 display: -webkit-box;
                 -webkit-line-clamp: 2;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
+                word-break: normal;
+                overflow-wrap: anywhere;
             }
 
             .wmc-announcement-cell-truncate {
@@ -129,24 +138,31 @@
             }
 
             .wmc-announcement-badge {
-                font-size: 10.5px;
-                padding: 0.28rem 0.48rem;
+                font-size: 10.2px;
+                padding: 0.26rem 0.46rem;
                 white-space: nowrap;
             }
 
             .wmc-announcement-action-wrap {
                 display: flex;
                 justify-content: center;
+                align-items: center;
+                width: 100%;
             }
 
             .wmc-announcement-action-wrap .btn {
-                width: 32px;
-                height: 32px;
+                width: 31px;
+                height: 31px;
                 padding: 0 !important;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: 9px;
+                border-radius: 8px;
+                flex: 0 0 31px;
+            }
+
+            .wmc-announcement-action-wrap .gap-2 {
+                gap: 0.35rem !important;
             }
 
             .wmc-announcement-action-wrap .icon {
@@ -157,25 +173,39 @@
             }
 
             .wmc-announcement-action-wrap svg {
-                width: 16px;
-                height: 16px;
+                width: 15px;
+                height: 15px;
             }
 
             @media (max-width: 1399.98px) {
                 .wmc-announcement-table {
-                    font-size: 12.3px;
-                    min-width: 1180px;
+                    font-size: 12px;
                 }
 
                 .wmc-announcement-table th,
                 .wmc-announcement-table td {
-                    padding: 0.65rem 0.5rem !important;
+                    padding: 0.62rem 0.42rem !important;
+                }
+
+                .wmc-announcement-table th {
+                    font-size: 10.2px;
+                    letter-spacing: 0;
+                }
+
+                .wmc-announcement-card .card-header,
+                .wmc-announcement-card .card-body {
+                    padding-left: 0.7rem;
+                    padding-right: 0.7rem;
                 }
             }
 
-            @media (max-width: 1199.98px) {
+            @media (max-width: 991.98px) {
+                .wmc-announcement-table-wrap {
+                    overflow-x: auto;
+                }
+
                 .wmc-announcement-table {
-                    min-width: 1120px;
+                    min-width: 980px;
                 }
             }
         </style>

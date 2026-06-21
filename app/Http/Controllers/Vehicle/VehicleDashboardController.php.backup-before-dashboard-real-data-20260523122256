@@ -1,0 +1,61 @@
+<?php
+
+namespace App\Http\Controllers\Vehicle;
+
+use App\Http\Controllers\Controller;
+use App\Models\Vehicle;
+use App\Models\VehicleDocument;
+use App\Models\VehicleMaintenanceRecord;
+use App\Models\VehicleStatus;
+use Carbon\Carbon;
+
+class VehicleDashboardController extends Controller
+{
+    public function index()
+    {
+        $totalVehicles = Vehicle::count();
+
+        $statusCounts = VehicleStatus::query()
+            ->withCount('vehicles')
+            ->orderBy('sort_order')
+            ->get();
+
+        $availableCount = Vehicle::whereHas('status', function ($query) {
+            $query->where('code', 'AVAILABLE');
+        })->count();
+
+        $assignedCount = Vehicle::whereHas('status', function ($query) {
+            $query->whereIn('code', ['ASSIGNED', 'IN_USE']);
+        })->count();
+
+        $maintenanceCount = Vehicle::whereHas('status', function ($query) {
+            $query->whereIn('code', ['UNDER_MAINTENANCE', 'FOR_REPAIR']);
+        })->count();
+
+        $expiringDocuments = VehicleDocument::query()
+            ->with('vehicle')
+            ->whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '>=', Carbon::today())
+            ->whereDate('expiry_date', '<=', Carbon::today()->addDays(30))
+            ->orderBy('expiry_date')
+            ->limit(5)
+            ->get();
+
+        $recentMaintenance = VehicleMaintenanceRecord::query()
+            ->with(['vehicle', 'type'])
+            ->latest('maintenance_date')
+            ->latest('id')
+            ->limit(5)
+            ->get();
+
+        return view('vehicle.dashboard', compact(
+            'totalVehicles',
+            'statusCounts',
+            'availableCount',
+            'assignedCount',
+            'maintenanceCount',
+            'expiringDocuments',
+            'recentMaintenance'
+        ));
+    }
+}

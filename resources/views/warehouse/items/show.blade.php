@@ -6,6 +6,22 @@
             $displayCode = $item->display_code ?: '-';
             $displayName = $item->display_name ?: '-';
             $money = fn ($value) => number_format((float) $value, 2);
+            $user = auth()->user();
+            $canViewCostPrice = $user && (
+                (method_exists($user, 'canViewCostPrice') && $user->canViewCostPrice())
+                || (method_exists($user, 'hasAnyRole') && $user->hasAnyRole([
+                    'super-admin',
+                    'Super Admin',
+                    'Super Administrator',
+                    'admin',
+                    'Admin',
+                    'bod',
+                    'BOD',
+                    'Bod',
+                    'Board of Directors',
+                    'Board Of Directors',
+                ]))
+            );
 
             $statusBadge = function ($status) {
                 $normalized = strtolower((string) $status);
@@ -166,19 +182,21 @@
                                     <div class="fw-semibold">{{ $item->supplier?->supplier_name ?? $item->supplier?->name ?? '-' }}</div>
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <div class="border rounded-3 p-3 h-100">
-                                    <div class="text-secondary small">Cost Price</div>
-                                    <div class="fw-bold">{{ $money($item->cost_price) }}</div>
+                            @if($canViewCostPrice)
+                                <div class="col-md-4">
+                                    <div class="border rounded-3 p-3 h-100">
+                                        <div class="text-secondary small">Cost Price</div>
+                                        <div class="fw-bold">{{ $money($item->cost_price) }}</div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-md-4">
+                            @endif
+                            <div class="{{ $canViewCostPrice ? 'col-md-4' : 'col-md-6' }}">
                                 <div class="border rounded-3 p-3 h-100">
                                     <div class="text-secondary small">Selling Price / SRP</div>
                                     <div class="fw-bold text-primary">{{ $money($item->selling_price) }}</div>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="{{ $canViewCostPrice ? 'col-md-4' : 'col-md-6' }}">
                                 <div class="border rounded-3 p-3 h-100">
                                     <div class="text-secondary small">Reorder Level</div>
                                     <div class="fw-bold">{{ number_format((float) ($item->reorder_level ?? $item->minimum_stock ?? 0), 2) }}</div>
@@ -435,8 +453,8 @@
                                     <td class="fw-semibold text-primary">{{ $movement->reference_type ?: '-' }}</td>
                                     <td>{!! $movementBadge($movement->movement_type) !!}</td>
                                     <td>
-                                        <div class="fw-semibold">{{ $movement->location?->location_name ?? $movement->location?->name ?? '-' }}</div>
-                                        <div class="small text-secondary">{{ $movement->location?->branch?->name ?? '-' }}</div>
+                                        <div class="fw-semibold">{{ $movement->location_display_name ?? $movement->location?->location_name ?? $movement->location?->name ?? '-' }}</div>
+                                        <div class="small text-secondary">{{ $movement->location_display_branch ?? $movement->location?->branch?->name ?? '-' }}</div>
                                     </td>
                                     <td class="text-end fw-bold {{ (float) $movement->quantity < 0 ? 'text-danger' : 'text-success' }}">{{ number_format((float) $movement->quantity, 2) }}</td>
                                     <td class="text-end">{{ number_format((float) $movement->balance_after, 2) }}</td>

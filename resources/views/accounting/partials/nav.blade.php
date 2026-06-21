@@ -1,12 +1,14 @@
 @php
-    $accountingTabs = [
+    use Illuminate\Support\Facades\Route;
+
+    $accountingTabs = collect([
         [
             'label' => 'Dashboard',
             'route' => 'accounting.dashboard',
-            'active' => request()->routeIs('accounting.dashboard'),
+            'active' => request()->routeIs('accounting.dashboard') || request()->is('accounting'),
         ],
         [
-            'label' => 'Chart Of Accounts',
+            'label' => 'Accounts',
             'route' => 'accounting.accounts.index',
             'active' => request()->routeIs('accounting.accounts.*'),
         ],
@@ -26,6 +28,11 @@
             'active' => request()->routeIs('accounting.bank-accounts.*'),
         ],
         [
+            'label' => 'Pay Bills',
+            'route' => 'accounting.pay-bills.index',
+            'active' => request()->routeIs('accounting.pay-bills.*'),
+        ],
+        [
             'label' => 'Collections',
             'route' => 'accounting.collections.index',
             'active' => request()->routeIs('accounting.collections.*'),
@@ -40,73 +47,93 @@
             'route' => 'accounting.reports.index',
             'active' => request()->routeIs('accounting.reports.*'),
         ],
-    ];
+    ])->filter(fn ($tab) => Route::has($tab['route']))->values();
 @endphp
 
 <style>
-    .wmc-accounting-nav-card {
-        border: 0;
-        border-radius: 1rem;
-        background: #ffffff;
-        box-shadow: 0 10px 30px rgba(17, 24, 39, 0.06);
+    .accounting-nav-shell {
+        position: relative;
+        margin-bottom: 18px;
     }
 
-    .wmc-accounting-nav {
+    .accounting-nav-card {
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        border-radius: 20px;
+        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.07);
+        backdrop-filter: blur(10px);
+        overflow: hidden;
+    }
+
+    .accounting-nav-scroll {
         display: flex;
-        flex-wrap: wrap;
-        gap: .55rem;
+        flex-wrap: nowrap;
         align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        width: 100%;
+        padding: 13px 16px;
+        overflow: hidden;
     }
 
-    .wmc-accounting-tab {
+    .accounting-nav-link {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 40px;
+        padding: 0 7px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-size: 12.5px;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 38px;
-        padding: .55rem 1.15rem;
-        border-radius: .55rem;
-        border: 1px solid transparent;
-        background: #f3f4f6;
-        color: #1f2937 !important;
-        font-size: .875rem;
-        font-weight: 600;
-        line-height: 1;
-        text-decoration: none !important;
-        transition: all .18s ease-in-out;
-        box-shadow: none;
+        text-align: center;
         white-space: nowrap;
+        transition: all 0.18s ease-in-out;
     }
 
-    .wmc-accounting-tab:hover {
-        background: #eef2ff;
-        color: #3b5bdb !important;
-        border-color: #dbe4ff;
+    .accounting-nav-link:hover {
+        background: #eef4ff;
+        color: #2f4cff;
+        border-color: #dce6ff;
         transform: translateY(-1px);
     }
 
-    .wmc-accounting-tab.active {
-        background: #3b5bdb;
-        color: #ffffff !important;
-        border-color: #3b5bdb;
-        box-shadow: 0 8px 18px rgba(59, 91, 219, .28);
+    .accounting-nav-link.active {
+        background: linear-gradient(135deg, #3f5cff 0%, #2448e8 100%);
+        color: #ffffff;
+        box-shadow: 0 10px 22px rgba(47, 76, 255, 0.28);
     }
 
-    .wmc-accounting-tab.active:hover {
-        background: #304fd0;
-        color: #ffffff !important;
-        border-color: #304fd0;
+    @media (max-width: 1199.98px) {
+        .accounting-nav-scroll {
+            overflow-x: auto;
+            justify-content: flex-start;
+            scrollbar-width: thin;
+        }
+
+        .accounting-nav-link {
+            flex: 0 0 auto;
+            min-width: 135px;
+        }
     }
 </style>
 
-<div class="card wmc-accounting-nav-card mb-4">
-    <div class="card-body py-2 px-2">
-        <div class="wmc-accounting-nav">
+<div class="accounting-nav-shell">
+    <div class="accounting-nav-card">
+        <nav class="accounting-nav-scroll" aria-label="Accounting navigation">
             @foreach($accountingTabs as $tab)
                 <a href="{{ route($tab['route']) }}"
-                   class="wmc-accounting-tab {{ $tab['active'] ? 'active' : '' }}">
+                   class="accounting-nav-link {{ $tab['active'] ? 'active' : '' }}">
                     {{ $tab['label'] }}
                 </a>
             @endforeach
-        </div>
+        </nav>
     </div>
 </div>

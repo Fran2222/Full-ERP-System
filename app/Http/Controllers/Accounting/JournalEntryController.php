@@ -187,6 +187,10 @@ class JournalEntryController extends Controller
             'posted_by' => auth()->id(),
         ]);
 
+        if (class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingJournalEntryActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingJournalEntryActivity($journalEntry->fresh(), 'posted', auth()->id());
+        }
         return redirect()
             ->route('accounting.journal-entries.show', $journalEntry)
             ->with('success', 'Journal entry posted successfully.');
@@ -203,6 +207,10 @@ class JournalEntryController extends Controller
             'voided_by' => auth()->id(),
         ]);
 
+        if (class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingJournalEntryActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingJournalEntryActivity($journalEntry->fresh(), 'voided', auth()->id());
+        }
         return redirect()
             ->route('accounting.journal-entries.show', $journalEntry)
             ->with('success', 'Journal entry voided successfully.');

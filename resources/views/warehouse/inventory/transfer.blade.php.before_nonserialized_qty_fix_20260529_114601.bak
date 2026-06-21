@@ -1,0 +1,1108 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0">
+
+        @include('warehouse.partials.nav')
+        @include('warehouse.inventory._alerts')
+
+        @php
+            $user = auth()->user();
+
+            $canAccess = function ($permission) use ($user) {
+                return $user && (
+                    $user->can($permission)
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                );
+            };
+
+            abort_unless($canAccess('warehouse.transfer.create'), 403);
+        @endphp
+
+        <div class="card rounded-4 border-0 shadow-sm warehouse-transfer-card">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h4 class="card-title mb-1 fw-bold">Stock Transfer</h4>
+                        <p class="text-secondary mb-0">
+                            Transfer item quantity from central warehouse or any branch/location to another warehouse location.
+                        </p>
+                    </div>
+
+                    @can('warehouse.inventory.view')
+                        <a href="{{ route('warehouse.inventory') }}" class="btn btn-outline-secondary warehouse-soft-btn">
+                            Back To Inventory
+                        </a>
+                    @endcan
+                </div>
+            </div>
+
+            <div class="card-body px-4 pb-4">
+                @if($errors->any())
+                    <div class="alert alert-danger rounded-3 mb-4">
+                        <div class="fw-semibold mb-2">Please fix the following errors:</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <form method="POST" action="{{ route('warehouse.transfer.store') }}" id="warehouseTransferForm">
+                    @csrf
+
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <div class="warehouse-section-card h-100">
+                                <h5 class="fw-bold mb-1">From Location</h5>
+                                <p class="text-secondary mb-4">
+                                    Select the source warehouse location where stock will be deducted. Branch is optional for central stock.
+                                </p>
+
+                                <div class="mb-3 warehouse-select2-wrap">
+                                    <label class="form-label">Item <span class="text-danger">*</span></label>
+                                    <select name="item_id"
+                                            class="form-select warehouse-input warehouse-item-select"
+                                            data-placeholder="Search item code or name..."
+                                            required>
+                                        <option value="">Select Item</option>
+                                        @foreach($items as $item)
+                                            @php
+                                                $itemCode = $item->item_code ?? $item->code;
+                                                $itemName = $item->item_name ?? $item->name;
+                                            @endphp
+
+                                            <option value="{{ $item->id }}"
+                                                    data-code="{{ $itemCode }}"
+                                                    data-name="{{ $itemName }}"
+                                                    {{ old('item_id') == $item->id ? 'selected' : '' }}>
+                                                {{ $itemCode }} - {{ $itemName }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">From Branch <span class="text-secondary small">(optional)</span></label>
+                                    <select name="from_branch_id" class="form-select warehouse-input">
+                                        <option value="">Central / Unassigned Warehouse</option>
+                                        @foreach($branches as $branch)
+                                            <option value="{{ $branch->id }}" {{ old('from_branch_id') == $branch->id ? 'selected' : '' }}>
+                                                {{ $branch->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">From Location <span class="text-danger">*</span></label>
+                                    <select name="from_location_id" class="form-select warehouse-input" required>
+                                        <option value="">Select Location</option>
+                                        @foreach($locations as $location)
+                                            <option value="{{ $location->id }}" {{ old('from_location_id') == $location->id ? 'selected' : '' }}>
+                                                {{ $location->location_name ?? $location->name }}
+                                                {{ $location->branch ? ' - ' . $location->branch->name : ' - Central / Unassigned' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="warehouse-section-card h-100">
+                                <h5 class="fw-bold mb-1">To Location</h5>
+                                <p class="text-secondary mb-4">
+                                    Select the receiving warehouse location where stock will be added. Branch is optional for central stock.
+                                </p>
+
+                                <div class="mb-3">
+                                    <label class="form-label">To Branch <span class="text-secondary small">(optional)</span></label>
+                                    <select name="to_branch_id" class="form-select warehouse-input">
+                                        <option value="">Central / Unassigned Warehouse</option>
+                                        @foreach($branches as $branch)
+                                            <option value="{{ $branch->id }}" {{ old('to_branch_id') == $branch->id ? 'selected' : '' }}>
+                                                {{ $branch->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">To Location <span class="text-danger">*</span></label>
+                                    <select name="to_location_id" class="form-select warehouse-input" required>
+                                        <option value="">Select Location</option>
+                                        @foreach($locations as $location)
+                                            <option value="{{ $location->id }}" {{ old('to_location_id') == $location->id ? 'selected' : '' }}>
+                                                {{ $location->location_name ?? $location->name }}
+                                                {{ $location->branch ? ' - ' . $location->branch->name : ' - Central / Unassigned' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Quantity <span class="text-danger">*</span></label>
+                                    <input type="number"
+                                           name="quantity"
+                                           value="{{ old('quantity') }}"
+                                           min="0.01"
+                                           step="0.01"
+                                           class="form-control warehouse-input"
+                                           placeholder="0.00"
+                                           required>
+                                </div>
+
+                                <div class="mb-0">
+                                    <label class="form-label">Remarks</label>
+                                    <textarea name="remarks"
+                                              rows="3"
+                                              class="form-control warehouse-input"
+                                              placeholder="Optional transfer remarks">{{ old('remarks') }}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        @can('warehouse.inventory.view')
+                            <a href="{{ route('warehouse.inventory') }}" class="btn btn-outline-secondary px-4 warehouse-soft-btn">
+                                Cancel
+                            </a>
+                        @endcan
+
+                        @can('warehouse.transfer.create')
+                            <button type="submit" class="btn btn-primary px-4 warehouse-soft-btn">
+                                Save Transfer
+                            </button>
+                        @endcan
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .warehouse-transfer-card,
+        .warehouse-section-card {
+            border-radius: 18px !important;
+            border: 1px solid #edf0f5 !important;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045) !important;
+        }
+
+        .warehouse-section-card {
+            padding: 22px;
+            background: #ffffff;
+        }
+
+        .warehouse-soft-btn {
+            border-radius: 10px;
+            padding: 10px 18px;
+            font-weight: 700;
+        }
+
+        .warehouse-input {
+            min-height: 44px;
+            border-radius: 12px;
+            border-color: #d9dee8;
+        }
+
+        .warehouse-input:focus {
+            border-color: #3f5cff;
+            box-shadow: 0 0 0 .18rem rgba(63, 92, 255, .12);
+        }
+
+        .warehouse-select2-wrap .select2-container {
+            width: 100% !important;
+        }
+
+        .warehouse-select2-wrap .select2-container--default .select2-selection--single {
+            min-height: 44px;
+            border-radius: 12px;
+            border-color: #d9dee8;
+            display: flex;
+            align-items: center;
+        }
+
+        .warehouse-select2-wrap .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #111827;
+            line-height: 44px;
+            padding-left: 14px;
+            padding-right: 36px;
+            font-weight: 600;
+        }
+
+        .warehouse-select2-wrap .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #8a94a6;
+            font-weight: 500;
+        }
+
+        .warehouse-select2-wrap .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 44px;
+            right: 8px;
+        }
+
+        .warehouse-select2-dropdown {
+            border-color: #d9dee8 !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+        }
+
+        .warehouse-select2-dropdown .select2-search__field {
+            border-radius: 10px;
+            border-color: #d9dee8 !important;
+            min-height: 38px;
+            padding: 8px 10px;
+            outline: none;
+        }
+
+        .warehouse-select2-dropdown .select2-results__option {
+            padding: 10px 12px;
+            font-weight: 600;
+        }
+
+        .warehouse-select2-dropdown .select2-results__option--highlighted {
+            background: #315cf6 !important;
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('warehouseTransferForm');
+
+            function hasWarehouseSelect2() {
+                return window.jQuery && typeof jQuery.fn.select2 === 'function';
+            }
+
+            function loadWarehouseSelect2Assets(callback) {
+                if (!window.jQuery) {
+                    return;
+                }
+
+                if (hasWarehouseSelect2()) {
+                    callback();
+                    return;
+                }
+
+                if (!document.getElementById('warehouse-select2-css')) {
+                    const css = document.createElement('link');
+                    css.id = 'warehouse-select2-css';
+                    css.rel = 'stylesheet';
+                    css.href = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+                    document.head.appendChild(css);
+                }
+
+                if (!document.getElementById('warehouse-select2-js')) {
+                    const script = document.createElement('script');
+                    script.id = 'warehouse-select2-js';
+                    script.src = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js';
+                    script.onload = callback;
+                    document.body.appendChild(script);
+                } else {
+                    const waitForSelect2 = setInterval(function () {
+                        if (hasWarehouseSelect2()) {
+                            clearInterval(waitForSelect2);
+                            callback();
+                        }
+                    }, 100);
+                }
+            }
+
+            function initWarehouseItemSelect2() {
+                if (!hasWarehouseSelect2()) {
+                    return;
+                }
+
+                $('.warehouse-item-select').each(function () {
+                    const $select = $(this);
+
+                    if ($select.hasClass('select2-hidden-accessible')) {
+                        return;
+                    }
+
+                    $select.select2({
+                        width: '100%',
+                        placeholder: $select.data('placeholder') || 'Search item code or name...',
+                        allowClear: true,
+                        dropdownCssClass: 'warehouse-select2-dropdown',
+                        matcher: function (params, data) {
+                            if ($.trim(params.term) === '') {
+                                return data;
+                            }
+
+                            if (typeof data.text === 'undefined') {
+                                return null;
+                            }
+
+                            const term = params.term.toLowerCase();
+                            const text = data.text.toLowerCase();
+                            const element = data.element;
+                            const code = element ? String($(element).data('code') || '').toLowerCase() : '';
+                            const name = element ? String($(element).data('name') || '').toLowerCase() : '';
+
+                            if (text.indexOf(term) > -1 || code.indexOf(term) > -1 || name.indexOf(term) > -1) {
+                                return data;
+                            }
+
+                            return null;
+                        }
+                    });
+                });
+            }
+
+            function confirmTransfer() {
+                if (window.Swal) {
+                    return Swal.fire({
+                        icon: 'question',
+                        title: 'Post stock transfer?',
+                        text: 'This will deduct stock from the source location and add it to the destination location.',
+                        showCancelButton: true,
+                        confirmButtonText: 'Yes, save transfer',
+                        cancelButtonText: 'Cancel',
+                        confirmButtonColor: '#315cf6',
+                        reverseButtons: true
+                    }).then(result => result.isConfirmed);
+                }
+
+                return Promise.resolve(confirm('Post this stock transfer?'));
+            }
+
+            if (form) {
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+
+                    confirmTransfer().then(function (confirmed) {
+                        if (confirmed) {
+                            form.submit();
+                        }
+                    });
+                });
+            }
+
+            loadWarehouseSelect2Assets(function () {
+                initWarehouseItemSelect2();
+            });
+        });
+    </script>
+</x-app-layout>
+
+{{-- force-transfer-global-item-picker-phase6-start --}}
+<x-warehouse.item-picker-modal />
+
+<script>
+    window.WMC_ITEM_PICKER_BASE = "{{ url('') }}";
+</script>
+<script src="{{ asset('assets/js/wmc-item-picker.js') }}"></script>
+
+<script>
+(function () {
+    function qs(selector, root) {
+        return (root || document).querySelector(selector);
+    }
+
+    function qsa(selector, root) {
+        return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+    }
+
+    function onTransferPage() {
+        return window.location.pathname.indexOf('/warehouse/transfer') !== -1;
+    }
+
+    function lowerText(el) {
+        return el ? (el.textContent || '').trim().toLowerCase() : '';
+    }
+
+    function fieldWrap(el) {
+        return el ? (el.closest('.form-group, .mb-3, .col-md-6, .col-md-4, .col, .row, div') || el.parentElement) : null;
+    }
+
+    function labelNear(el) {
+        var wrap = fieldWrap(el);
+        var label = wrap ? qs('label', wrap) : null;
+        return lowerText(label);
+    }
+
+    function findItemLabel() {
+        return qsa('label').find(function (label) {
+            var t = lowerText(label);
+            return t === 'item' || t.indexOf('item') !== -1 || t.indexOf('product') !== -1;
+        });
+    }
+
+    function findItemSelect() {
+        var label = findItemLabel();
+
+        if (label) {
+            var forId = label.getAttribute('for');
+            if (forId) {
+                var byFor = qs('#' + CSS.escape(forId));
+                if (byFor && byFor.tagName && byFor.tagName.toLowerCase() === 'select') {
+                    return byFor;
+                }
+            }
+
+            var wrap = fieldWrap(label);
+            if (wrap) {
+                var selectInWrap = qs('select', wrap);
+                if (selectInWrap) {
+                    return selectInWrap;
+                }
+            }
+        }
+
+        return qsa('select').find(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+            var txt = lowerText(select);
+
+            if (name.indexOf('location') !== -1 || id.indexOf('location') !== -1 || label.indexOf('location') !== -1) return false;
+            if (name.indexOf('branch') !== -1 || id.indexOf('branch') !== -1 || label.indexOf('branch') !== -1) return false;
+            if (name.indexOf('status') !== -1 || id.indexOf('status') !== -1) return false;
+
+            return (
+                name.indexOf('item') !== -1 ||
+                id.indexOf('item') !== -1 ||
+                label.indexOf('item') !== -1 ||
+                txt.indexOf('item-') !== -1 ||
+                txt.indexOf('serialized') !== -1 ||
+                txt.indexOf('pcs') !== -1
+            );
+        });
+    }
+
+    function findSourceLocationSelect() {
+        var candidates = qsa('select').filter(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+
+            return (
+                name.indexOf('from') !== -1 ||
+                name.indexOf('source') !== -1 ||
+                name.indexOf('origin') !== -1 ||
+                id.indexOf('from') !== -1 ||
+                id.indexOf('source') !== -1 ||
+                id.indexOf('origin') !== -1 ||
+                label.indexOf('from') !== -1 ||
+                label.indexOf('source') !== -1 ||
+                label.indexOf('origin') !== -1 ||
+                label.indexOf('current location') !== -1
+            ) && (
+                name.indexOf('location') !== -1 ||
+                id.indexOf('location') !== -1 ||
+                label.indexOf('location') !== -1 ||
+                label.indexOf('warehouse') !== -1
+            );
+        });
+
+        if (candidates.length) {
+            return candidates[0];
+        }
+
+        // Fallback: first location select, but avoid "to/destination" labels.
+        return qsa('select').find(function (select) {
+            var name = (select.getAttribute('name') || '').toLowerCase();
+            var id = (select.getAttribute('id') || '').toLowerCase();
+            var label = labelNear(select);
+
+            var isLocation = name.indexOf('location') !== -1 || id.indexOf('location') !== -1 || label.indexOf('location') !== -1 || label.indexOf('warehouse') !== -1;
+            var isDestination = name.indexOf('to') !== -1 || name.indexOf('destination') !== -1 || id.indexOf('to') !== -1 || id.indexOf('destination') !== -1 || label.indexOf('to') !== -1 || label.indexOf('destination') !== -1;
+
+            return isLocation && !isDestination;
+        });
+    }
+
+    function findQtyInput() {
+        return qsa('input').find(function (input) {
+            var name = (input.getAttribute('name') || '').toLowerCase();
+            var id = (input.getAttribute('id') || '').toLowerCase();
+            return name === 'quantity' || name.indexOf('quantity') !== -1 || name.indexOf('qty') !== -1 || id.indexOf('quantity') !== -1 || id.indexOf('qty') !== -1;
+        });
+    }
+
+    function setSelectValue(select, value, label) {
+        if (!select || value === null || value === undefined || value === '') return;
+
+        var has = false;
+        qsa('option', select).forEach(function (opt) {
+            if (String(opt.value) === String(value)) has = true;
+        });
+
+        if (!has) {
+            var opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label || String(value);
+            select.appendChild(opt);
+        }
+
+        select.value = String(value);
+
+        if (window.jQuery) {
+            window.jQuery(select).val(String(value)).trigger('change');
+        }
+
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function hideSelectAndSelect2(select) {
+        if (!select) return;
+
+        select.style.display = 'none';
+        select.classList.add('d-none');
+
+        if (select.id) {
+            var container = qs('#select2-' + select.id + '-container');
+            if (container) {
+                var s2wrap = container.closest('.select2, .select2-container');
+                if (s2wrap) {
+                    s2wrap.style.display = 'none';
+                    s2wrap.classList.add('d-none');
+                }
+            }
+
+            qsa('.select2, .select2-container').forEach(function (s2) {
+                if (qs('#select2-' + select.id + '-container', s2)) {
+                    s2.style.display = 'none';
+                    s2.classList.add('d-none');
+                }
+            });
+        }
+
+        var parent = select.parentElement;
+        if (parent) {
+            qsa('.select2, .select2-container', parent).forEach(function (s2) {
+                s2.style.display = 'none';
+                s2.classList.add('d-none');
+            });
+        }
+    }
+
+    function ensureSerialField(form) {
+        var serial =
+            qs('input[name="warehouse_item_serial_id"]', form) ||
+            qs('select[name="warehouse_item_serial_id"]', form) ||
+            qs('input[name="serial_id"]', form) ||
+            qs('select[name="serial_id"]', form);
+
+        if (serial) return serial;
+
+        serial = document.createElement('input');
+        serial.type = 'hidden';
+        serial.name = 'warehouse_item_serial_id';
+        serial.id = 'transfer_picker_serial_id';
+        form.appendChild(serial);
+
+        return serial;
+    }
+
+    function ensurePickerTargetRow(form) {
+        var row = qs('#transferGlobalPickerTargetRow', form);
+        if (row) return row;
+
+        row = document.createElement('div');
+        row.id = 'transferGlobalPickerTargetRow';
+        row.className = 'd-none';
+        row.setAttribute('data-material-row', '1');
+
+        var inv = document.createElement('select');
+        inv.name = '_transfer_picker[warehouse_inventory_id]';
+        inv.className = 'd-none';
+
+        var serial = document.createElement('select');
+        serial.name = '_transfer_picker[warehouse_item_serial_id]';
+        serial.className = 'd-none';
+
+        row.appendChild(inv);
+        row.appendChild(serial);
+        form.appendChild(row);
+
+        return row;
+    }
+
+    function createPickerUI(itemSelect) {
+        if (!itemSelect || itemSelect.dataset.transferPickerReady === '1') return;
+
+        var form = itemSelect.closest('form');
+        if (!form) return;
+
+        itemSelect.dataset.transferPickerReady = '1';
+
+        hideSelectAndSelect2(itemSelect);
+        ensurePickerTargetRow(form);
+        ensureSerialField(form);
+
+        var holder = document.createElement('div');
+        holder.id = 'transferPickerVisibleBox';
+        holder.className = 'transfer-picker-visible-box';
+
+        holder.innerHTML =
+            '<div class="transfer-picker-summary" id="transferPickerSummary">' +
+                '<div class="text-muted">No item selected.</div>' +
+            '</div>' +
+            '<button type="button" class="btn btn-outline-primary btn-sm mt-2 transfer-open-picker-btn" id="transferOpenPickerBtn">' +
+                'Search / Select Item' +
+            '</button>' +
+            '<div class="small text-muted mt-1">Search item, view details, select serial if required.</div>';
+
+        var label = findItemLabel();
+
+        if (label && label.parentElement) {
+            label.parentElement.insertBefore(holder, itemSelect);
+        } else if (itemSelect.parentElement) {
+            itemSelect.parentElement.insertBefore(holder, itemSelect);
+        }
+
+        var btn = qs('#transferOpenPickerBtn', holder);
+        if (btn) {
+            btn.addEventListener('click', function () {
+                var targetRow = qs('#transferGlobalPickerTargetRow', form);
+
+                if (window.WMCItemPicker && typeof window.WMCItemPicker.open === 'function') {
+                    window.WMCItemPicker.open(targetRow);
+                    return;
+                }
+
+                if (window.WMCItemPicker && typeof window.WMCItemPicker.initRows === 'function') {
+                    window.WMCItemPicker.initRows();
+                    setTimeout(function () {
+                        var generatedBtn = qs('.wmc-open-item-picker', targetRow);
+                        if (generatedBtn) {
+                            generatedBtn.click();
+                        } else {
+                            alert('Item picker loaded but cannot open. Send wmc-item-picker.js if this appears.');
+                        }
+                    }, 100);
+                    return;
+                }
+
+                alert('Global item picker script not loaded. Please refresh with CTRL + F5.');
+            });
+        }
+
+        if (window.WMCItemPicker && typeof window.WMCItemPicker.initRows === 'function') {
+            window.WMCItemPicker.initRows();
+        }
+    }
+
+    function updateSummary(item, serialLabel, qty) {
+        var box = qs('#transferPickerSummary');
+        if (!box || !item) return;
+
+        var photo = item.photo_url || item.image_url || '';
+        var photoHtml = photo
+            ? '<img src="' + photo + '" alt="" style="width:46px;height:46px;object-fit:contain;border:1px solid rgba(58,87,232,.25);border-radius:8px;background:#fff;">'
+            : '<div style="width:46px;height:46px;border:1px solid rgba(58,87,232,.18);border-radius:8px;background:#f7f8fb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a92a6;">No Photo</div>';
+
+        box.innerHTML =
+            '<div class="d-flex align-items-center gap-2">' +
+                photoHtml +
+                '<div class="flex-grow-1">' +
+                    '<div class="fw-semibold text-dark">' + (item.item_code || 'ITEM') + ' - ' + (item.item_name || '') + '</div>' +
+                    '<div class="small text-muted">' + (item.category_name || '-') + ' | Source: ' + (item.location_name || '-') + '</div>' +
+                    '<div class="small text-muted">Available: ' + (item.available_qty ?? '-') + ' | Serial: ' + (serialLabel || '-') + ' | Qty: ' + (qty || 1) + '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function applyPickedItem(detail) {
+        if (!onTransferPage() || !detail || !detail.item) return;
+
+        var item = detail.item;
+        var form = qs('form');
+        if (!form) return;
+
+        var itemSelect = findItemSelect();
+        var sourceLocation = findSourceLocationSelect();
+        var qtyInput = findQtyInput();
+        var serialField = ensureSerialField(form);
+
+        var itemLabel = (item.item_code || 'ITEM') + ' - ' + (item.item_name || '');
+        var sourceLabel = item.location_name || 'Selected Source Location';
+
+        if (itemSelect) {
+            setSelectValue(itemSelect, item.item_id, itemLabel);
+            hideSelectAndSelect2(itemSelect);
+        }
+
+        if (sourceLocation && item.location_id) {
+            setSelectValue(sourceLocation, item.location_id, sourceLabel);
+        }
+
+        if (qtyInput) {
+            qtyInput.value = detail.quantity || 1;
+            qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+            qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (serialField) {
+            serialField.value = detail.serial_id || '';
+            serialField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        updateSummary(item, detail.serial_label || detail.serial_id || '', detail.quantity || 1);
+    }
+
+    function bootTransferPicker() {
+        if (!onTransferPage()) return;
+
+        var itemSelect = findItemSelect();
+        if (!itemSelect) return;
+
+        createPickerUI(itemSelect);
+        hideSelectAndSelect2(itemSelect);
+    }
+
+    document.addEventListener('wmc:item-picker:selected', function (event) {
+        applyPickedItem(event.detail || {});
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootTransferPicker);
+    } else {
+        bootTransferPicker();
+    }
+
+    setTimeout(bootTransferPicker, 300);
+    setTimeout(bootTransferPicker, 1000);
+
+    setInterval(function () {
+        if (onTransferPage()) {
+            var itemSelect = findItemSelect();
+            if (itemSelect) hideSelectAndSelect2(itemSelect);
+        }
+    }, 1000);
+})();
+</script>
+
+<style>
+    .transfer-picker-visible-box {
+        border: 1px solid rgba(58, 87, 232, .18);
+        border-radius: 10px;
+        padding: 10px;
+        background: linear-gradient(145deg, #fbfcff, #ffffff);
+        box-shadow: 0 8px 18px rgba(35, 45, 66, .045);
+    }
+
+    .transfer-picker-summary {
+        min-height: 44px;
+    }
+
+    .transfer-open-picker-btn {
+        width: 100%;
+        border-color: #3a57e8 !important;
+        color: #3a57e8 !important;
+        font-weight: 600;
+        border-radius: 8px;
+    }
+
+    .transfer-open-picker-btn:hover {
+        background: #3a57e8 !important;
+        color: #fff !important;
+        box-shadow: 0 8px 18px rgba(58, 87, 232, .22);
+    }
+
+    /* Same picker modal UI/photo zoom consistency */
+    #wmcItemPickerModal .modal-content {
+        border: 1px solid rgba(58, 87, 232, 0.24) !important;
+        border-top: 5px solid #3a57e8 !important;
+        border-radius: 18px !important;
+        box-shadow: 0 25px 70px rgba(35, 45, 66, 0.28) !important;
+        overflow: hidden !important;
+    }
+
+    #wmcItemPickerModal .modal-header {
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1)) !important;
+        border-bottom: 1px solid rgba(58, 87, 232, 0.14) !important;
+        padding-bottom: 14px !important;
+    }
+
+    #wmcItemPickerModal .card,
+    #wmcItemPickerModal .wmc-picker-info-box {
+        border: 1px solid rgba(58, 87, 232, 0.13) !important;
+        box-shadow: 0 10px 24px rgba(35, 45, 66, 0.06) !important;
+    }
+
+    #wmcItemPickerResults tr:hover {
+        background: rgba(58, 87, 232, 0.06) !important;
+    }
+
+    #wmcItemPickerResults tr.wmc-picker-active,
+    #wmcItemPickerResults tr.table-active,
+    #wmcItemPickerResults tr.active {
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.14), rgba(58, 87, 232, 0.04)) !important;
+        box-shadow: inset 4px 0 0 #3a57e8 !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo {
+        border: 2px solid rgba(58, 87, 232, 0.35) !important;
+        background: linear-gradient(145deg, #f7f9ff, #ffffff) !important;
+        box-shadow: 0 10px 22px rgba(58, 87, 232, 0.16) !important;
+        cursor: pointer !important;
+        position: relative !important;
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo:hover {
+        transform: translateY(-1px) !important;
+        border-color: rgba(58, 87, 232, 0.95) !important;
+        box-shadow: 0 16px 32px rgba(58, 87, 232, 0.25) !important;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo::after {
+        content: "Zoom";
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        background: #3a57e8;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 5px 7px;
+        border-radius: 999px;
+        opacity: 0;
+        transform: translateY(3px);
+        transition: opacity .16s ease, transform .16s ease;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    #wmcItemPickerModal .wmc-item-picker-photo.wmc-force-has-photo::after {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    #wmcItemPickerUseBtn {
+        border-radius: 10px !important;
+        box-shadow: 0 10px 22px rgba(58, 87, 232, 0.26) !important;
+    }
+
+    .wmc-force-photo-zoom-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 24, 38, 0.76);
+        backdrop-filter: blur(3px);
+        z-index: 99999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .wmc-force-photo-zoom-overlay.show {
+        display: flex;
+    }
+
+    .wmc-force-photo-zoom-panel {
+        width: min(900px, 96vw);
+        max-height: 90vh;
+        background: #fff;
+        border-radius: 18px;
+        border: 1px solid rgba(58, 87, 232, 0.25);
+        border-top: 5px solid #3a57e8;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+        overflow: hidden;
+        position: relative;
+    }
+
+    .wmc-force-photo-zoom-close {
+        position: absolute;
+        top: 13px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        border: 0;
+        background: rgba(58, 87, 232, 0.10);
+        color: #232d42;
+        border-radius: 999px;
+        font-size: 26px;
+        line-height: 30px;
+        cursor: pointer;
+        z-index: 2;
+    }
+
+    .wmc-force-photo-zoom-close:hover {
+        background: rgba(58, 87, 232, 0.18);
+    }
+
+    .wmc-force-photo-zoom-header {
+        padding: 18px 62px 14px 22px;
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1));
+        border-bottom: 1px solid rgba(58, 87, 232, 0.14);
+    }
+
+    .wmc-force-photo-zoom-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #232d42;
+    }
+
+    .wmc-force-photo-zoom-subtitle {
+        font-size: 13px;
+        color: #6c757d;
+        margin-top: 2px;
+    }
+
+    .wmc-force-photo-zoom-body {
+        min-height: 420px;
+        max-height: calc(90vh - 90px);
+        overflow: auto;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+            linear-gradient(45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+            linear-gradient(-45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%),
+            linear-gradient(-45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    }
+
+    .wmc-force-photo-zoom-body img {
+        max-width: 100%;
+        max-height: calc(90vh - 150px);
+        object-fit: contain;
+        border-radius: 12px;
+        background: #fff;
+    }
+</style>
+
+<div id="wmcTransferPhotoZoomOverlay" class="wmc-force-photo-zoom-overlay" aria-hidden="true">
+    <div class="wmc-force-photo-zoom-panel">
+        <button type="button" class="wmc-force-photo-zoom-close" aria-label="Close preview">&times;</button>
+        <div class="wmc-force-photo-zoom-header">
+            <div class="wmc-force-photo-zoom-title">Item Photo Preview</div>
+            <div class="wmc-force-photo-zoom-subtitle" id="wmcTransferPhotoZoomSubtitle">Warehouse item image</div>
+        </div>
+        <div class="wmc-force-photo-zoom-body">
+            <img id="wmcTransferPhotoZoomImg" src="" alt="Item Photo Preview">
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    function qs(selector, root) {
+        return (root || document).querySelector(selector);
+    }
+
+    function getVisiblePhoto() {
+        var img = qs('#wmcItemPickerPhoto');
+        if (!img) return null;
+        if (img.classList.contains('d-none')) return null;
+        if (!img.getAttribute('src')) return null;
+        return img;
+    }
+
+    function refreshPhotoBox() {
+        var box = qs('#wmcItemPickerModal .wmc-item-picker-photo');
+        var img = getVisiblePhoto();
+
+        if (!box) return;
+
+        if (img) {
+            box.classList.add('wmc-force-has-photo');
+            box.setAttribute('title', 'Click to zoom item photo');
+            box.setAttribute('role', 'button');
+            box.setAttribute('tabindex', '0');
+        } else {
+            box.classList.remove('wmc-force-has-photo');
+            box.removeAttribute('title');
+            box.removeAttribute('role');
+            box.removeAttribute('tabindex');
+        }
+    }
+
+    function openZoom() {
+        var img = getVisiblePhoto();
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        var zoomImg = qs('#wmcTransferPhotoZoomImg');
+        var subtitle = qs('#wmcTransferPhotoZoomSubtitle');
+        var code = qs('#wmcItemPickerCode');
+        var name = qs('#wmcItemPickerName');
+
+        if (!img || !overlay || !zoomImg) return;
+
+        zoomImg.src = img.src;
+
+        var label = '';
+        if (code && code.textContent.trim()) label += code.textContent.trim();
+        if (name && name.textContent.trim()) label += (label ? ' - ' : '') + name.textContent.trim();
+
+        if (subtitle) subtitle.textContent = label || 'Warehouse item image';
+
+        overlay.classList.add('show');
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeZoom() {
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        if (!overlay) return;
+
+        overlay.classList.remove('show');
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function bindEvents() {
+        var box = qs('#wmcItemPickerModal .wmc-item-picker-photo');
+        var overlay = qs('#wmcTransferPhotoZoomOverlay');
+        var closeBtn = qs('#wmcTransferPhotoZoomOverlay .wmc-force-photo-zoom-close');
+
+        if (box && box.dataset.transferZoomBound !== '1') {
+            box.dataset.transferZoomBound = '1';
+
+            box.addEventListener('click', openZoom);
+
+            box.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openZoom();
+                }
+            });
+        }
+
+        if (overlay && overlay.dataset.transferZoomBound !== '1') {
+            overlay.dataset.transferZoomBound = '1';
+
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) closeZoom();
+            });
+        }
+
+        if (closeBtn && closeBtn.dataset.transferZoomBound !== '1') {
+            closeBtn.dataset.transferZoomBound = '1';
+            closeBtn.addEventListener('click', closeZoom);
+        }
+
+        if (document.body.dataset.transferZoomEscBound !== '1') {
+            document.body.dataset.transferZoomEscBound = '1';
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') closeZoom();
+            });
+        }
+    }
+
+    function bootZoom() {
+        bindEvents();
+        refreshPhotoBox();
+        setInterval(refreshPhotoBox, 700);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootZoom);
+    } else {
+        bootZoom();
+    }
+
+    document.addEventListener('click', function () {
+        setTimeout(function () {
+            bindEvents();
+            refreshPhotoBox();
+        }, 80);
+    });
+})();
+</script>
+{{-- force-transfer-global-item-picker-phase6-end --}}
+

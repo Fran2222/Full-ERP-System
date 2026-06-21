@@ -1,390 +1,677 @@
-<x-app-layout>
-    @include('warehouse.partials.styles')
-
+<x-app-layout :assets="['data-table']">
     <div class="container-fluid content-inner mt-n5 py-0">
-        @include('warehouse.partials.nav')
-        @include('warehouse.partials.alerts')
 
-        <div class="card wmc-card ledger-card">
-            <div class="card-header bg-white border-0 ledger-header">
+        @include('warehouse.partials.nav')
+        @include('warehouse.inventory._alerts')
+
+        @php
+            $user = auth()->user();
+
+            $canAccess = function ($permission) use ($user) {
+                return $user && (
+                    $user->can($permission)
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                );
+            };
+
+            abort_unless($canAccess('warehouse.ledger.view'), 403);
+        @endphp
+
+        <div class="card rounded-4 border-0 shadow-sm warehouse-card">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>
-                        <h4 class="mb-1 fw-bold">Stock Ledger</h4>
-                        <small class="text-muted">Complete stock card and warehouse movement history.</small>
+                        <h4 class="card-title mb-1 fw-bold">Stock Ledger</h4>
+                        <p class="text-secondary mb-0">
+                            Complete stock card and warehouse movement history.
+                        </p>
                     </div>
 
-                    <a href="{{ route('warehouse.inventory') }}" class="btn btn-outline-secondary ledger-back-btn">
-                        Back To Inventory
+                    <a href="{{ route('warehouse.inventory') }}" class="btn btn-outline-secondary warehouse-soft-btn">
+                        Back to Inventory
                     </a>
                 </div>
             </div>
 
-            <div class="card-body ledger-body">
-                <form method="GET" class="row g-3 align-items-center mb-3 ledger-filter-form">
+            <div class="card-body px-4 pb-4">
+                <div class="row g-3 align-items-center mb-3">
                     <div class="col-lg-4 col-md-6">
-                        <input type="text"
-                               name="search"
-                               value="{{ request('search') }}"
-                               class="form-control ledger-control"
-                               placeholder="Search ref, item, remarks">
-                    </div>
-
-                    <div class="col-lg-3 col-md-6">
-                        <select name="type" class="form-select ledger-control">
+                        <select id="ledger-type-filter" class="form-select warehouse-filter">
                             <option value="">All Types</option>
-                            @foreach(['IN','OUT','TRANSFER','ADJUSTMENT'] as $t)
-                                <option value="{{ $t }}" @selected(request('type') == $t)>
-                                    {{ $t }}
-                                </option>
-                            @endforeach
+                            <option value="stock_in">Stock In</option>
+                            <option value="stock_out">Stock Out</option>
+                            <option value="transfer_in">Transfer In</option>
+                            <option value="transfer_out">Transfer Out</option>
+                            <option value="adjustment_add">Adjustment Add</option>
+                            <option value="adjustment_deduct">Adjustment Deduct</option>
+                            <option value="purchase_order_receiving">Purchase Order Receiving</option>
+                            <option value="sales_receipt">Sales Receipt</option>
+                            <option value="sales_receipt_deleted">Sales Receipt Void</option>
+                            <option value="service_unit_borrow">Service Unit Borrow</option>
+                            <option value="service_unit_return">Service Unit Return</option>
+                            <option value="service_unit_return_unavailable">Service Unit Return - Unavailable</option>
                         </select>
                     </div>
 
-                    <div class="col-lg-5 col-md-12">
-                        <div class="d-flex flex-wrap justify-content-lg-end gap-2">
-                            <button type="submit" class="btn btn-primary ledger-action-btn">
-                                Filter
-                            </button>
-
-                            <a href="{{ route('warehouse.ledger') }}" class="btn btn-outline-secondary ledger-action-btn">
+                    <div class="col-lg-8 col-md-6">
+                        <div class="d-flex justify-content-lg-end">
+                            <button type="button" id="ledger-reset-filter" class="btn btn-outline-secondary px-4 warehouse-reset-btn">
                                 Reset
-                            </a>
+                            </button>
                         </div>
-                    </div>
-                </form>
-
-                <div class="ledger-table-shell">
-                    <div class="ledger-table-scroll" id="ledgerTableScroll">
-                        <table class="table wmc-table align-middle ledger-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th style="width: 170px;">Date</th>
-                                    <th style="width: 210px;">Reference</th>
-                                    <th style="width: 150px;">Type</th>
-                                    <th style="width: 220px;">Item</th>
-                                    <th class="text-end" style="width: 110px;">Qty</th>
-                                    <th style="width: 240px;">From</th>
-                                    <th style="width: 240px;">To</th>
-                                    <th style="width: 380px;">Remarks</th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                @forelse($movements as $m)
-                                    @php
-                                        $remarks = $m->remarks ?? '-';
-                                    @endphp
-
-                                    <tr>
-                                        <td class="text-nowrap">
-                                            {{ $m->created_at?->format('M d, Y h:i A') }}
-                                        </td>
-
-                                        <td class="ledger-reference-cell">
-                                            <span title="{{ $m->reference_no ?? '-' }}">
-                                                {{ $m->reference_no ?? '-' }}
-                                            </span>
-                                        </td>
-
-                                        <td class="text-nowrap">
-                                            <span class="wmc-badge wmc-badge-{{ strtolower($m->type) }}">
-                                                {{ $m->type }}
-                                            </span>
-                                        </td>
-
-                                        <td>
-                                            <strong class="d-block ledger-main-text" title="{{ $m->item?->name ?? '-' }}">
-                                                {{ $m->item?->name ?? '-' }}
-                                            </strong>
-                                            <small class="text-muted">
-                                                {{ $m->item?->code ?? '-' }}
-                                            </small>
-                                        </td>
-
-                                        <td class="text-end text-nowrap fw-semibold">
-                                            {{ number_format($m->quantity, 2) }}
-                                        </td>
-
-                                        <td>
-                                            <span class="d-block ledger-main-text" title="{{ $m->fromBranch?->name ?? '-' }}">
-                                                {{ $m->fromBranch?->name ?? '-' }}
-                                            </span>
-                                            <small class="text-muted" title="{{ $m->fromLocation?->name ?? '-' }}">
-                                                {{ $m->fromLocation?->name ?? '-' }}
-                                            </small>
-                                        </td>
-
-                                        <td>
-                                            <span class="d-block ledger-main-text" title="{{ $m->toBranch?->name ?? '-' }}">
-                                                {{ $m->toBranch?->name ?? '-' }}
-                                            </span>
-                                            <small class="text-muted" title="{{ $m->toLocation?->name ?? '-' }}">
-                                                {{ $m->toLocation?->name ?? '-' }}
-                                            </small>
-                                        </td>
-
-                                        <td>
-                                            <div class="ledger-remarks-cell" title="{{ $remarks }}">
-                                                {{ $remarks }}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted py-5">
-                                            No ledger records found.
-                                        </td>
-                                    </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
                     </div>
                 </div>
 
-                <div class="ledger-pagination-wrap">
-                    {{ $movements->links() }}
+                <div class="warehouse-ledger-shell">
+                    <table id="warehouse-ledger-table" class="table table-hover align-middle mb-0 warehouse-table ledger-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Date</th>
+                                <th>Reference</th>
+                                <th>Type</th>
+                                <th>Item</th>
+                                <th>Location</th>
+                                <th class="text-end ledger-number-head">Qty</th>
+                                <th class="text-end ledger-number-head">Balance</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <style>
-        .ledger-card {
-            border-radius: 18px !important;
-            overflow: hidden !important;
-            max-width: 100% !important;
-        }
+    @push('scripts')
+        <script>
+            $(document).ready(function () {
+                let table = $('#warehouse-ledger-table').DataTable({
+                    processing: false,
+                    serverSide: true,
+                    responsive: false,
+                    autoWidth: false,
+                    scrollX: false,
+                    pageLength: 10,
+                    lengthMenu: [10, 25, 50, 100],
+                    ajax: {
+                        url: "{{ route('warehouse.ledger') }}",
+                        data: function (d) {
+                            d.type = $('#ledger-type-filter').val();
+                        }
+                    },
+                    order: [[0, 'desc']],
+                    searchDelay: 250,
+                    columns: [
+                        {
+                            data: 'DT_RowIndex',
+                            name: 'DT_RowIndex',
+                            orderable: false,
+                            searchable: false
+                        },
+                        {
+                            data: 'date_display',
+                            name: 'transaction_date',
+                            orderable: false
+                        },
+                        {
+                            data: 'reference_display',
+                            name: 'reference_type',
+                            orderable: false
+                        },
+                        {
+                            data: 'type_display',
+                            name: 'movement_type',
+                            orderable: false
+                        },
+                        {
+                            data: 'item_display',
+                            name: 'item_display',
+                            orderable: false
+                        },
+                        {
+                            data: 'location_display',
+                            name: 'location_display',
+                            orderable: false
+                        },
+                        {
+                            data: 'qty_display',
+                            name: 'quantity'
+                        },
+                        {
+                            data: 'balance_display',
+                            name: 'balance_after'
+                        },
+                        {
+                            data: 'remarks_display',
+                            name: 'remarks',
+                            orderable: false
+                        }
+                    ],
+                    language: {
+                        search: '',
+                        searchPlaceholder: 'Search reference, item, location, or remarks...',
+                        lengthMenu: 'Show _MENU_ entries',
+                        emptyTable: 'No stock movements found.',
+                        zeroRecords: 'No matching stock movements found.'
+                    },
+                    dom:
+                        "<'row g-3 align-items-center mb-3 warehouse-table-top'<'col-lg-6 col-md-6'l><'col-lg-6 col-md-6'f>>" +
+                        "<'ledger-table-scroll't>" +
+                        "<'row g-3 align-items-center warehouse-table-footer'<'col-lg-6 col-md-6'i><'col-lg-6 col-md-6'p>>",
+                    columnDefs: [
+                        {
+                            targets: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+                            className: 'text-nowrap'
+                        },
+                        {
+                            targets: [6, 7],
+                            className: 'text-end text-nowrap ledger-number-col'
+                        },
+                        {
+                            targets: 8,
+                            className: 'ledger-remarks-col'
+                        }
+                    ],
+                    initComplete: function () {
+                        const api = this.api();
+                        const searchInput = $('#warehouse-ledger-table_filter input');
+                        const lengthSelect = $('#warehouse-ledger-table_length select');
 
-        .ledger-header {
-            padding: 24px 24px 12px !important;
-        }
+                        searchInput.off();
 
-        .ledger-body {
-            padding: 18px 24px 24px !important;
-            max-width: 100% !important;
-            overflow: hidden !important;
-        }
+                        let searchTimer = null;
 
-        .ledger-back-btn,
-        .ledger-action-btn {
-            border-radius: 10px;
-            padding: 10px 18px;
-            font-weight: 700;
-        }
+                        searchInput.on('input', function () {
+                            const value = this.value;
 
-        .ledger-control {
-            border-radius: 10px;
-            min-height: 42px;
-            border: 1px solid #e5e7eb;
-            box-shadow: none !important;
-        }
+                            clearTimeout(searchTimer);
 
-        .ledger-control:focus {
-            border-color: #3a57e8;
-            box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
-        }
+                            searchTimer = setTimeout(function () {
+                                api.search(value).draw();
+                            }, 250);
+                        });
 
-        .ledger-table-shell {
-            width: 100% !important;
-            max-width: 100% !important;
-            overflow: hidden !important;
-            background: #ffffff;
-            border-radius: 12px;
-        }
+                        lengthSelect.off('change').on('change', function () {
+                            api.page.len($(this).val()).draw();
+                        });
 
-        .ledger-table-scroll {
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            overflow-x: scroll !important;
-            overflow-y: hidden !important;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: auto;
-            padding-bottom: 8px;
-        }
+                        setTimeout(function () {
+                            api.columns.adjust();
+                        }, 150);
+                    },
+                    drawCallback: function () {
+                        const api = this.api();
 
-        .ledger-table-scroll::-webkit-scrollbar {
-            height: 12px;
-        }
+                        setTimeout(function () {
+                            api.columns.adjust();
+                        }, 50);
 
-        .ledger-table-scroll::-webkit-scrollbar-track {
-            background: #eef2f7;
-            border-radius: 999px;
-        }
+                        $('#warehouse-ledger-table tbody td:nth-child(9)').each(function () {
+                            const cell = $(this);
 
-        .ledger-table-scroll::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 999px;
-        }
+                            if (cell.hasClass('dataTables_empty')) {
+                                return;
+                            }
 
-        .ledger-table-scroll::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
-        }
+                            cell.attr('title', cell.text().trim());
+                        });
+                    }
+                });
 
-        .ledger-table {
-            width: 1720px !important;
-            min-width: 1720px !important;
-            max-width: none !important;
-            table-layout: fixed !important;
-            border-collapse: collapse !important;
-        }
+                $('#ledger-type-filter').on('change', function () {
+                    table.ajax.reload(null, true);
+                });
 
-        .ledger-table th,
-        .ledger-table td {
-            white-space: nowrap;
-        }
+                $('#ledger-reset-filter').on('click', function () {
+                    $('#ledger-type-filter').val('');
+                    $('#warehouse-ledger-table_filter input').val('');
+                    table.search('').draw();
+                    table.ajax.reload(null, true);
+                });
 
-        .ledger-table thead th {
-            background: #f4f6fb;
-            color: #8a94a6;
-            font-size: 12px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            border-bottom: 0 !important;
-            padding: 14px 16px;
-            white-space: nowrap;
-        }
+                $(window).on('resize', function () {
+                    table.columns.adjust();
+                });
+            });
+        </script>
 
-        .ledger-table tbody td {
-            padding: 16px;
-            border-bottom: 1px solid #edf0f5;
-            vertical-align: middle;
-            color: #475569;
-        }
-
-        .ledger-table tbody tr:hover {
-            background: #f8faff;
-        }
-
-        .ledger-main-text {
-            color: #1f2937;
-            font-weight: 700;
-            line-height: 1.25;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .ledger-reference-cell span,
-        .ledger-remarks-cell {
-            display: block;
-            max-width: 100%;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .ledger-reference-cell span {
-            color: #3a57e8;
-            font-weight: 600;
-        }
-
-        .ledger-remarks-cell {
-            color: #64748b;
-            text-align: left;
-            max-width: 360px;
-        }
-
-        .ledger-pagination-wrap {
-            padding-top: 18px;
-            display: flex;
-            justify-content: flex-end;
-            max-width: 100%;
-            overflow: hidden;
-        }
-
-        .ledger-pagination-wrap nav {
-            margin: 0;
-        }
-
-        .ledger-pagination-wrap .pagination {
-            margin-bottom: 0 !important;
-            gap: 0;
-        }
-
-        .ledger-pagination-wrap .page-item {
-            margin: 0;
-        }
-
-        .ledger-pagination-wrap .page-link {
-            min-width: 42px;
-            height: 38px;
-            padding: 8px 14px;
-            border: 1px solid #dce3ef !important;
-            color: #3a57e8 !important;
-            background: #ffffff !important;
-            font-size: 15px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: none !important;
-            outline: 0 !important;
-            border-radius: 0 !important;
-            line-height: 1.2;
-        }
-
-        .ledger-pagination-wrap .page-item:first-child .page-link {
-            border-top-left-radius: 8px !important;
-            border-bottom-left-radius: 8px !important;
-        }
-
-        .ledger-pagination-wrap .page-item:last-child .page-link {
-            border-top-right-radius: 8px !important;
-            border-bottom-right-radius: 8px !important;
-        }
-
-        .ledger-pagination-wrap .page-item.active .page-link {
-            background: #3a57e8 !important;
-            border-color: #3a57e8 !important;
-            color: #ffffff !important;
-        }
-
-        .ledger-pagination-wrap .page-item.disabled .page-link {
-            color: #94a3b8 !important;
-            background: #ffffff !important;
-            border-color: #dce3ef !important;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        .ledger-pagination-wrap .page-link:hover {
-            background: #eef2ff !important;
-            border-color: #3a57e8 !important;
-            color: #3a57e8 !important;
-        }
-
-        .ledger-pagination-wrap .page-item.active .page-link:hover {
-            background: #3a57e8 !important;
-            border-color: #3a57e8 !important;
-            color: #ffffff !important;
-        }
-
-        @media (max-width: 991px) {
-            .ledger-header {
-                padding: 20px 18px 10px !important;
+        <style>
+            .warehouse-card {
+                background: #ffffff;
+                border-radius: 18px !important;
+                border: 1px solid #edf0f5 !important;
+                box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055) !important;
+                overflow: hidden !important;
+                max-width: 100% !important;
             }
 
-            .ledger-body {
-                padding: 16px 18px 20px !important;
+            .warehouse-card .card-body {
+                max-width: 100% !important;
+                overflow: hidden !important;
             }
 
-            .ledger-table {
-                width: 1600px !important;
-                min-width: 1600px !important;
+            .warehouse-soft-btn {
+                border-radius: 10px;
+                padding: 10px 18px;
+                font-weight: 700;
             }
 
-            .ledger-pagination-wrap {
-                justify-content: flex-start;
+            .warehouse-reset-btn {
+                border-radius: 8px;
+                min-height: 42px;
+                font-weight: 600;
             }
 
-            .ledger-pagination-wrap .page-link {
-                min-width: 38px;
-                height: 36px;
-                padding: 7px 12px;
-                font-size: 14px;
+            .warehouse-filter {
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                min-height: 42px;
+                box-shadow: none !important;
             }
-        }
-    </style>
+
+            .warehouse-filter:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            .warehouse-ledger-shell {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                background: #ffffff;
+                border-radius: 12px;
+            }
+
+            /* IMPORTANT: DataTables controls are outside this div.
+               Only the table is inserted here by the DataTables dom option above. */
+            #warehouse-ledger-table_wrapper {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+            }
+
+            #warehouse-ledger-table_wrapper .warehouse-table-top,
+            #warehouse-ledger-table_wrapper .warehouse-table-footer {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: visible !important;
+            }
+
+            #warehouse-ledger-table_wrapper .ledger-table-scroll {
+                width: 100% !important;
+                max-width: 100% !important;
+                display: block !important;
+                overflow-x: auto !important;
+                overflow-y: hidden !important;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: auto;
+                padding-bottom: 10px;
+                background: #ffffff;
+            }
+
+            #warehouse-ledger-table_wrapper .ledger-table-scroll::-webkit-scrollbar {
+                height: 12px;
+            }
+
+            #warehouse-ledger-table_wrapper .ledger-table-scroll::-webkit-scrollbar-track {
+                background: #eef2f7;
+                border-radius: 999px;
+            }
+
+            #warehouse-ledger-table_wrapper .ledger-table-scroll::-webkit-scrollbar-thumb {
+                background: #94a3b8;
+                border-radius: 999px;
+            }
+
+            #warehouse-ledger-table_wrapper .ledger-table-scroll::-webkit-scrollbar-thumb:hover {
+                background: #64748b;
+            }
+
+            #warehouse-ledger-table.ledger-table {
+                width: 1760px !important;
+                min-width: 1760px !important;
+                max-width: none !important;
+                table-layout: fixed !important;
+                border-collapse: collapse !important;
+                margin-bottom: 0 !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(1),
+            #warehouse-ledger-table td:nth-child(1) {
+                width: 70px !important;
+                min-width: 70px !important;
+                max-width: 70px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(2),
+            #warehouse-ledger-table td:nth-child(2) {
+                width: 180px !important;
+                min-width: 180px !important;
+                max-width: 180px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(3),
+            #warehouse-ledger-table td:nth-child(3) {
+                width: 220px !important;
+                min-width: 220px !important;
+                max-width: 220px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(4),
+            #warehouse-ledger-table td:nth-child(4) {
+                width: 170px !important;
+                min-width: 170px !important;
+                max-width: 170px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(5),
+            #warehouse-ledger-table td:nth-child(5) {
+                width: 220px !important;
+                min-width: 220px !important;
+                max-width: 220px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(6),
+            #warehouse-ledger-table td:nth-child(6) {
+                width: 250px !important;
+                min-width: 250px !important;
+                max-width: 250px !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(7),
+            #warehouse-ledger-table td:nth-child(7) {
+                width: 120px !important;
+                min-width: 120px !important;
+                max-width: 120px !important;
+                text-align: right !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(8),
+            #warehouse-ledger-table td:nth-child(8) {
+                width: 130px !important;
+                min-width: 130px !important;
+                max-width: 130px !important;
+                text-align: right !important;
+            }
+
+            #warehouse-ledger-table th:nth-child(9),
+            #warehouse-ledger-table td:nth-child(9) {
+                width: 400px !important;
+                min-width: 400px !important;
+                max-width: 400px !important;
+                text-align: left !important;
+            }
+
+            #warehouse-ledger-table.ledger-table thead th {
+                position: relative !important;
+                background: #f4f6fb;
+                color: #8a94a6;
+                font-size: 12px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                border-bottom: 0 !important;
+                padding: 14px 16px;
+                white-space: nowrap !important;
+                vertical-align: middle !important;
+            }
+
+            /* Fix DataTables sort icon spacing/alignment */
+            #warehouse-ledger-table thead th.sorting,
+            #warehouse-ledger-table thead th.sorting_asc,
+            #warehouse-ledger-table thead th.sorting_desc {
+                padding-right: 30px !important;
+            }
+
+            #warehouse-ledger-table thead th.sorting::before,
+            #warehouse-ledger-table thead th.sorting::after,
+            #warehouse-ledger-table thead th.sorting_asc::before,
+            #warehouse-ledger-table thead th.sorting_asc::after,
+            #warehouse-ledger-table thead th.sorting_desc::before,
+            #warehouse-ledger-table thead th.sorting_desc::after {
+                right: 10px !important;
+                opacity: 0.35;
+            }
+
+            /* Specific alignment for QTY and Balance sortable headers */
+            #warehouse-ledger-table thead th:nth-child(7),
+            #warehouse-ledger-table thead th:nth-child(8),
+            #warehouse-ledger-table thead th.ledger-number-head,
+            #warehouse-ledger-table thead th.ledger-number-col {
+                text-align: right !important;
+                padding-right: 36px !important;
+                padding-left: 10px !important;
+            }
+
+            #warehouse-ledger-table thead th:nth-child(7)::before,
+            #warehouse-ledger-table thead th:nth-child(7)::after,
+            #warehouse-ledger-table thead th:nth-child(8)::before,
+            #warehouse-ledger-table thead th:nth-child(8)::after {
+                right: 12px !important;
+            }
+
+            /* Keep QTY and Balance body values aligned */
+            #warehouse-ledger-table tbody td:nth-child(7),
+            #warehouse-ledger-table tbody td:nth-child(8),
+            #warehouse-ledger-table td.ledger-number-col {
+                text-align: right !important;
+                padding-right: 24px !important;
+            }
+
+            #warehouse-ledger-table th.ledger-number-col,
+            #warehouse-ledger-table td.ledger-number-col {
+                text-align: right !important;
+            }
+
+            #warehouse-ledger-table.ledger-table tbody td {
+                padding: 16px;
+                border-bottom: 1px solid #edf0f5;
+                vertical-align: middle;
+                color: #475569;
+                white-space: nowrap !important;
+            }
+
+            #warehouse-ledger-table.ledger-table tbody tr:hover {
+                background: #f8faff;
+            }
+
+            #warehouse-ledger-table.dataTable tbody td.dataTables_empty {
+                text-align: center !important;
+                vertical-align: middle !important;
+                padding: 52px 16px !important;
+                color: #64748b !important;
+                font-size: 15px;
+                font-weight: 500;
+                height: 120px;
+                border-bottom: 0 !important;
+            }
+
+            #warehouse-ledger-table tbody tr:has(td.dataTables_empty):hover {
+                background: #ffffff !important;
+            }
+
+            #warehouse-ledger-table td:nth-child(9) {
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            #warehouse-ledger-table td:nth-child(9) * {
+                max-width: 100% !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            #warehouse-ledger-table a {
+                color: #3a57e8;
+                font-weight: 600;
+            }
+
+            #warehouse-ledger-table small {
+                color: #64748b !important;
+            }
+
+            .warehouse-table-footer {
+                padding: 22px 22px 6px !important;
+                margin: 0 !important;
+                border-top: 0 !important;
+                align-items: center;
+                background: #ffffff;
+            }
+
+            .warehouse-table-footer .dataTables_info {
+                padding-top: 0 !important;
+                color: #64748b;
+                font-size: 13px;
+            }
+
+            .warehouse-table-footer .dataTables_paginate {
+                padding-top: 0 !important;
+                margin-top: 0 !important;
+                display: flex;
+                justify-content: flex-end;
+            }
+
+            .warehouse-table-footer .pagination {
+                margin-bottom: 0 !important;
+                justify-content: flex-end;
+                gap: 0;
+            }
+
+            .warehouse-table-footer .pagination .page-item {
+                margin: 0;
+            }
+
+            .warehouse-table-footer .pagination .page-link {
+                min-width: 42px;
+                height: 38px;
+                padding: 8px 14px;
+                border: 1px solid #dce3ef !important;
+                color: #3a57e8 !important;
+                background: #ffffff !important;
+                font-size: 15px;
+                font-weight: 500;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: none !important;
+                outline: 0 !important;
+                border-radius: 0 !important;
+                line-height: 1.2;
+            }
+
+            .warehouse-table-footer .pagination .page-item:first-child .page-link {
+                border-top-left-radius: 8px !important;
+                border-bottom-left-radius: 8px !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item:last-child .page-link {
+                border-top-right-radius: 8px !important;
+                border-bottom-right-radius: 8px !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.active .page-link {
+                background: #3a57e8 !important;
+                border-color: #3a57e8 !important;
+                color: #ffffff !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.disabled .page-link {
+                color: #94a3b8 !important;
+                background: #ffffff !important;
+                border-color: #dce3ef !important;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            .warehouse-table-footer .pagination .page-link:hover {
+                background: #eef2ff !important;
+                border-color: #3a57e8 !important;
+                color: #3a57e8 !important;
+            }
+
+            .warehouse-table-footer .pagination .page-item.active .page-link:hover {
+                background: #3a57e8 !important;
+                border-color: #3a57e8 !important;
+                color: #ffffff !important;
+            }
+
+            div.dataTables_wrapper {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter {
+                text-align: right;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter input {
+                min-width: 320px;
+                max-width: 320px;
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                padding: 9px 12px;
+                margin-left: 8px;
+                box-shadow: none !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_filter input:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_length select {
+                border-radius: 10px;
+                border: 1px solid #e5e7eb;
+                padding: 7px 32px 7px 10px;
+                box-shadow: none !important;
+            }
+
+            div.dataTables_wrapper div.dataTables_length select:focus {
+                border-color: #3a57e8;
+                box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
+            }
+
+            @media (max-width: 991px) {
+                #warehouse-ledger-table_wrapper .ledger-table-scroll {
+                    overflow-x: auto !important;
+                }
+
+                #warehouse-ledger-table.ledger-table {
+                    width: 1600px !important;
+                    min-width: 1600px !important;
+                }
+
+                div.dataTables_wrapper div.dataTables_filter {
+                    text-align: left;
+                }
+
+                div.dataTables_wrapper div.dataTables_filter input {
+                    width: 100%;
+                    min-width: unset;
+                    max-width: unset;
+                    margin-left: 0;
+                    margin-top: 8px;
+                }
+
+                .warehouse-table-footer {
+                    padding: 18px 14px 6px !important;
+                }
+
+                .warehouse-table-footer .dataTables_paginate,
+                .warehouse-table-footer .pagination {
+                    justify-content: flex-start !important;
+                }
+
+                .warehouse-table-footer .pagination .page-link {
+                    min-width: 38px;
+                    height: 36px;
+                    padding: 7px 12px;
+                    font-size: 14px;
+                }
+            }
+        </style>
+    @endpush
 </x-app-layout>

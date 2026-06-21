@@ -1,0 +1,96 @@
+@extends('layouts.dashboard.dashboard')
+
+@section('content')
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h3 class="mb-1 fw-bold">Internal Chat</h3>
+            <p class="text-muted mb-0">Send direct messages to users inside the system.</p>
+        </div>
+    </div>
+
+    @if(session('success'))
+        <div class="alert alert-success rounded-3">{{ session('success') }}</div>
+    @endif
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white border-0 pb-0">
+                    <h5 class="fw-bold mb-1">Start Chat</h5>
+                    <p class="text-muted small mb-0">Choose a user to open a direct conversation.</p>
+                </div>
+                <div class="card-body">
+                    <form action="{{ route('chat.start') }}" method="POST">
+                        @csrf
+                        <label class="form-label fw-semibold">User</label>
+                        <select name="recipient_id" class="form-select" required>
+                            <option value="">Select user...</option>
+                            @foreach($users as $user)
+                                <option value="{{ $user->id }}">
+                                    {{ $user->full_name ?: $user->name ?: $user->email }}
+                                    @if($user->email)
+                                        — {{ $user->email }}
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('recipient_id')
+                            <div class="text-danger small mt-1">{{ $message }}</div>
+                        @enderror
+
+                        <button type="submit" class="btn btn-primary w-100 mt-3">
+                            Open Chat
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white border-0 pb-0">
+                    <h5 class="fw-bold mb-1">Conversations</h5>
+                    <p class="text-muted small mb-0">Recent internal conversations.</p>
+                </div>
+                <div class="card-body p-0">
+                    @forelse($conversations as $conversation)
+                        @php
+                            $latest = $conversation->latestMessage;
+                            $unread = $unreadCounts[$conversation->id] ?? 0;
+                        @endphp
+                        <a href="{{ route('chat.show', $conversation) }}"
+                           class="d-flex align-items-start justify-content-between gap-3 px-4 py-3 text-decoration-none border-bottom">
+                            <div class="min-w-0">
+                                <div class="fw-bold text-dark">
+                                    {{ $conversation->displayTitleFor(auth()->id()) }}
+                                    @if($unread > 0)
+                                        <span class="badge bg-primary rounded-pill ms-2">{{ $unread }}</span>
+                                    @endif
+                                </div>
+                                <div class="text-muted small text-truncate" style="max-width: 520px;">
+                                    @if($latest)
+                                        <span class="fw-semibold">
+                                            {{ optional($latest->sender)->full_name ?: optional($latest->sender)->name ?: 'User' }}:
+                                        </span>
+                                        {{ $latest->body }}
+                                    @else
+                                        No messages yet.
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="text-muted small text-nowrap">
+                                {{ $latest ? $latest->created_at->diffForHumans() : $conversation->created_at->diffForHumans() }}
+                            </div>
+                        </a>
+                    @empty
+                        <div class="text-center py-5 text-muted">
+                            No conversations yet. Start a chat using the form.
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection

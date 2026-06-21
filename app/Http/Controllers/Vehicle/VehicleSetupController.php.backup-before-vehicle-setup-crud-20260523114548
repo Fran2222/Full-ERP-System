@@ -1,0 +1,156 @@
+<?php
+
+namespace App\Http\Controllers\Vehicle;
+
+use App\Http\Controllers\Controller;
+use App\Models\VehicleMaintenanceType;
+use App\Models\VehicleStatus;
+use App\Models\VehicleType;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+class VehicleSetupController extends Controller
+{
+    public function index()
+    {
+        return view('vehicle.setup.index', [
+            'vehicleTypes' => VehicleType::orderBy('name')->get(),
+            'vehicleStatuses' => VehicleStatus::orderBy('sort_order')->orderBy('name')->get(),
+            'maintenanceTypes' => VehicleMaintenanceType::orderBy('name')->get(),
+        ]);
+    }
+
+    public function storeType(Request $request)
+    {
+        $data = $request->validate([
+            'code' => ['nullable', 'string', 'max:50', 'unique:vehicle_types,code'],
+            'name' => ['required', 'string', 'max:150'],
+            'status' => ['required', 'in:active,inactive'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $data['code'] = $data['code'] ?: Str::upper(Str::slug($data['name'], '_'));
+
+        VehicleType::create($data);
+
+        return back()->with('success', 'Vehicle type saved successfully.');
+    }
+
+    public function updateType(Request $request, VehicleType $type)
+    {
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:50', 'unique:vehicle_types,code,' . $type->id],
+            'name' => ['required', 'string', 'max:150'],
+            'status' => ['required', 'in:active,inactive'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $type->update($data);
+
+        return back()->with('success', 'Vehicle type updated successfully.');
+    }
+
+    public function destroyType(VehicleType $type)
+    {
+        abort_if($type->vehicles()->exists(), 422, 'This vehicle type is already used by a vehicle.');
+
+        $type->delete();
+
+        return back()->with('success', 'Vehicle type deleted successfully.');
+    }
+
+    public function storeStatus(Request $request)
+    {
+        $data = $request->validate([
+            'code' => ['nullable', 'string', 'max:50', 'unique:vehicle_statuses,code'],
+            'name' => ['required', 'string', 'max:150'],
+            'color' => ['nullable', 'string', 'max:30'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_default' => ['nullable', 'boolean'],
+            'status' => ['required', 'in:active,inactive'],
+        ]);
+
+        $data['code'] = $data['code'] ?: Str::upper(Str::slug($data['name'], '_'));
+        $data['sort_order'] = $data['sort_order'] ?? 0;
+        $data['is_default'] = (bool) ($data['is_default'] ?? false);
+
+        if ($data['is_default']) {
+            VehicleStatus::query()->update(['is_default' => false]);
+        }
+
+        VehicleStatus::create($data);
+
+        return back()->with('success', 'Vehicle status saved successfully.');
+    }
+
+    public function updateStatus(Request $request, VehicleStatus $status)
+    {
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:50', 'unique:vehicle_statuses,code,' . $status->id],
+            'name' => ['required', 'string', 'max:150'],
+            'color' => ['nullable', 'string', 'max:30'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_default' => ['nullable', 'boolean'],
+            'status' => ['required', 'in:active,inactive'],
+        ]);
+
+        $data['sort_order'] = $data['sort_order'] ?? 0;
+        $data['is_default'] = (bool) ($data['is_default'] ?? false);
+
+        if ($data['is_default']) {
+            VehicleStatus::whereKeyNot($status->id)->update(['is_default' => false]);
+        }
+
+        $status->update($data);
+
+        return back()->with('success', 'Vehicle status updated successfully.');
+    }
+
+    public function destroyStatus(VehicleStatus $status)
+    {
+        abort_if($status->vehicles()->exists(), 422, 'This vehicle status is already used by a vehicle.');
+
+        $status->delete();
+
+        return back()->with('success', 'Vehicle status deleted successfully.');
+    }
+
+    public function storeMaintenanceType(Request $request)
+    {
+        $data = $request->validate([
+            'code' => ['nullable', 'string', 'max:50', 'unique:vehicle_maintenance_types,code'],
+            'name' => ['required', 'string', 'max:150'],
+            'status' => ['required', 'in:active,inactive'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $data['code'] = $data['code'] ?: Str::upper(Str::slug($data['name'], '_'));
+
+        VehicleMaintenanceType::create($data);
+
+        return back()->with('success', 'Maintenance type saved successfully.');
+    }
+
+    public function updateMaintenanceType(Request $request, VehicleMaintenanceType $maintenanceType)
+    {
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:50', 'unique:vehicle_maintenance_types,code,' . $maintenanceType->id],
+            'name' => ['required', 'string', 'max:150'],
+            'status' => ['required', 'in:active,inactive'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $maintenanceType->update($data);
+
+        return back()->with('success', 'Maintenance type updated successfully.');
+    }
+
+    public function destroyMaintenanceType(VehicleMaintenanceType $maintenanceType)
+    {
+        abort_if($maintenanceType->maintenanceRecords()->exists(), 422, 'This maintenance type is already used by a record.');
+
+        $maintenanceType->delete();
+
+        return back()->with('success', 'Maintenance type deleted successfully.');
+    }
+}

@@ -1,0 +1,461 @@
+<?php
+
+namespace App\Http\Controllers\POS;
+
+use App\Http\Controllers\Controller;
+use App\Models\Sales\SalesReceipt;
+use App\Models\Warehouse\StockMovement;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
+
+class POSController extends Controller
+{
+    private string $sessionKey = 'pos_access_granted';
+
+    public function index()
+    {
+        $this->authorizePosAccess();
+
+        return session()->get($this->sessionKey)
+            ? redirect()->route('pos.terminal')
+            : redirect()->route('pos.access');
+    }
+
+    public function access()
+    {
+        $this->authorizePosAccess();
+
+        if (session()->get($this->sessionKey)) {
+            return redirect()->route('pos.terminal');
+        }
+
+        return view('pos.access');
+    }
+
+    public function authenticate(Request $request)
+    {
+        $this->authorizePosAccess();
+
+        $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        $configuredPassword = (string) env('POS_ACCESS_PASSWORD', '123456');
+
+        if (! hash_equals($configuredPassword, (string) $request->input('password'))) {
+            return back()
+                ->withErrors(['password' => 'Invalid POS access password.'])
+                ->withInput();
+        }
+
+        session()->put($this->sessionKey, true);
+        session()->put('pos_access_at', now()->toDateTimeString());
+
+        return redirect()->route('pos.terminal')
+            ->with('success', 'POS access granted.');
+    }
+
+    public function logout(Request $request)
+    {
+        $request->session()->forget($this->sessionKey);
+        $request->session()->forget('pos_access_at');
+
+        return redirect()->route('pos.access')
+            ->with('success', 'POS terminal locked.');
+    }
+
+    public function terminal()
+    {
+        $this->authorizePosAccess();
+
+        if (! session()->get($this->sessionKey)) {
+            return redirect()->route('pos.access')
+                ->withErrors(['password' => 'Please enter the POS access password first.']);
+        }
+
+        $user = auth()->user();
+        $branchId = $user ? (int) ($user->branch_id ?? 0) : 0;
+
+        $items = $this->branchStockItems($branchId);
+        $customers = $this->customersForPos();
+        $branchName = $this->branchName($branchId);
+
+        return view('pos.terminal', compact('items', 'customers', 'branchName', 'branchId'));
+    }
+
+    public function store(Request $request)
+    {
+        $this->authorizePosAccess();
+
+        if (! session()->get($this->sessionKey)) {
+            return redirect()->route('pos.access')
+                ->withErrors(['password' => 'Please enter the POS access password first.']);
+        }
+
+        $user = auth()->user();
+        $branchId = $user ? (int) ($user->branch_id ?? 0) : 0;
+
+        if ($branchId <= 0) {
+            throw ValidationException::withMessages([
+                'branch' => 'Your user account has no assigned branch. POS cannot sell without a branch assignment.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'customer_id' => ['nullable', 'integer'],
+            'payment_status' => ['required', 'string', 'in:paid,partial,unpaid'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'amount_paid' => ['nullable', 'numeric', 'min:0'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'items_json' => ['required', 'string'],
+        ]);
+
+        $items = json_decode($data['items_json'], true);
+
+        if (! is_array($items) || empty($items)) {
+            throw ValidationException::withMessages([
+                'items' => 'Cart is empty. Please add at least one item.',
+            ]);
+        }
+
+        $salesReceiptId = null;
+        $receiptNo = null;
+
+        DB::transaction(function () use ($items, $data, $branchId, &$salesReceiptId, &$receiptNo) {
+            $normalizedItems = $this->normalizeCartItems($items, $branchId);
+            $subtotal = collect($normalizedItems)->sum('line_total');
+            $total = $subtotal;
+            $paidAmount = $this->resolvePaidAmount($data['payment_status'], (float) ($data['amount_paid'] ?? 0), $total);
+            $status = $this->receiptStatus($paidAmount, $total);
+            $customerId = $data['customer_id'] ?: $this->walkInCustomerId();
+            $defaultLocationId = $this->firstBranchInventoryLocation($branchId, $normalizedItems);
+
+            if (! $defaultLocationId) {
+                throw ValidationException::withMessages([
+                    'location' => 'No branch stock location found for this POS sale.',
+                ]);
+            }
+
+            $receiptNo = $this->generatePosReceiptNo();
+
+            $salesReceiptId = DB::table('sales_receipts')->insertGetId([
+                'receipt_no' => $receiptNo,
+                'customer_id' => $customerId,
+                'branch_id' => $branchId,
+                'location_id' => $defaultLocationId,
+                'receipt_date' => now()->toDateString(),
+                'payment_method' => $data['payment_method'],
+                'reference_no' => $data['reference_no'] ?? null,
+                'subtotal' => $subtotal,
+                'discount_amount' => 0,
+                'tax_amount' => 0,
+                'total_amount' => $total,
+                'paid_amount' => $paidAmount,
+                'status' => $status,
+                'notes' => trim((string) ($data['notes'] ?? '')) ?: 'Created from POS terminal.',
+                'created_by' => auth()->id(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            foreach ($normalizedItems as $line) {
+                DB::table('sales_receipt_items')->insert([
+                    'sales_receipt_id' => $salesReceiptId,
+                    'item_id' => $line['item_id'],
+                    'item_code' => $line['item_code'],
+                    'item_name' => $line['item_name'],
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $line['unit_price'],
+                    'discount_amount' => 0,
+                    'tax_amount' => 0,
+                    'line_total' => $line['line_total'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $this->deductBranchStock($branchId, $line, $salesReceiptId, $receiptNo);
+            }
+        });
+
+        return redirect()
+            ->route('pos.terminal')
+            ->with('success', 'POS sale saved: ' . $receiptNo . '. Branch stock was deducted. Accounting posting will be connected in the next POS patch.');
+    }
+
+    private function authorizePosAccess(): void
+    {
+        $user = auth()->user();
+
+        abort_unless($user, 403, 'Please login to access POS.');
+
+        $roleAllowed = method_exists($user, 'hasAnyRole')
+            && $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'BOD', 'Board of Directors', 'super-admin', 'admin', 'bod']);
+
+        $moduleAllowed = Schema::hasTable('user_module_accesses')
+            && DB::table('user_module_accesses')
+                ->where('user_id', $user->id)
+                ->whereRaw('LOWER(module) = ?', ['pos'])
+                ->exists();
+
+        abort_unless($roleAllowed || $moduleAllowed, 403, 'You do not have POS module access.');
+    }
+
+    private function branchStockItems(int $branchId)
+    {
+        if ($branchId <= 0 || ! Schema::hasTable('warehouse_items') || ! Schema::hasTable('warehouse_inventories')) {
+            return collect();
+        }
+
+        $itemColumns = [
+            'wi.id',
+        ];
+
+        $selects = ['wi.id'];
+        foreach (['item_code', 'code', 'item_name', 'name', 'description', 'selling_price', 'image_path', 'is_serialized'] as $column) {
+            if (Schema::hasColumn('warehouse_items', $column)) {
+                $selects[] = 'wi.' . $column;
+            }
+        }
+
+        $query = DB::table('warehouse_items as wi')
+            ->join('warehouse_inventories as inv', 'inv.item_id', '=', 'wi.id')
+            ->where('inv.branch_id', $branchId)
+            ->where('inv.quantity', '>', 0);
+
+        if (Schema::hasTable('warehouse_locations') && Schema::hasColumn('warehouse_inventories', 'location_id')) {
+            $query->leftJoin('warehouse_locations as wl', 'wl.id', '=', 'inv.location_id');
+            if (Schema::hasColumn('warehouse_locations', 'location_type')) {
+                $query->where(function ($q) {
+                    $q->whereNull('wl.location_type')
+                        ->orWhereRaw("LOWER(COALESCE(wl.location_type, '')) NOT LIKE ?", ['%warehouse%']);
+                });
+            }
+        }
+
+        $query->select($selects)
+            ->selectRaw('SUM(inv.quantity) as pos_available_qty')
+            ->selectRaw('MIN(inv.location_id) as pos_location_id');
+
+        foreach ($selects as $select) {
+            $query->groupBy($select);
+        }
+
+        $sortColumn = Schema::hasColumn('warehouse_items', 'item_name') ? 'wi.item_name' : (Schema::hasColumn('warehouse_items', 'name') ? 'wi.name' : 'wi.id');
+
+        return $query->orderBy($sortColumn)->limit(60)->get();
+    }
+
+    private function customersForPos()
+    {
+        if (! Schema::hasTable('customers')) {
+            return collect();
+        }
+
+        return DB::table('customers')
+            ->select('id', 'customer_name')
+            ->orderBy('customer_name')
+            ->limit(300)
+            ->get();
+    }
+
+    private function branchName(int $branchId): string
+    {
+        if ($branchId <= 0 || ! Schema::hasTable('branches')) {
+            return 'No assigned branch';
+        }
+
+        return (string) (DB::table('branches')->where('id', $branchId)->value('name') ?: 'Assigned Branch #' . $branchId);
+    }
+
+    private function normalizeCartItems(array $items, int $branchId): array
+    {
+        $normalized = [];
+
+        foreach ($items as $index => $line) {
+            $itemId = (int) ($line['id'] ?? $line['item_id'] ?? 0);
+            $quantity = (float) ($line['qty'] ?? $line['quantity'] ?? 0);
+
+            if ($itemId <= 0 || $quantity <= 0) {
+                throw ValidationException::withMessages([
+                    'items' => 'Invalid cart item at line ' . ($index + 1) . '.',
+                ]);
+            }
+
+            $item = DB::table('warehouse_items')->where('id', $itemId)->first();
+
+            if (! $item) {
+                throw ValidationException::withMessages([
+                    'items' => 'Selected item no longer exists.',
+                ]);
+            }
+
+            if ((int) ($item->is_serialized ?? 0) === 1) {
+                throw ValidationException::withMessages([
+                    'items' => 'Serialized items need serial selection. This will be added in the next POS patch. Item: ' . ($item->item_code ?? $item->code ?? $item->id),
+                ]);
+            }
+
+            $available = (float) DB::table('warehouse_inventories')
+                ->where('item_id', $itemId)
+                ->where('branch_id', $branchId)
+                ->sum('quantity');
+
+            if ($available < $quantity) {
+                throw ValidationException::withMessages([
+                    'items' => 'Insufficient branch stock for ' . ($item->item_name ?? $item->name ?? 'item') . '. Available: ' . $available,
+                ]);
+            }
+
+            $itemCode = (string) ($item->item_code ?? $item->code ?? 'ITEM-' . $itemId);
+            $itemName = (string) ($item->item_name ?? $item->name ?? 'Item #' . $itemId);
+            $unitPrice = (float) ($item->selling_price ?? 0);
+
+            $normalized[] = [
+                'item_id' => $itemId,
+                'item_code' => $itemCode,
+                'item_name' => $itemName,
+                'description' => $item->description ?? null,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'line_total' => $quantity * $unitPrice,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function resolvePaidAmount(string $paymentStatus, float $requestedPaid, float $total): float
+    {
+        if ($paymentStatus === 'paid') {
+            return $total;
+        }
+
+        if ($paymentStatus === 'unpaid') {
+            return 0;
+        }
+
+        if ($requestedPaid <= 0 || $requestedPaid >= $total) {
+            throw ValidationException::withMessages([
+                'amount_paid' => 'Partial payment must be greater than 0 and less than the total amount.',
+            ]);
+        }
+
+        return $requestedPaid;
+    }
+
+    private function receiptStatus(float $paidAmount, float $total): string
+    {
+        if ($paidAmount <= 0) {
+            return 'unpaid';
+        }
+
+        if ($paidAmount >= $total) {
+            return 'paid';
+        }
+
+        return 'partially_paid';
+    }
+
+    private function walkInCustomerId(): int
+    {
+        $existingId = DB::table('customers')->whereRaw('LOWER(customer_name) = ?', ['walk-in customer'])->value('id');
+
+        if ($existingId) {
+            return (int) $existingId;
+        }
+
+        $next = ((int) DB::table('customers')->max('id')) + 1;
+
+        return (int) DB::table('customers')->insertGetId([
+            'customer_code' => 'WALKIN-' . str_pad($next, 4, '0', STR_PAD_LEFT),
+            'customer_name' => 'Walk-in Customer',
+            'contact_person' => null,
+            'phone' => null,
+            'email' => null,
+            'billing_address' => null,
+            'shipping_address' => null,
+            'tin' => null,
+            'payment_terms' => 'Due on receipt',
+            'status' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function firstBranchInventoryLocation(int $branchId, array $items): ?int
+    {
+        $itemIds = collect($items)->pluck('item_id')->all();
+
+        $locationId = DB::table('warehouse_inventories')
+            ->where('branch_id', $branchId)
+            ->whereIn('item_id', $itemIds)
+            ->where('quantity', '>', 0)
+            ->orderBy('location_id')
+            ->value('location_id');
+
+        return $locationId ? (int) $locationId : null;
+    }
+
+    private function deductBranchStock(int $branchId, array $line, int $salesReceiptId, string $receiptNo): void
+    {
+        $remaining = (float) $line['quantity'];
+
+        $inventories = DB::table('warehouse_inventories')
+            ->where('branch_id', $branchId)
+            ->where('item_id', $line['item_id'])
+            ->where('quantity', '>', 0)
+            ->orderBy('location_id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($inventories as $inventory) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $available = (float) $inventory->quantity;
+            $deduct = min($available, $remaining);
+            $newBalance = $available - $deduct;
+
+            DB::table('warehouse_inventories')
+                ->where('id', $inventory->id)
+                ->update([
+                    'quantity' => $newBalance,
+                    'updated_at' => now(),
+                ]);
+
+            StockMovement::create([
+                'item_id' => $line['item_id'],
+                'location_id' => $inventory->location_id,
+                'movement_type' => 'pos_sale',
+                'quantity' => -abs($deduct),
+                'balance_after' => $newBalance,
+                'reference_type' => 'pos_sale',
+                'reference_id' => $salesReceiptId,
+                'remarks' => 'POS Sale #' . $receiptNo,
+                'transaction_date' => now()->toDateString(),
+                'created_by' => auth()->id(),
+            ]);
+
+            $remaining -= $deduct;
+        }
+
+        if ($remaining > 0.00001) {
+            throw ValidationException::withMessages([
+                'items' => 'Insufficient branch stock while posting POS sale for ' . $line['item_name'] . '.',
+            ]);
+        }
+    }
+
+    private function generatePosReceiptNo(): string
+    {
+        $prefix = 'POS-' . now()->format('Ymd') . '-';
+        $countToday = SalesReceipt::whereDate('created_at', today())->count() + 1;
+
+        return $prefix . str_pad($countToday, 4, '0', STR_PAD_LEFT);
+    }
+}

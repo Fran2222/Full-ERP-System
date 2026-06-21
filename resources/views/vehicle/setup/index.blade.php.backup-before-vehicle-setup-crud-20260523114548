@@ -1,0 +1,233 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0">
+        @include('vehicle.partials.nav')
+
+        @if(session('success'))
+            <div class="alert alert-success rounded-3">{{ session('success') }}</div>
+        @endif
+
+        @if($errors->any())
+            <div class="alert alert-danger rounded-3">
+                <strong>Please check the form:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <div>
+                <h3 class="fw-bold mb-1">Vehicle Setup</h3>
+                <p class="text-secondary mb-0">Manage vehicle dropdowns used by the Vehicle Management module.</p>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-xl-4">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                        <h5 class="fw-bold mb-0">Vehicle Types</h5>
+                    </div>
+                    <div class="card-body px-4">
+                        <form method="POST" action="{{ route('vehicle.setup.types.store') }}" class="mb-4">
+                            @csrf
+                            <div class="mb-2">
+                                <label class="form-label">Code</label>
+                                <input type="text" name="code" class="form-control" placeholder="Auto if blank">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Name</label>
+                                <input type="text" name="name" class="form-control" required placeholder="e.g. L300">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm rounded-pill px-3">Add Type</button>
+                        </form>
+
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($vehicleTypes as $type)
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ $type->name }}</div>
+                                            <small class="text-secondary">{{ $type->code }}</small>
+                                        </td>
+                                        <td><span class="badge bg-{{ $type->status === 'active' ? 'success' : 'secondary' }}">{{ ucfirst($type->status) }}</span></td>
+                                        <td class="text-end">
+                                            <form method="POST" action="{{ route('vehicle.setup.types.destroy', $type) }}" onsubmit="return confirm('Delete this vehicle type?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger rounded-pill">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                @if($vehicleTypes->isEmpty())
+                                    <tr><td colspan="3" class="text-center text-secondary py-4">No vehicle types yet.</td></tr>
+                                @endif
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-4">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                        <h5 class="fw-bold mb-0">Vehicle Statuses</h5>
+                    </div>
+                    <div class="card-body px-4">
+                        <form method="POST" action="{{ route('vehicle.setup.statuses.store') }}" class="mb-4">
+                            @csrf
+                            <div class="mb-2">
+                                <label class="form-label">Code</label>
+                                <input type="text" name="code" class="form-control" placeholder="Auto if blank">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Name</label>
+                                <input type="text" name="name" class="form-control" required placeholder="e.g. Available">
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label">Badge Color</label>
+                                    <select name="color" class="form-select">
+                                        <option value="success">Success</option>
+                                        <option value="primary">Primary</option>
+                                        <option value="info">Info</option>
+                                        <option value="warning">Warning</option>
+                                        <option value="danger">Danger</option>
+                                        <option value="secondary">Secondary</option>
+                                        <option value="dark">Dark</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Sort</label>
+                                    <input type="number" name="sort_order" class="form-control" value="0" min="0">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm rounded-pill px-3">Add Status</button>
+                        </form>
+
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Badge</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($vehicleStatuses as $status)
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ $status->name }}</div>
+                                            <small class="text-secondary">{{ $status->code }}</small>
+                                        </td>
+                                        <td><span class="badge bg-{{ $status->color ?: 'secondary' }}">{{ $status->name }}</span></td>
+                                        <td class="text-end">
+                                            <form method="POST" action="{{ route('vehicle.setup.statuses.destroy', $status) }}" onsubmit="return confirm('Delete this vehicle status?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger rounded-pill">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                @if($vehicleStatuses->isEmpty())
+                                    <tr><td colspan="3" class="text-center text-secondary py-4">No vehicle statuses yet.</td></tr>
+                                @endif
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-4">
+                <div class="card rounded-4 border-0 shadow-sm h-100">
+                    <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                        <h5 class="fw-bold mb-0">Maintenance Types</h5>
+                    </div>
+                    <div class="card-body px-4">
+                        <form method="POST" action="{{ route('vehicle.setup.maintenance-types.store') }}" class="mb-4">
+                            @csrf
+                            <div class="mb-2">
+                                <label class="form-label">Code</label>
+                                <input type="text" name="code" class="form-control" placeholder="Auto if blank">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Name</label>
+                                <input type="text" name="name" class="form-control" required placeholder="e.g. Oil Change">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Status</label>
+                                <select name="status" class="form-select">
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm rounded-pill px-3">Add Maintenance Type</button>
+                        </form>
+
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @foreach($maintenanceTypes as $type)
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">{{ $type->name }}</div>
+                                            <small class="text-secondary">{{ $type->code }}</small>
+                                        </td>
+                                        <td><span class="badge bg-{{ $type->status === 'active' ? 'success' : 'secondary' }}">{{ ucfirst($type->status) }}</span></td>
+                                        <td class="text-end">
+                                            <form method="POST" action="{{ route('vehicle.setup.maintenance-types.destroy', $type) }}" onsubmit="return confirm('Delete this maintenance type?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button class="btn btn-sm btn-outline-danger rounded-pill">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                                @if($maintenanceTypes->isEmpty())
+                                    <tr><td colspan="3" class="text-center text-secondary py-4">No maintenance types yet.</td></tr>
+                                @endif
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>

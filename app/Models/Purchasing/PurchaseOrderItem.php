@@ -41,4 +41,22 @@ class PurchaseOrderItem extends Model
     {
         return $this->belongsTo(Item::class, 'item_id');
     }
+
+    public function getRemainingQuantityAttribute(): float
+    {
+        return max(0, (float) $this->quantity - (float) $this->received_quantity);
+    }
+
+    public function getReceivingStatusAttribute(): string
+    {
+        if ((float) $this->received_quantity <= 0) {
+            return 'pending';
+        }
+
+        if ((float) $this->remaining_quantity <= 0) {
+            return 'received';
+        }
+
+        return 'partial';
+    }
 }

@@ -1,5 +1,5 @@
 <x-app-layout :assets="['data-table']">
-    <div class="container-fluid content-inner mt-n5 py-0">
+    <div class="container-fluid content-inner mt-n5 py-0 warehouse-units-page">
 
         @include('warehouse.partials.nav')
 
@@ -21,7 +21,7 @@
             $canManageUnitActions = $canEditUnit || $canDeleteUnit;
         @endphp
 
-        <div class="card rounded-4 border-0 shadow-sm warehouse-card">
+        <div class="card rounded-4 border-0 shadow-sm warehouse-card warehouse-units-card">
             <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>
@@ -298,6 +298,18 @@
         </script>
 
         <style>
+
+
+            /* Extra space below Units card so it will not sit too close to the main footer,
+               especially at 125% browser scale. */
+            .warehouse-units-page {
+                padding-bottom: 72px !important;
+            }
+
+            .warehouse-units-card {
+                margin-bottom: 44px !important;
+            }
+
             .warehouse-card {
                 background: #ffffff;
                 border-radius: 18px !important;
@@ -535,6 +547,14 @@
                     min-width: unset;
                     margin-left: 0;
                     margin-top: 8px;
+                }
+
+                .warehouse-units-page {
+                    padding-bottom: 58px !important;
+                }
+
+                .warehouse-units-card {
+                    margin-bottom: 34px !important;
                 }
 
                 .warehouse-table-footer {

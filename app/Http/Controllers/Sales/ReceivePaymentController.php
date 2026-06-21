@@ -142,6 +142,11 @@ class ReceivePaymentController extends Controller
             ]);
 
             app(SalesAccountingService::class)->postPayment($payment->fresh(['customer', 'invoice']));
+
+            if (class_exists(\App\Services\SystemNotificationService::class)
+                && method_exists(\App\Services\SystemNotificationService::class, 'notifyReceivePaymentCreated')) {
+                \App\Services\SystemNotificationService::notifyReceivePaymentCreated($payment->fresh(['customer', 'invoice']), auth()->id());
+            }
         });
 
         return redirect()

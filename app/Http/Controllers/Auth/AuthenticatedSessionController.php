@@ -25,12 +25,12 @@ class AuthenticatedSessionController extends Controller
 
         $moduleRoutes = [
             'hr' => route('module.hr'),
-            'inventory' => route('module.inventory'),
-            'warehouse' => route('module.warehouse'),
+            'inventory' => route('warehouse.inventory'),
+            'warehouse' => route('warehouse.inventory'),
             'procurement' => route('purchasing.dashboard'),
             'purchasing' => route('purchasing.dashboard'),
-            'sales' => route('module.sales'),
-            'accounting' => route('module.accounting'),
+            'sales' => route('sales.dashboard'),
+            'accounting' => route('accounting.dashboard'),
             'payroll' => route('module.payroll'),
             'reports' => route('module.reports'),
         ];

@@ -48,9 +48,9 @@
                     </div>
                 </div>
 
-                <form id="serviceUnitFilterForm" method="GET" action="{{ route('warehouse.service-units.index') }}" class="mb-3">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-2">
+                <form id="serviceUnitFilterForm" method="GET" action="{{ route('warehouse.service-units.index') }}" class="mb-3 service-units-filter-form">
+                    <div class="service-units-filter-grid align-items-end">
+                        <div class="service-units-filter-item service-units-filter-show">
                             <label class="form-label small text-secondary mb-1">Show</label>
                             <select name="per_page" id="serviceUnitPerPage" class="form-select">
                                 @foreach([10, 25, 50, 100] as $size)
@@ -58,7 +58,7 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="service-units-filter-item service-units-filter-status">
                             <label class="form-label small text-secondary mb-1">Status</label>
                             <select name="status" id="serviceUnitStatus" class="form-select">
                                 <option value="">All Status</option>
@@ -67,7 +67,7 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-md-5">
+                        <div class="service-units-filter-item service-units-filter-search">
                             <label class="form-label small text-secondary mb-1">Search</label>
                             <input type="text"
                                    name="search"
@@ -77,18 +77,18 @@
                                    placeholder="Search borrow no, employee, item, serial, location, remarks..."
                                    autocomplete="off">
                         </div>
-                        <div class="col-md-2 d-flex gap-2">
+                        <div class="service-units-filter-actions d-flex gap-2">
                             <button type="submit" class="btn btn-primary flex-fill">Search</button>
-                            <a href="{{ route('warehouse.service-units.index') }}" class="btn btn-outline-secondary">Reset</a>
+                            <a href="{{ route('warehouse.service-units.index') }}" class="btn btn-outline-secondary flex-fill">Reset</a>
                         </div>
                     </div>
                 </form>
 
                 <div class="table-responsive service-units-table-wrap">
-                    <table class="table align-middle mb-0">
+                    <table class="table align-middle mb-0 service-units-table">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 60px;">#</th>
+                                <th class="service-units-col-count">#</th>
                                 <th>Borrow No.</th>
                                 <th>Employee</th>
                                 <th>Item / Serial</th>
@@ -173,12 +173,130 @@
         .service-unit-summary-card {
             transition: 0.15s ease-in-out;
         }
+
         .service-unit-summary-card:hover {
             transform: translateY(-1px);
             box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.06);
         }
+
+        .service-units-filter-grid {
+            display: grid;
+            grid-template-columns: minmax(160px, 180px) minmax(220px, 280px) minmax(320px, 1fr) minmax(190px, 230px);
+            gap: 0.75rem;
+            width: 100%;
+        }
+
+        .service-units-filter-grid .form-label {
+            font-weight: 600;
+            letter-spacing: 0.01em;
+        }
+
+        .service-units-filter-grid .form-select,
+        .service-units-filter-grid .form-control,
+        .service-units-filter-grid .btn {
+            min-height: 46px;
+            border-radius: 0.55rem;
+        }
+
+        .service-units-filter-actions {
+            min-width: 0;
+        }
+
+        .service-units-filter-actions .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
         .service-units-table-wrap {
             min-height: 240px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(107, 114, 128, 0.55) rgba(241, 245, 249, 0.95);
+        }
+
+        .service-units-table-wrap::-webkit-scrollbar {
+            height: 9px;
+        }
+
+        .service-units-table-wrap::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.95);
+            border-radius: 999px;
+        }
+
+        .service-units-table-wrap::-webkit-scrollbar-thumb {
+            background: rgba(107, 114, 128, 0.5);
+            border-radius: 999px;
+        }
+
+        .service-units-table {
+            min-width: 1260px;
+            table-layout: auto;
+        }
+
+        .service-units-table thead th {
+            background: #f4f6fa;
+            color: #7f8a9d;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.035em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            border-bottom: 0;
+            padding-top: 0.9rem;
+            padding-bottom: 0.9rem;
+        }
+
+        .service-units-table tbody td {
+            color: #334155;
+            font-size: 0.93rem;
+            vertical-align: middle;
+            white-space: nowrap;
+            border-color: #eef2f7;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+
+        .service-units-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .service-units-col-count {
+            width: 60px;
+        }
+
+        @media (max-width: 1199.98px) {
+            .service-units-filter-grid {
+                grid-template-columns: minmax(150px, 0.8fr) minmax(210px, 1fr) minmax(280px, 1.4fr);
+            }
+
+            .service-units-filter-actions {
+                grid-column: 1 / -1;
+                justify-content: flex-end;
+            }
+
+            .service-units-filter-actions .btn {
+                max-width: 150px;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .service-units-filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .service-units-filter-actions {
+                justify-content: stretch;
+            }
+
+            .service-units-filter-actions .btn {
+                max-width: none;
+            }
         }
     </style>
 

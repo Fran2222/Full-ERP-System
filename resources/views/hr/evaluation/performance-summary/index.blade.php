@@ -1,6 +1,10 @@
 <x-app-layout>
-    <div class="container-fluid content-inner mt-n5 py-0">
+    <div class="container-fluid content-inner mt-n5 py-0 performance-summary-page">
         <style>
+            .performance-summary-page {
+                max-width: none !important;
+            }
+
             .performance-summary-card {
                 border: 0;
                 border-radius: 18px;
@@ -41,37 +45,71 @@
             .performance-summary-table {
                 table-layout: fixed;
                 width: 100%;
+                min-width: 0;
             }
 
             .performance-summary-table th {
                 text-transform: uppercase;
-                font-size: 12px;
-                letter-spacing: 0.03em;
+                font-size: 10.25px;
+                letter-spacing: 0;
                 color: #8a94a6;
                 background: #f4f6fa;
-                white-space: nowrap;
+                white-space: normal;
+                word-break: normal;
+                overflow-wrap: normal;
                 vertical-align: middle;
                 font-weight: 700;
-                padding: 13px 10px;
+                padding: 11px 5px;
+                overflow: visible;
+                text-overflow: clip;
+                line-height: 1.15;
+            }
+
+            .performance-summary-table th:nth-child(5),
+            .performance-summary-table th:nth-child(7),
+            .performance-summary-table th:nth-child(9) {
+                white-space: nowrap !important;
+                word-break: keep-all !important;
+                overflow-wrap: normal !important;
+                font-size: 9.5px;
             }
 
             .performance-summary-table td {
                 vertical-align: middle;
                 color: #071437;
-                font-size: 14px;
-                padding: 14px 10px;
+                font-size: 13px;
+                padding: 12px 6px;
+            }
+
+            .performance-summary-table th,
+            .performance-summary-table td {
+                box-sizing: border-box;
+            }
+
+            .performance-summary-table th.text-center,
+            .performance-summary-table td.text-center {
+                text-align: center !important;
+            }
+
+            .performance-summary-table td:nth-child(2) .fw-semibold,
+            .performance-summary-table td:nth-child(2) small {
+                display: block;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
 
             .performance-summary-wrap-cell {
                 white-space: normal !important;
-                word-break: break-word;
-                overflow-wrap: anywhere;
+                word-break: normal;
+                overflow-wrap: break-word;
                 line-height: 1.35;
             }
 
             .performance-summary-department-cell {
-                max-width: 180px;
+                max-width: 170px;
             }
 
             .performance-summary-table tbody tr {
@@ -87,24 +125,32 @@
                 align-items: center;
                 justify-content: center;
                 border-radius: 999px;
-                padding: 6px 10px;
+                padding: 6px 9px;
                 background: #eef2ff;
                 color: #3b5bdb;
-                font-size: 12px;
+                font-size: 11.5px;
                 font-weight: 700;
                 line-height: 1;
+                white-space: nowrap;
             }
 
             .performance-summary-pill {
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
+                max-width: 100%;
                 border-radius: 999px;
-                padding: 6px 10px;
-                font-size: 12px;
+                padding: 6px 9px;
+                font-size: 11.5px;
                 font-weight: 700;
                 line-height: 1;
                 white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .performance-summary-table td:nth-child(8) .performance-summary-pill {
+                max-width: 112px;
             }
 
             .performance-summary-pill-success {
@@ -159,8 +205,8 @@
             }
 
             .performance-summary-pdf-btn {
-                width: 34px;
-                height: 34px;
+                width: 32px;
+                height: 32px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -171,8 +217,8 @@
             }
 
             .performance-summary-pdf-btn svg {
-                width: 19px;
-                height: 19px;
+                width: 18px;
+                height: 18px;
                 display: block;
             }
 
@@ -182,7 +228,7 @@
             }
 
             .performance-summary-view-btn {
-                min-width: 58px;
+                min-width: 54px;
                 height: 30px;
                 font-size: 12px;
                 font-weight: 600;
@@ -199,9 +245,54 @@
                 transition: opacity 0.18s ease;
             }
 
+
+            @media (min-width: 1200px) {
+                .performance-summary-page {
+                    padding-left: 18px !important;
+                    padding-right: 18px !important;
+                }
+
+                .performance-summary-card {
+                    width: calc(100% + 72px);
+                    margin-left: -36px;
+                    margin-right: -36px;
+                }
+
+                .performance-summary-card .card-body {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                }
+            }
+
             @media (max-width: 1199.98px) {
                 .performance-summary-table {
-                    min-width: 1240px;
+                    min-width: 1120px;
+                }
+            }
+
+            @media (min-width: 1200px) and (max-width: 1500px) {
+                .performance-summary-table th {
+                    font-size: 9.75px;
+                    padding-left: 4px;
+                    padding-right: 4px;
+                }
+
+                .performance-summary-table th:nth-child(5),
+                .performance-summary-table th:nth-child(7),
+                .performance-summary-table th:nth-child(9) {
+                    font-size: 9px;
+                }
+
+                .performance-summary-table td {
+                    font-size: 12.75px;
+                    padding-left: 5px;
+                    padding-right: 5px;
+                }
+
+                .performance-summary-view-btn {
+                    min-width: 52px;
+                    padding-left: 10px !important;
+                    padding-right: 10px !important;
                 }
             }
         </style>

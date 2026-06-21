@@ -1,3 +1,50 @@
+@php
+    $wmcExistingSerialBaselines = collect();
+
+    try {
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('warehouse_item_serials') &&
+            \Illuminate\Support\Facades\Schema::hasTable('warehouse_items')
+        ) {
+            $wmcExistingSerialRows = \Illuminate\Support\Facades\DB::table('warehouse_item_serials as s')
+                ->leftJoin('warehouse_items as i', 'i.id', '=', 's.item_id')
+                ->whereNotNull('s.item_id')
+                ->whereNotNull('s.serial_number')
+                ->where('s.serial_number', '<>', '')
+                ->orderByDesc('s.id')
+                ->limit(1000)
+                ->get([
+                    's.item_id',
+                    's.serial_number',
+                    'i.item_code',
+                    'i.item_name',
+                ]);
+
+            $wmcExistingSerialBaselines = $wmcExistingSerialRows
+                ->groupBy('item_id')
+                ->map(function ($rows) {
+                    $first = $rows->first();
+
+                    return [
+                        'item_id' => (int) $first->item_id,
+                        'item_code' => (string) ($first->item_code ?? ''),
+                        'item_name' => (string) ($first->item_name ?? ''),
+                        'samples' => $rows
+                            ->pluck('serial_number')
+                            ->filter()
+                            ->unique()
+                            ->take(20)
+                            ->values()
+                            ->all(),
+                    ];
+                })
+                ->values();
+        }
+    } catch (\Throwable $e) {
+        $wmcExistingSerialBaselines = collect();
+    }
+@endphp
+
 <x-app-layout>
     <div class="container-fluid content-inner mt-n5 py-0">
 
@@ -15,6 +62,37 @@
             };
 
             abort_unless($canAccess('warehouse.stock_in.create'), 403);
+
+            $openPurchaseOrders = \App\Models\Purchasing\PurchaseOrder::with(['supplier', 'location', 'items.item.unit'])
+                ->whereIn('status', ['ordered', 'partially_received'])
+                ->orderByDesc('id')
+                ->get();
+
+            $poReceivingOptions = $openPurchaseOrders->map(function ($po) {
+                return [
+                    'id' => $po->id,
+                    'po_no' => $po->po_no,
+                    'supplier' => $po->supplier?->supplier_name ?? $po->supplier?->name ?? '-',
+                    'location_id' => $po->location_id,
+                    'status' => $po->status,
+                    'items' => $po->items->map(function ($line) {
+                        $ordered = (float) $line->quantity;
+                        $received = (float) ($line->received_quantity ?? 0);
+                        $remaining = max(0, $ordered - $received);
+
+                        return [
+                            'id' => $line->id,
+                            'item_id' => $line->item_id,
+                            'item_code' => $line->item_code ?: ($line->item?->item_code ?? $line->item?->code ?? ''),
+                            'item_name' => $line->item_name ?: ($line->item?->item_name ?? $line->item?->name ?? '-'),
+                            'unit_name' => $line->unit_name ?: ($line->item?->unit?->name ?? $line->item?->unit?->abbreviation ?? ''),
+                            'ordered_quantity' => $ordered,
+                            'received_quantity' => $received,
+                            'remaining_quantity' => $remaining,
+                        ];
+                    })->filter(fn ($line) => (float) $line['remaining_quantity'] > 0)->values(),
+                ];
+            })->filter(fn ($po) => count($po['items']) > 0)->values();
         @endphp
 
         <div class="card rounded-4 border-0 shadow-sm">
@@ -49,6 +127,66 @@
 
                 <form method="POST" action="{{ route('warehouse.stock-in.store') }}">
                     @csrf
+                    <input type="hidden" name="serial_source" value="accepted_serial_review">
+                    <input type="hidden" name="prevent_auto_generate_serials" value="1">
+                    <input type="hidden" name="stock_in_source" id="stock_in_source" value="manual">
+                    <input type="hidden" name="purchase_order_id" id="purchase_order_id" value="">
+                    <input type="hidden" name="purchase_order_item_id" id="purchase_order_item_id" value="">
+
+                    <div class="border rounded-4 p-3 p-md-4 mb-4 bg-light-subtle">
+                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                            <div>
+                                <h6 class="fw-bold mb-1">Receiving Source</h6>
+                                <div class="text-secondary small">
+                                    Use Manual Stock In for regular receiving, or From Purchase Order when the delivered items are based on an approved PO.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label">Stock In Type</label>
+                                <select class="form-select" id="po_stock_in_type">
+                                    <option value="manual" selected>Manual Stock In</option>
+                                    <option value="purchase_order">From Purchase Order</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 po-receiving-field d-none">
+                                <label class="form-label">Purchase Order</label>
+                                <select class="form-select" id="po_select">
+                                    <option value="">Select approved PO</option>
+                                    @foreach($poReceivingOptions as $po)
+                                        <option value="{{ $po['id'] }}">
+                                            {{ $po['po_no'] }} — {{ $po['supplier'] }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="d-none">
+                                <select class="form-select" id="po_item_select" disabled>
+                                    <option value="">Select PO item</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="po_receiving_summary" class="alert alert-info rounded-3 mt-3 mb-0 d-none">
+                            <div class="fw-semibold mb-1">PO Receiving Summary</div>
+                            <div class="small" id="po_receiving_summary_text"></div>
+                        </div>
+
+                        <div id="po_locked_item_card" class="alert alert-primary rounded-3 mt-3 mb-0 d-none">
+                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                                <div>
+                                    <div class="fw-semibold mb-1">Selected Item From Purchase Order</div>
+                                    <div class="small" id="po_locked_item_text">Select a PO item above.</div>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">PO controlled item</span>
+                            </div>
+                            <div class="small text-secondary mt-2">
+                                The normal Item picker below is locked/hidden while receiving from PO to avoid selecting a different warehouse item. Quantity can still be adjusted up to the remaining PO quantity.
+                            </div>
+                        </div>
+                    </div>
 
                     @include('warehouse.inventory._movement-form-fields')
 
@@ -69,4 +207,2093 @@
             </div>
         </div>
     </div>
+
+
+
+    <script>
+        window.wmcOpenPurchaseOrdersForReceiving = @json($poReceivingOptions);
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const poData = Array.isArray(window.wmcOpenPurchaseOrdersForReceiving) ? window.wmcOpenPurchaseOrdersForReceiving : [];
+            const typeSelect = document.getElementById('po_stock_in_type');
+            const poSelect = document.getElementById('po_select');
+            const poItemSelect = document.getElementById('po_item_select');
+            const poOpenItemPickerBtn = document.getElementById('po_open_item_picker_btn');
+            window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS = [];
+            const sourceInput = document.getElementById('stock_in_source');
+            const poIdInput = document.getElementById('purchase_order_id');
+            const poItemIdInput = document.getElementById('purchase_order_item_id');
+            const poFields = document.querySelectorAll('.po-receiving-field');
+            const summary = document.getElementById('po_receiving_summary');
+            const summaryText = document.getElementById('po_receiving_summary_text');
+            const lockedItemCard = document.getElementById('po_locked_item_card');
+            const lockedItemText = document.getElementById('po_locked_item_text');
+
+            function findNamedField(name) {
+                return document.querySelector(`[name="${name}"]`);
+            }
+
+            function fieldWrapper(field) {
+                if (!field) return null;
+
+                return field.closest('.col-md-6, .col-md-5, .col-md-4, .col-lg-6, .col-lg-4, .col-12, .mb-3, .form-group')
+                    || field.parentElement;
+            }
+
+            function toggleManualItemPicker(isPo) {
+                const itemField = findNamedField('item_id');
+                const wrapper = fieldWrapper(itemField);
+
+                // Keep the new item picker visible in both modes.
+                // In PO mode, its item list is filtered to the selected PO items only.
+                if (wrapper) {
+                    wrapper.classList.remove('d-none');
+                }
+
+                if (lockedItemCard) {
+                    lockedItemCard.classList.toggle('d-none', !isPo);
+                }
+
+                if (typeof window.WMC_STOCKIN_SYNC_PICKER_MODE_UI === 'function') {
+                    window.WMC_STOCKIN_SYNC_PICKER_MODE_UI();
+                }
+            }
+
+            function dispatchFieldEvents(field) {
+                if (!field) return;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2) {
+                    window.jQuery(field).trigger('change.select2').trigger('change');
+                }
+            }
+
+            function setNamedField(name, value) {
+                document.querySelectorAll(`[name="${name}"]`).forEach(function (field) {
+                    field.value = value ?? '';
+                    dispatchFieldEvents(field);
+                });
+            }
+
+            function selectedPo() {
+                return poData.find(function (po) {
+                    return String(po.id) === String(poSelect?.value || '');
+                }) || null;
+            }
+
+            function selectedPoLine() {
+                const po = selectedPo();
+                if (!po || !Array.isArray(po.items)) return null;
+                return po.items.find(function (line) {
+                    return String(line.id) === String(poItemSelect?.value || '');
+                }) || null;
+            }
+
+            function resetPoItemOptions() {
+                window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS = [];
+                if (!poItemSelect) return;
+                poItemSelect.innerHTML = '<option value="">Select PO item</option>';
+                poItemSelect.disabled = true;
+            }
+
+            function renderPoItems() {
+                resetPoItemOptions();
+                const po = selectedPo();
+
+                if (!po || !Array.isArray(po.items) || po.items.length === 0) {
+                    return;
+                }
+
+                window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS = po.items.map(function (line) { return String(line.item_id || ''); }).filter(Boolean);
+
+                po.items.forEach(function (line) {
+                    const option = document.createElement('option');
+                    option.value = line.id;
+                    option.textContent = `${line.item_code ? line.item_code + ' — ' : ''}${line.item_name} | Remaining: ${Number(line.remaining_quantity || 0).toFixed(2)} ${line.unit_name || ''}`;
+                    poItemSelect.appendChild(option);
+                });
+
+                poItemSelect.disabled = false;
+            }
+
+            function syncPoHiddenFields() {
+                const mode = typeSelect?.value || 'manual';
+                const po = selectedPo();
+                const line = selectedPoLine();
+
+                if (sourceInput) sourceInput.value = mode;
+                if (poIdInput) poIdInput.value = mode === 'purchase_order' && po ? po.id : '';
+                if (poItemIdInput) poItemIdInput.value = mode === 'purchase_order' && line ? line.id : '';
+
+                if (mode !== 'purchase_order') {
+                    summary?.classList.add('d-none');
+                    return;
+                }
+
+                if (po && po.location_id) {
+                    setNamedField('location_id', po.location_id);
+                }
+
+                if (po) {
+                    const referenceFields = document.querySelectorAll('[name="reference_no"]');
+                    referenceFields.forEach(function (field) {
+                        if (!field.value) {
+                            field.value = po.po_no;
+                            dispatchFieldEvents(field);
+                        }
+                    });
+                }
+
+                if (line) {
+                    setNamedField('item_id', line.item_id);
+                    setNamedField('quantity', Number(line.remaining_quantity || 0).toFixed(2));
+
+                    document.querySelectorAll('[name="quantity"]').forEach(function (field) {
+                        field.setAttribute('max', Number(line.remaining_quantity || 0).toFixed(2));
+                    });
+
+                    if (lockedItemText) {
+                        lockedItemText.textContent = `${line.item_code ? line.item_code + ' — ' : ''}${line.item_name} (${line.unit_name || 'unit'}) | Remaining to receive: ${Number(line.remaining_quantity || 0).toFixed(2)}.`;
+                    }
+
+                    if (summary && summaryText) {
+                        summary.classList.remove('d-none');
+                        summaryText.textContent = `${po.po_no}: ${line.item_name} | Ordered ${Number(line.ordered_quantity || 0).toFixed(2)}, already received ${Number(line.received_quantity || 0).toFixed(2)}, remaining ${Number(line.remaining_quantity || 0).toFixed(2)} ${line.unit_name || ''}.`;
+                    }
+                } else {
+                    summary?.classList.add('d-none');
+                    if (lockedItemText) {
+                        lockedItemText.textContent = 'Select a PO item above. Only items from the selected PO will be available.';
+                    }
+                }
+            }
+
+            window.WMC_STOCKIN_SELECT_PO_ITEM_BY_WAREHOUSE_ITEM = function (warehouseItemId) {
+                const po = selectedPo();
+                if (!po || !Array.isArray(po.items) || !poItemSelect) return false;
+
+                const line = po.items.find(function (row) {
+                    return String(row.item_id || '') === String(warehouseItemId || '');
+                });
+
+                if (!line) return false;
+
+                poItemSelect.value = line.id;
+                syncPoHiddenFields();
+                return true;
+            };
+
+            function syncMode() {
+                const isPo = (typeSelect?.value || 'manual') === 'purchase_order';
+                poFields.forEach(field => field.classList.toggle('d-none', !isPo));
+                toggleManualItemPicker(isPo);
+
+                if (!isPo) {
+                    if (poSelect) poSelect.value = '';
+                    resetPoItemOptions();
+                    if (lockedItemText) {
+                        lockedItemText.textContent = 'Select a PO item above.';
+                    }
+                    document.querySelectorAll('[name="quantity"]').forEach(function (field) {
+                        field.removeAttribute('max');
+                    });
+                }
+
+                syncPoHiddenFields();
+                setTimeout(function () {
+                    if (typeof window.WMC_STOCKIN_SYNC_PICKER_MODE_UI === 'function') {
+                        window.WMC_STOCKIN_SYNC_PICKER_MODE_UI();
+                    }
+                }, 0);
+            }
+
+            poOpenItemPickerBtn?.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                if (!selectedPo()) {
+                    alert('Please select Purchase Order first.');
+                    poSelect?.focus();
+                    return;
+                }
+
+                if (!window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS || !window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS.length) {
+                    renderPoItems();
+                }
+
+                if (typeof window.WMC_STOCKIN_OPEN_PICKER === 'function') {
+                    window.WMC_STOCKIN_OPEN_PICKER();
+                    return;
+                }
+
+                const hiddenPickerButton = document.getElementById('stockInOpenPickerBtn');
+                if (hiddenPickerButton) hiddenPickerButton.click();
+            });
+
+            typeSelect?.addEventListener('change', syncMode);
+            poSelect?.addEventListener('change', function () {
+                renderPoItems();
+                syncPoHiddenFields();
+            });
+            poItemSelect?.addEventListener('change', syncPoHiddenFields);
+
+            syncMode();
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.querySelector('form[action="{{ route('warehouse.stock-in.store') }}"]') || document.querySelector('form');
+            const serialTextarea = Array.from(document.querySelectorAll('textarea, input[type="text"]')).find(function (field) {
+                const name = (field.getAttribute('name') || '').toLowerCase();
+                const id = (field.getAttribute('id') || '').toLowerCase();
+                const placeholder = (field.getAttribute('placeholder') || '').toLowerCase();
+
+                return name.includes('serial') || id.includes('serial') || placeholder.includes('serial number');
+            });
+
+            if (!form || !serialTextarea) {
+                return;
+            }
+
+            const quantityInput = Array.from(document.querySelectorAll('input')).find(function (field) {
+                const name = (field.getAttribute('name') || '').toLowerCase();
+                const id = (field.getAttribute('id') || '').toLowerCase();
+                return name === 'quantity' || name.endsWith('[quantity]') || id === 'quantity' || id.includes('quantity');
+            });
+
+            /*
+             * Important:
+             * The visual textarea/review UI is not always the exact field that the
+             * stock-in backend reads. To make the accepted serials the single source
+             * of truth, we submit them through several safe hidden payload fields.
+             *
+             * - serial_numbers: newline text payload used by most existing controllers
+             * - accepted_serial_numbers: JSON payload for newer/safer controller reads
+             * - serials[] / serial_numbers_array[]: array payload fallback
+             *
+             * These hidden fields are rebuilt on every render and immediately before submit.
+             */
+            const hiddenSerialPayload = document.createElement('textarea');
+            hiddenSerialPayload.name = 'serial_numbers';
+            hiddenSerialPayload.id = 'accepted_serial_numbers_payload';
+            hiddenSerialPayload.className = 'd-none';
+            hiddenSerialPayload.setAttribute('aria-hidden', 'true');
+            form.appendChild(hiddenSerialPayload);
+
+            const hiddenAcceptedJson = document.createElement('input');
+            hiddenAcceptedJson.type = 'hidden';
+            hiddenAcceptedJson.name = 'accepted_serial_numbers';
+            hiddenAcceptedJson.id = 'accepted_serial_numbers_json';
+            form.appendChild(hiddenAcceptedJson);
+
+            function clearGeneratedHiddenInputs() {
+                form.querySelectorAll('[data-generated-serial-hidden="1"]').forEach(function (field) {
+                    field.remove();
+                });
+            }
+
+            function syncSubmittedSerials() {
+                const acceptedValues = acceptedSerials.map(item => item.serial);
+                const payloadText = acceptedValues.join('\n');
+
+                hiddenSerialPayload.value = payloadText;
+                hiddenAcceptedJson.value = JSON.stringify(acceptedValues);
+
+                // Keep the visible textarea usable for continuous barcode scanning.
+                // The backend payload stays exact in the hidden fields, while the
+                // visible scanner textarea keeps one blank line ready for the next scan.
+                serialTextarea.disabled = false;
+                serialTextarea.removeAttribute('disabled');
+                serialTextarea.value = acceptedValues.length ? (payloadText + '\n') : '';
+                serialTextarea.selectionStart = serialTextarea.selectionEnd = serialTextarea.value.length;
+
+                clearGeneratedHiddenInputs();
+
+                acceptedValues.forEach(function (serial) {
+                    const serialArrayField = document.createElement('input');
+                    serialArrayField.type = 'hidden';
+                    serialArrayField.name = 'serials[]';
+                    serialArrayField.value = serial;
+                    serialArrayField.setAttribute('data-generated-serial-hidden', '1');
+                    form.appendChild(serialArrayField);
+
+                    const serialNumbersArrayField = document.createElement('input');
+                    serialNumbersArrayField.type = 'hidden';
+                    serialNumbersArrayField.name = 'serial_numbers_array[]';
+                    serialNumbersArrayField.value = serial;
+                    serialNumbersArrayField.setAttribute('data-generated-serial-hidden', '1');
+                    form.appendChild(serialNumbersArrayField);
+                });
+            }
+
+            const serialArea = serialTextarea.closest('.mb-3, .form-group, .col-md-12, .col-12, .serial-field, .border, div') || serialTextarea.parentElement;
+            const helper = document.createElement('div');
+            helper.className = 'mt-3 serial-review-wrapper';
+            helper.innerHTML = `
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span class="badge bg-soft-success text-success border border-success-subtle" id="accepted-serial-count">
+                        Accepted serials: 0
+                    </span>
+                    <span class="badge bg-soft-warning text-warning border border-warning-subtle" id="suspicious-serial-count">
+                        Possible wrong barcodes: 0
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="reset-serial-review">
+                        Reset All
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 d-none" id="clear-wrong-barcodes">
+                        Clear Wrong Barcodes
+                    </button>
+                </div>
+
+                <div class="text-secondary small mb-2">
+                    Scan serials normally. If this item already has serial history, the existing database serial format is used as the trusted baseline. Pure numeric/product barcodes and suspicious scans will be placed in review and will not be submitted unless you manually accept them.
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <div class="border rounded-3 p-3 h-100 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-semibold text-success">Accepted Serials</div>
+                                <small class="text-secondary">Submitted on save</small>
+                            </div>
+                            <div id="accepted-serial-list" class="d-flex flex-column gap-2 small">
+                                <div class="text-secondary">No accepted serials yet.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="border rounded-3 p-3 h-100 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-semibold text-warning">Possible Wrong Barcodes</div>
+                                <small class="text-secondary">Not submitted</small>
+                            </div>
+                            <div id="suspicious-serial-list" class="d-flex flex-column gap-2 small">
+                                <div class="text-secondary">No wrong barcodes detected.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-danger small mt-2 d-none" id="serial-review-message"></div>
+            `;
+            serialArea.appendChild(helper);
+
+            const acceptedCountBadge = helper.querySelector('#accepted-serial-count');
+            const suspiciousCountBadge = helper.querySelector('#suspicious-serial-count');
+            const acceptedList = helper.querySelector('#accepted-serial-list');
+            const suspiciousList = helper.querySelector('#suspicious-serial-list');
+            const resetButton = helper.querySelector('#reset-serial-review');
+            const clearWrongButton = helper.querySelector('#clear-wrong-barcodes');
+            const reviewMessage = helper.querySelector('#serial-review-message');
+
+            let acceptedSerials = [];
+            let suspiciousScans = [];
+            let duplicateScans = [];
+            let debounceTimer = null;
+            let isRendering = false;
+
+            function normalizeSerial(value) {
+                return String(value || '')
+                    .trim()
+                    .replace(/[\u2010-\u2015]/g, '-')
+                    .replace(/\s+/g, '')
+                    .toUpperCase();
+            }
+
+            function serialKey(value) {
+                return normalizeSerial(value);
+            }
+
+            function hasAccepted(serial) {
+                const key = serialKey(serial);
+                return acceptedSerials.some(item => item.key === key);
+            }
+
+            function hasSuspicious(serial) {
+                const key = serialKey(serial);
+                return suspiciousScans.some(item => item.key === key);
+            }
+
+            function addDuplicate(serial) {
+                const key = serialKey(serial);
+                if (!duplicateScans.some(item => item.key === key)) {
+                    duplicateScans.push({ key: key, serial: key });
+                }
+            }
+
+            const wmcExistingSerialBaselines = @json($wmcExistingSerialBaselines ?? []);
+
+            function wmcVisiblePageText() {
+                return (document.body ? document.body.innerText : '').toLowerCase();
+            }
+
+            function wmcCurrentSelectedItemId() {
+                const selectors = [
+                    '[name="item_id"]',
+                    '#item_id',
+                    '[name="warehouse_item_id"]',
+                    '#warehouse_item_id',
+                    '[name="po_item_id"]',
+                    '#po_item_id',
+                    '[data-selected-item-id]',
+                    '[data-item-id]'
+                ];
+
+                for (const selector of selectors) {
+                    const el = document.querySelector(selector);
+                    if (!el) continue;
+
+                    const value = el.value || el.getAttribute('data-selected-item-id') || el.getAttribute('data-item-id');
+                    if (value && /^\d+$/.test(String(value))) {
+                        return String(value);
+                    }
+                }
+
+                const pageText = wmcVisiblePageText();
+
+                const matched = [...wmcExistingSerialBaselines]
+                    .filter(row => {
+                        const code = String(row.item_code || '').toLowerCase().trim();
+                        const name = String(row.item_name || '').toLowerCase().trim();
+
+                        if (code && pageText.includes(code)) return true;
+                        if (name && name.length >= 5 && pageText.includes(name)) return true;
+
+                        return false;
+                    })
+                    .sort((a, b) => String(b.item_name || '').length - String(a.item_name || '').length)[0];
+
+                return matched ? String(matched.item_id) : null;
+            }
+
+            function wmcSerialSamplesForCurrentItem() {
+                const itemId = wmcCurrentSelectedItemId();
+
+                if (!itemId) {
+                    return [];
+                }
+
+                const baseline = wmcExistingSerialBaselines.find(row => String(row.item_id) === String(itemId));
+
+                if (!baseline || !Array.isArray(baseline.samples)) {
+                    return [];
+                }
+
+                return baseline.samples
+                    .map(normalizeSerial)
+                    .filter(Boolean)
+                    .slice(0, 20);
+            }
+
+            function wmcMostCommon(values) {
+                const counts = {};
+
+                values.forEach(value => {
+                    counts[value] = (counts[value] || 0) + 1;
+                });
+
+                return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || null;
+            }
+
+            function wmcSerialShape(serial) {
+                const clean = normalizeSerial(serial);
+
+                return {
+                    length: clean.length,
+                    startsWithLetter: /^[A-Z]/.test(clean),
+                    startsWithNumber: /^\d/.test(clean),
+                    prefixLetters: (clean.match(/^[A-Z]+/) || [''])[0],
+                    hasLetters: /[A-Z]/.test(clean),
+                    hasNumbers: /\d/.test(clean)
+                };
+            }
+
+            function wmcIsExistingDbSerialForCurrentItem(clean) {
+                const samples = wmcSerialSamplesForCurrentItem();
+                const key = normalizeSerial(clean);
+
+                if (!key || !samples.length) {
+                    return false;
+                }
+
+                return samples.some(function (sample) {
+                    return normalizeSerial(sample) === key;
+                });
+            }
+            function wmcCheckAgainstDbBaseline(clean) {
+                const samples = wmcSerialSamplesForCurrentItem();
+
+                if (!samples.length) {
+                    return { ok: true, reason: '' };
+                }
+
+                const shapes = samples.map(wmcSerialShape);
+                const lengths = shapes.map(shape => shape.length);
+                const avgLength = lengths.reduce((sum, value) => sum + value, 0) / Math.max(1, lengths.length);
+
+                const minLength = Math.max(4, Math.floor(avgLength - 8));
+                const maxLength = Math.min(80, Math.ceil(avgLength + 8));
+
+                if (clean.length < minLength || clean.length > maxLength) {
+                    return { ok: false, reason: 'Length differs from existing item serial format' };
+                }
+
+                const letterStartCount = shapes.filter(shape => shape.startsWithLetter).length;
+                const numberStartCount = shapes.filter(shape => shape.startsWithNumber).length;
+
+                if (letterStartCount >= Math.ceil(samples.length * 0.6) && /^\d/.test(clean)) {
+                    return { ok: false, reason: 'Starts differently from existing item serial format' };
+                }
+
+                if (numberStartCount >= Math.ceil(samples.length * 0.6) && /^[A-Z]/.test(clean)) {
+                    return { ok: false, reason: 'Starts differently from existing item serial format' };
+                }
+
+                const commonPrefix = wmcMostCommon(
+                    shapes
+                        .map(shape => shape.prefixLetters)
+                        .filter(prefix => prefix && prefix.length >= 2)
+                );
+
+                if (commonPrefix && /^[A-Z]/.test(clean) && !clean.startsWith(commonPrefix.slice(0, 2))) {
+                    return { ok: false, reason: 'Prefix differs from existing item serial format' };
+                }
+
+                return { ok: true, reason: '' };
+            }
+
+            function classifyScan(serial) {
+                const clean = normalizeSerial(serial);
+
+                if (!clean) {
+                    return { type: 'empty', reason: '' };
+                }
+
+                if (clean.length < 4) {
+                    return { type: 'suspicious', reason: 'Too short to be a serial number' };
+                }
+
+                if (clean.length > 80) {
+                    return { type: 'suspicious', reason: 'Too long to be a serial number' };
+                }
+
+                if (!/^[A-Z0-9._\/-]+$/.test(clean)) {
+                    return { type: 'suspicious', reason: 'Contains unsupported characters' };
+                }
+
+                if (/^\d+$/.test(clean)) {
+                    return { type: 'suspicious', reason: 'Pure numeric product/price barcode' };
+                }
+
+                if (!/[A-Z]/.test(clean) || !/\d/.test(clean)) {
+                    return { type: 'suspicious', reason: 'Serial should contain both letters and numbers' };
+                }
+
+                if (wmcIsExistingDbSerialForCurrentItem(clean)) {
+                    return { type: 'suspicious', reason: 'Serial already exists for this item' };
+                }
+
+                const dbBaselineCheck = wmcCheckAgainstDbBaseline(clean);
+                if (!dbBaselineCheck.ok) {
+                    return { type: 'suspicious', reason: dbBaselineCheck.reason };
+                }
+
+                const firstAccepted = acceptedSerials[0]?.serial || null;
+                if (firstAccepted) {
+                    const minLength = Math.max(4, firstAccepted.length - 8);
+                    const maxLength = Math.min(80, firstAccepted.length + 8);
+
+                    if (clean.length < minLength || clean.length > maxLength) {
+                        return { type: 'suspicious', reason: 'Length differs from accepted serials' };
+                    }
+
+                    // If first accepted serial starts with a letter and this one starts with a number,
+                    // mark for review instead of submitting. The user can still manually accept it.
+                    if (/^[A-Z]/.test(firstAccepted) && /^\d/.test(clean)) {
+                        return { type: 'suspicious', reason: 'Starts differently from accepted serials' };
+                    }
+                } else if (/^\d/.test(clean)) {
+                    return { type: 'suspicious', reason: 'Starts with number; review before accepting' };
+                }
+
+                return { type: 'accepted', reason: '' };
+            }
+
+            function addAccepted(serial, fromManualReview = false) {
+                const clean = normalizeSerial(serial);
+                if (!clean) return;
+
+                if (hasAccepted(clean)) {
+                    addDuplicate(clean);
+                    return;
+                }
+
+                acceptedSerials.push({ key: serialKey(clean), serial: clean });
+
+                if (fromManualReview) {
+                    suspiciousScans = suspiciousScans.filter(item => item.key !== serialKey(clean));
+                }
+            }
+
+            function addSuspicious(serial, reason) {
+                const clean = normalizeSerial(serial);
+                if (!clean) return;
+
+                if (hasAccepted(clean) || hasSuspicious(clean)) {
+                    if (hasAccepted(clean)) addDuplicate(clean);
+                    return;
+                }
+
+                suspiciousScans.push({ key: serialKey(clean), serial: clean, reason: reason || 'Needs review' });
+            }
+
+            function parseTokens(rawValue) {
+                return String(rawValue || '')
+                    .split(/\r?\n|,|;/)
+                    .map(normalizeSerial)
+                    .filter(Boolean);
+            }
+
+            function setQuantity(count) {
+                if (!quantityInput) return;
+                quantityInput.value = count > 0 ? count : '';
+                quantityInput.dispatchEvent(new Event('input', { bubbles: true }));
+                quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function renderReview() {
+                isRendering = true;
+
+                serialTextarea.value = acceptedSerials.map(item => item.serial).join('\n');
+                if (acceptedSerials.length) {
+                    serialTextarea.value += '\n';
+                }
+                serialTextarea.selectionStart = serialTextarea.selectionEnd = serialTextarea.value.length;
+
+                acceptedCountBadge.textContent = 'Accepted serials: ' + acceptedSerials.length;
+                suspiciousCountBadge.textContent = 'Possible wrong barcodes: ' + suspiciousScans.length;
+
+                setQuantity(acceptedSerials.length);
+                syncSubmittedSerials();
+
+                if (acceptedSerials.length) {
+                    acceptedList.innerHTML = acceptedSerials.map(function (item, index) {
+                        return `
+                            <div class="d-flex justify-content-between align-items-center gap-2 border rounded-2 px-2 py-1 bg-light">
+                                <span class="fw-semibold text-break">${escapeHtml(item.serial)}</span>
+                                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" data-remove-accepted="${index}">Remove</button>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    acceptedList.innerHTML = '<div class="text-secondary">No accepted serials yet.</div>';
+                }
+
+                if (suspiciousScans.length) {
+                    suspiciousList.innerHTML = suspiciousScans.map(function (item, index) {
+                        return `
+                            <div class="border rounded-2 px-2 py-2 bg-light">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <div class="fw-semibold text-break text-warning">${escapeHtml(item.serial)}</div>
+                                        <div class="text-secondary">${escapeHtml(item.reason)}</div>
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-1 justify-content-end">
+                                        <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" data-accept-suspicious="${index}">Accept</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" data-remove-suspicious="${index}">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    suspiciousList.innerHTML = '<div class="text-secondary">No wrong barcodes detected.</div>';
+                }
+
+                clearWrongButton.classList.toggle('d-none', suspiciousScans.length === 0);
+
+                if (duplicateScans.length) {
+                    reviewMessage.innerHTML = 'Duplicate scan(s) ignored: ' + duplicateScans.slice(0, 5).map(item => escapeHtml(item.serial)).join(', ') + (duplicateScans.length > 5 ? ' +' + (duplicateScans.length - 5) + ' more' : '');
+                    reviewMessage.classList.remove('d-none');
+                } else {
+                    reviewMessage.textContent = '';
+                    reviewMessage.classList.add('d-none');
+                }
+
+                isRendering = false;
+            }
+
+            function processScans(force = false) {
+                if (isRendering) return;
+
+                const rawValue = serialTextarea.value;
+                const tokens = parseTokens(rawValue);
+
+                if (!force && tokens.length === 0) {
+                    return;
+                }
+
+                duplicateScans = [];
+
+                tokens.forEach(function (token) {
+                    if (hasAccepted(token) || hasSuspicious(token)) {
+                        // Existing accepted/suspicious lines are already displayed in the
+                        // textarea. Do not treat them as new duplicate scans every time
+                        // the barcode gun appends the next value on the blank line.
+                        return;
+                    }
+
+                    const result = classifyScan(token);
+                    if (result.type === 'accepted') {
+                        addAccepted(token);
+                    } else if (result.type === 'suspicious') {
+                        addSuspicious(token, result.reason);
+                    }
+                });
+
+                renderReview();
+            }
+
+            serialTextarea.addEventListener('input', function () {
+                if (isRendering) return;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function () {
+                    processScans(false);
+                }, 450);
+            });
+
+            serialTextarea.addEventListener('paste', function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function () {
+                    processScans(true);
+                }, 80);
+            });
+
+            serialTextarea.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(function () {
+                        processScans(true);
+                    }, 20);
+                }
+            });
+
+            acceptedList.addEventListener('click', function (event) {
+                const button = event.target.closest('[data-remove-accepted]');
+                if (!button) return;
+
+                const index = parseInt(button.getAttribute('data-remove-accepted'), 10);
+                if (!Number.isNaN(index)) {
+                    acceptedSerials.splice(index, 1);
+                    duplicateScans = [];
+                    renderReview();
+                    serialTextarea.focus();
+                }
+            });
+
+            suspiciousList.addEventListener('click', function (event) {
+                const acceptButton = event.target.closest('[data-accept-suspicious]');
+                const removeButton = event.target.closest('[data-remove-suspicious]');
+
+                if (acceptButton) {
+                    const index = parseInt(acceptButton.getAttribute('data-accept-suspicious'), 10);
+                    const item = suspiciousScans[index];
+                    if (item) {
+                        addAccepted(item.serial, true);
+                        duplicateScans = [];
+                        renderReview();
+                        serialTextarea.focus();
+                    }
+                    return;
+                }
+
+                if (removeButton) {
+                    const index = parseInt(removeButton.getAttribute('data-remove-suspicious'), 10);
+                    if (!Number.isNaN(index)) {
+                        suspiciousScans.splice(index, 1);
+                        duplicateScans = [];
+                        renderReview();
+                        serialTextarea.focus();
+                    }
+                }
+            });
+
+            clearWrongButton.addEventListener('click', function () {
+                suspiciousScans = [];
+                duplicateScans = [];
+                renderReview();
+                serialTextarea.focus();
+            });
+
+            resetButton.addEventListener('click', function () {
+                acceptedSerials = [];
+                suspiciousScans = [];
+                duplicateScans = [];
+                renderReview();
+                serialTextarea.focus();
+            });
+
+            form.addEventListener('submit', function (event) {
+                processScans(true);
+
+                if (serialTextarea.offsetParent !== null && acceptedSerials.length === 0) {
+                    event.preventDefault();
+                    reviewMessage.textContent = 'Please scan or accept at least one valid serial number first.';
+                    reviewMessage.classList.remove('d-none');
+                    serialTextarea.focus();
+                    return;
+                }
+
+                // Only accepted serials are submitted. This prevents the backend from
+                // receiving an empty serial field and falling back to auto-generated
+                // serials such as TPL8P-001, TPL8P-002, etc.
+                syncSubmittedSerials();
+            });
+
+            // Load old input / prefilled serials, if any.
+            processScans(true);
+        });
+    </script>
+
+    {{-- stockin-standalone-picker-thumbnail-pagination-start --}}
+    @php
+        $wmcStockInPickerItems = collect();
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('warehouse_items')) {
+                $wiCols = \Illuminate\Support\Facades\Schema::getColumnListing('warehouse_items');
+
+                $codeColumn = in_array('item_code', $wiCols) ? 'item_code' : (in_array('code', $wiCols) ? 'code' : 'id');
+                $nameColumn = in_array('item_name', $wiCols) ? 'item_name' : (in_array('name', $wiCols) ? 'name' : null);
+                $imageColumn = in_array('image_path', $wiCols) ? 'image_path' : (in_array('photo', $wiCols) ? 'photo' : (in_array('image', $wiCols) ? 'image' : null));
+                $serializedColumn = in_array('is_serialized', $wiCols) ? 'is_serialized' : null;
+
+                $categoryJoin = false;
+                $categoryNameColumn = null;
+                if (in_array('category_id', $wiCols) && \Illuminate\Support\Facades\Schema::hasTable('warehouse_categories')) {
+                    $catCols = \Illuminate\Support\Facades\Schema::getColumnListing('warehouse_categories');
+                    $categoryNameColumn = in_array('name', $catCols) ? 'name' : (in_array('category_name', $catCols) ? 'category_name' : null);
+                    $categoryJoin = $categoryNameColumn !== null;
+                }
+
+                $unitJoin = false;
+                $unitNameColumn = null;
+                if (in_array('unit_id', $wiCols) && \Illuminate\Support\Facades\Schema::hasTable('warehouse_units')) {
+                    $unitCols = \Illuminate\Support\Facades\Schema::getColumnListing('warehouse_units');
+                    $unitNameColumn = in_array('name', $unitCols) ? 'name' : (in_array('unit_name', $unitCols) ? 'unit_name' : null);
+                    $unitJoin = $unitNameColumn !== null;
+                }
+
+                $query = \Illuminate\Support\Facades\DB::table('warehouse_items as wi');
+
+                if ($categoryJoin) {
+                    $query->leftJoin('warehouse_categories as wc', 'wc.id', '=', 'wi.category_id');
+                }
+
+                if ($unitJoin) {
+                    $query->leftJoin('warehouse_units as wu', 'wu.id', '=', 'wi.unit_id');
+                }
+
+                $select = [
+                    'wi.id',
+                    "wi.{$codeColumn} as code",
+                ];
+
+                if ($nameColumn) {
+                    $select[] = "wi.{$nameColumn} as name";
+                } else {
+                    $select[] = \Illuminate\Support\Facades\DB::raw("'' as name");
+                }
+
+                if ($imageColumn) {
+                    $select[] = "wi.{$imageColumn} as image_path";
+                } else {
+                    $select[] = \Illuminate\Support\Facades\DB::raw("null as image_path");
+                }
+
+                if ($serializedColumn) {
+                    $select[] = "wi.{$serializedColumn} as is_serialized";
+                } else {
+                    $select[] = \Illuminate\Support\Facades\DB::raw("false as is_serialized");
+                }
+
+                if ($categoryJoin) {
+                    $select[] = "wc.{$categoryNameColumn} as category_name";
+                } else {
+                    $select[] = \Illuminate\Support\Facades\DB::raw("'-' as category_name");
+                }
+
+                if ($unitJoin) {
+                    $select[] = "wu.{$unitNameColumn} as unit_name";
+                } else {
+                    $select[] = \Illuminate\Support\Facades\DB::raw("'-' as unit_name");
+                }
+
+                $wmcStockInPickerItems = $query
+                    ->select($select)
+                    ->orderBy("wi.{$codeColumn}")
+                    ->limit(5000)
+                    ->get()
+                    ->map(function ($item) {
+                        $image = $item->image_path ?? null;
+                        $imagePrimary = null;
+                        $imageFallback = null;
+                        $imageStorage = null;
+
+                        if ($image) {
+                            $cleanImage = ltrim($image, '/');
+
+                            if (str_starts_with($cleanImage, 'http')) {
+                                $imagePrimary = $cleanImage;
+                                $imageFallback = $cleanImage;
+                                $imageStorage = $cleanImage;
+                            } else {
+                                // Try all common Laravel/public paths. Existing item details often uses one of these.
+                                $imagePrimary = asset($cleanImage);
+                                $imageFallback = asset('storage/' . $cleanImage);
+
+                                try {
+                                    $imageStorage = \Illuminate\Support\Facades\Storage::url($cleanImage);
+                                } catch (\Throwable $e) {
+                                    $imageStorage = $imageFallback;
+                                }
+                            }
+                        }
+
+                        return [
+                            'id' => (string) $item->id,
+                            'code' => (string) ($item->code ?? ''),
+                            'name' => (string) ($item->name ?? ''),
+                            'category' => (string) ($item->category_name ?? '-'),
+                            'unit' => (string) ($item->unit_name ?? '-'),
+                            'is_serialized' => (bool) ($item->is_serialized ?? false),
+                            'image_url' => $imagePrimary,
+                            'image_fallback_url' => $imageFallback,
+                            'image_storage_url' => $imageStorage,
+                            'search' => strtolower(trim(($item->code ?? '') . ' ' . ($item->name ?? '') . ' ' . ($item->category_name ?? '') . ' ' . ($item->unit_name ?? ''))),
+                        ];
+                    });
+            }
+        } catch (\Throwable $e) {
+            $wmcStockInPickerItems = collect();
+        }
+    @endphp
+
+    <script>
+        window.WMC_STOCKIN_PICKER_ITEMS = @json($wmcStockInPickerItems);
+        console.log('StockIn picker DB items loaded:', window.WMC_STOCKIN_PICKER_ITEMS.length, window.WMC_STOCKIN_PICKER_ITEMS);
+    </script>
+
+    <div id="stockInStandalonePickerOverlay" class="stockin-picker-overlay" aria-hidden="true">
+        <div class="stockin-picker-modal" role="dialog" aria-modal="true">
+            <div class="stockin-picker-header">
+                <div>
+                    <h5 class="stockin-picker-title">Select Warehouse Item</h5>
+                    <div class="stockin-picker-subtitle">Stock In mode: choose item only. Existing serial review stays preserved.</div>
+                </div>
+                <button type="button" class="stockin-picker-close" id="stockInPickerCloseBtn">&times;</button>
+            </div>
+
+            <div class="stockin-picker-toolbar">
+                <div>
+                    <label class="stockin-picker-label">Search</label>
+                    <input type="text" id="stockInPickerSearch" class="form-control" placeholder="Search item code, name, category, unit...">
+                </div>
+                <div>
+                    <label class="stockin-picker-label">Selected Location</label>
+                    <div id="stockInPickerDestination" class="stockin-picker-destination">-</div>
+                </div>
+            </div>
+
+            <div class="stockin-picker-count-row">
+                <span id="stockInPickerCountText">Showing 0 item(s)</span>
+                <span class="text-muted">20 items per page</span>
+            </div>
+
+            <div class="stockin-picker-body">
+                <div class="table-responsive stockin-picker-table-wrap">
+                    <table class="table align-middle mb-0 stockin-picker-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th style="width: 150px;">Category</th>
+                                <th style="width: 120px;">Type</th>
+                                <th style="width: 120px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockInPickerRows">
+                            <tr>
+                                <td colspan="4" class="text-muted py-4 text-center">Loading items...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="stockin-picker-pagination">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="stockInPickerPrev">Previous</button>
+                    <span id="stockInPickerPageText" class="small text-muted">Page 1 of 1</span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="stockInPickerNext">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="stockInImagePreviewOverlay" class="stockin-image-preview-overlay" aria-hidden="true">
+        <div class="stockin-image-preview-panel">
+            <button type="button" class="stockin-image-preview-close" id="stockInImagePreviewClose">&times;</button>
+            <div class="stockin-image-preview-header">
+                <div class="stockin-image-preview-title">Item Photo Preview</div>
+                <div class="stockin-image-preview-subtitle" id="stockInImagePreviewTitle">Warehouse Item</div>
+            </div>
+            <div class="stockin-image-preview-body">
+                <img id="stockInImagePreviewImg" src="" alt="Item photo preview">
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        var perPage = 20;
+        var currentPage = 1;
+        var filteredItems = [];
+
+        function qs(s, r) { return (r || document).querySelector(s); }
+        function qsa(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+        function onPage() { return location.pathname.indexOf('/warehouse/stock-in') !== -1; }
+        function lower(el) { return el ? (el.textContent || '').trim().toLowerCase() : ''; }
+
+        function esc(str) {
+            return String(str || '').replace(/[&<>"']/g, function (m) {
+                return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m];
+            });
+        }
+
+        function wrap(el) {
+            return el ? (el.closest('.form-group,.mb-3,.col-md-6,.col-md-4,.col,.row,div') || el.parentElement) : null;
+        }
+
+        function labelNear(el) {
+            var w = wrap(el);
+            var label = w ? qs('label', w) : null;
+            return lower(label);
+        }
+
+        function findLocationSelect() {
+            return qsa('select').find(function (sel) {
+                var name = (sel.name || '').toLowerCase();
+                var id = (sel.id || '').toLowerCase();
+                var label = labelNear(sel);
+                var combo = name + ' ' + id + ' ' + label;
+
+                return (combo.indexOf('location') !== -1 || combo.indexOf('warehouse') !== -1)
+                    && combo.indexOf('item') === -1
+                    && combo.indexOf('product') === -1
+                    && combo.indexOf('supplier') === -1;
+            });
+        }
+
+        function locationReady() {
+            var loc = findLocationSelect();
+            return !loc || !!loc.value;
+        }
+
+        function selectedLocationText() {
+            var loc = findLocationSelect();
+            if (loc && loc.value && loc.options[loc.selectedIndex]) {
+                return loc.options[loc.selectedIndex].textContent.trim();
+            }
+            return '-';
+        }
+
+        function findItemSelect() {
+            var labels = qsa('label');
+
+            for (var i = 0; i < labels.length; i++) {
+                var t = lower(labels[i]);
+
+                if (t === 'item' || t.indexOf('item') !== -1 || t.indexOf('product') !== -1) {
+                    var fid = labels[i].getAttribute('for');
+
+                    if (fid) {
+                        var byFor = qs('#' + CSS.escape(fid));
+                        if (byFor && byFor.tagName && byFor.tagName.toLowerCase() === 'select') return byFor;
+                    }
+
+                    var w = wrap(labels[i]);
+                    if (w) {
+                        var s = qs('select', w);
+                        if (s) return s;
+                    }
+                }
+            }
+
+            return qsa('select').find(function (sel) {
+                var name = (sel.name || '').toLowerCase();
+                var id = (sel.id || '').toLowerCase();
+                var label = labelNear(sel);
+                var options = lower(sel);
+                var combo = name + ' ' + id + ' ' + label;
+
+                if (combo.indexOf('location') !== -1 || combo.indexOf('warehouse') !== -1) return false;
+                if (combo.indexOf('branch') !== -1 || combo.indexOf('supplier') !== -1 || combo.indexOf('status') !== -1) return false;
+
+                return combo.indexOf('item') !== -1 || combo.indexOf('product') !== -1 || options.indexOf('item-') !== -1;
+            });
+        }
+
+        function hideSelectAndSelect2(sel) {
+            if (!sel) return;
+
+            sel.style.display = 'none';
+            sel.classList.add('d-none');
+
+            if (sel.id) {
+                var c = qs('#select2-' + sel.id + '-container');
+                if (c) {
+                    var box = c.closest('.select2,.select2-container');
+                    if (box) {
+                        box.style.display = 'none';
+                        box.classList.add('d-none');
+                    }
+                }
+            }
+
+            var parent = sel.parentElement;
+            if (parent) {
+                qsa('.select2,.select2-container', parent).forEach(function (el) {
+                    el.style.display = 'none';
+                    el.classList.add('d-none');
+                });
+            }
+        }
+
+        function itemById(id) {
+            return getItems().find(function (item) {
+                return String(item.id) === String(id);
+            });
+        }
+
+        function optionItemsFallback() {
+            var sel = findItemSelect();
+            if (!sel) return [];
+
+            return qsa('option', sel).map(function (opt) {
+                var text = (opt.textContent || '').trim();
+                var type = text.toLowerCase().indexOf('serial') !== -1 ? true : false;
+
+                return {
+                    id: String(opt.value || ''),
+                    code: text.split('-')[0] ? text.split('-')[0].trim() : text,
+                    name: text,
+                    category: '-',
+                    unit: '',
+                    is_serialized: type,
+                    image_url: null,
+                    search: text.toLowerCase()
+                };
+            }).filter(function (item) {
+                return item.id && item.name;
+            });
+        }
+
+        function getItems() {
+            var dbItems = Array.isArray(window.WMC_STOCKIN_PICKER_ITEMS) ? window.WMC_STOCKIN_PICKER_ITEMS : [];
+            var items = dbItems.length ? dbItems : optionItemsFallback();
+
+            var mode = document.getElementById('po_stock_in_type');
+            var allowed = Array.isArray(window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS) ? window.WMC_STOCKIN_PO_ALLOWED_ITEM_IDS.map(String) : [];
+
+            if (mode && mode.value === 'purchase_order' && allowed.length) {
+                items = items.filter(function (item) {
+                    return allowed.indexOf(String(item.id || '')) !== -1;
+                });
+            }
+
+            return items;
+        }
+
+        function stockInIsPoMode() {
+            var mode = document.getElementById('po_stock_in_type');
+            return !!(mode && mode.value === 'purchase_order');
+        }
+
+        function syncPickerModeUi() {
+            var isPo = stockInIsPoMode();
+            var btn = qs('#stockInOpenPickerBtn');
+            var summary = qs('#stockInPickerSummary');
+            var help = qs('#stockInPickerHelpText');
+            var itemSelect = findItemSelect();
+            var label = itemSelect ? itemSelect.closest('.col-md-6, .col-md-5, .col-md-4, .col-lg-6, .col-lg-4, .col-12, .mb-3, .form-group')?.querySelector('label.form-label') : null;
+
+            if (btn) {
+                btn.textContent = isPo ? 'Search / Select PO Item' : 'Search / Select Item';
+            }
+
+            if (help) {
+                help.textContent = isPo
+                    ? 'Only items from the selected Purchase Order will be listed. Select PO first, then choose the delivered item here.'
+                    : 'Select Location first, then choose item. Existing Stock In serial review is preserved.';
+            }
+
+            if (label) {
+                label.textContent = isPo ? 'PO Item' : 'Item';
+            }
+
+            if (summary && !summary.dataset.hasSelectedItem) {
+                summary.textContent = isPo ? 'No PO item selected.' : 'No item selected.';
+            }
+        }
+
+        window.WMC_STOCKIN_SYNC_PICKER_MODE_UI = syncPickerModeUi;
+
+        function ensureVisibleBox(itemSelect) {
+            if (!itemSelect || itemSelect.dataset.stockInStandaloneThumbReady === '1') return;
+
+            itemSelect.dataset.stockInStandaloneThumbReady = '1';
+            hideSelectAndSelect2(itemSelect);
+
+            var box = document.createElement('div');
+            box.id = 'stockInPickerVisibleBox';
+            box.className = 'stockin-picker-visible-box';
+            box.innerHTML =
+                '<div id="stockInPickerSummary" class="stockin-picker-summary text-muted">No item selected.</div>' +
+                '<button type="button" id="stockInOpenPickerBtn" class="btn btn-outline-primary btn-sm mt-2 stockin-open-picker-btn">Search / Select Item</button>' +
+                '<div id="stockInPickerHelpText" class="small text-muted mt-1">Select Location first, then choose item. Existing Stock In serial review is preserved.</div>';
+
+            itemSelect.parentElement.insertBefore(box, itemSelect);
+            syncPickerModeUi();
+
+            var btn = qs('#stockInOpenPickerBtn', box);
+            if (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (stockInIsPoMode()) {
+                        var poSelect = document.getElementById('po_select');
+                        if (!poSelect || !poSelect.value) {
+                            alert('Please select Purchase Order first.');
+                            if (poSelect) poSelect.focus();
+                            return;
+                        }
+                    }
+
+                    if (!locationReady()) {
+                        alert('Please select Location first before selecting an item.');
+                        var loc = findLocationSelect();
+                        if (loc) loc.focus();
+                        return;
+                    }
+
+                    openStandaloneModal();
+                });
+            }
+        }
+
+        function imageHtml(item, sizeClass) {
+            if (item && (item.image_url || item.image_fallback_url || item.image_storage_url)) {
+                var src = item.image_url || item.image_fallback_url || item.image_storage_url || '';
+                var fallback = item.image_fallback_url || item.image_storage_url || item.image_url || '';
+                var storage = item.image_storage_url || item.image_fallback_url || item.image_url || '';
+
+                return '<button type="button" class="stockin-thumb-btn ' + sizeClass + '" data-preview-src="' + esc(src) + '" data-preview-fallback="' + esc(fallback) + '" data-preview-storage="' + esc(storage) + '" data-preview-title="' + esc((item.code || '') + ' - ' + (item.name || '')) + '">' +
+                    '<img src="' + esc(src) + '" data-fallback="' + esc(fallback) + '" data-storage="' + esc(storage) + '" alt="" onerror="window.stockInThumbFallback && window.stockInThumbFallback(this)">' +
+                    '<span>Zoom</span>' +
+                '</button>';
+            }
+
+            return '<div class="stockin-thumb-empty ' + sizeClass + '">No Photo</div>';
+        }
+
+        window.stockInThumbFallback = window.stockInThumbFallback || function (img) {
+            if (!img) return;
+
+            var current = img.getAttribute('src') || '';
+            var fallback = img.getAttribute('data-fallback') || '';
+            var storage = img.getAttribute('data-storage') || '';
+
+            if (fallback && current !== fallback && img.dataset.triedFallback !== '1') {
+                img.dataset.triedFallback = '1';
+                img.src = fallback;
+
+                var btn = img.closest('.stockin-thumb-btn');
+                if (btn) btn.setAttribute('data-preview-src', fallback);
+
+                return;
+            }
+
+            if (storage && current !== storage && img.dataset.triedStorage !== '1') {
+                img.dataset.triedStorage = '1';
+                img.src = storage;
+
+                var btn2 = img.closest('.stockin-thumb-btn');
+                if (btn2) btn2.setAttribute('data-preview-src', storage);
+
+                return;
+            }
+
+            var box = img.closest('.stockin-thumb-btn');
+            if (box) {
+                box.outerHTML = '<div class="stockin-thumb-empty ' + Array.from(box.classList).filter(function(c){ return c.indexOf('stockin-thumb-') === 0 && c !== 'stockin-thumb-btn'; }).join(' ') + '">No Photo</div>';
+            }
+        };
+
+        function applyFilter() {
+            var search = (qs('#stockInPickerSearch') ? qs('#stockInPickerSearch').value : '').trim().toLowerCase();
+            var items = getItems();
+
+            filteredItems = items.filter(function (item) {
+                var haystack = item.search || ((item.code || '') + ' ' + (item.name || '') + ' ' + (item.category || '') + ' ' + (item.unit || '')).toLowerCase();
+                return !search || haystack.indexOf(search) !== -1;
+            });
+
+            currentPage = 1;
+            renderRows();
+        }
+
+        function renderRows() {
+            var tbody = qs('#stockInPickerRows');
+            var count = qs('#stockInPickerCountText');
+            var pageText = qs('#stockInPickerPageText');
+            var prev = qs('#stockInPickerPrev');
+            var next = qs('#stockInPickerNext');
+
+            if (!tbody) return;
+
+            var total = filteredItems.length;
+            var pages = Math.max(1, Math.ceil(total / perPage));
+
+            if (currentPage > pages) currentPage = pages;
+            if (currentPage < 1) currentPage = 1;
+
+            var start = (currentPage - 1) * perPage;
+            var pageItems = filteredItems.slice(start, start + perPage);
+
+            if (count) {
+                if (total) {
+                    count.textContent = 'Showing ' + (start + 1) + '-' + (start + pageItems.length) + ' of ' + total + ' item(s)';
+                } else {
+                    count.textContent = 'Showing 0 item(s)';
+                }
+            }
+
+            if (pageText) pageText.textContent = 'Page ' + currentPage + ' of ' + pages;
+            if (prev) prev.disabled = currentPage <= 1;
+            if (next) next.disabled = currentPage >= pages;
+
+            if (!pageItems.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-muted py-4 text-center">No item found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = pageItems.map(function (item) {
+                var type = item.is_serialized ? 'Serialized' : 'Regular / Item';
+
+                return '' +
+                    '<tr>' +
+                        '<td>' +
+                            '<div class="stockin-picker-item-cell">' +
+                                imageHtml(item, 'stockin-thumb-list') +
+                                '<div class="min-w-0">' +
+                                    '<div class="fw-semibold text-dark">' + esc(item.code || '') + ' - ' + esc(item.name || '') + '</div>' +
+                                    '<div class="small text-muted">Unit: ' + esc(item.unit || '-') + '</div>' +
+                                    '<div class="small text-muted">Receiving to: ' + esc(selectedLocationText()) + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</td>' +
+                        '<td>' + esc(item.category || '-') + '</td>' +
+                        '<td><span class="badge ' + (item.is_serialized ? 'bg-soft-primary text-primary' : 'bg-soft-secondary text-secondary') + '">' + type + '</span></td>' +
+                        '<td><button type="button" class="btn btn-primary btn-sm stockin-pick-item-btn" data-value="' + esc(item.id) + '">Use Item</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function openStandaloneModal() {
+            var overlay = qs('#stockInStandalonePickerOverlay');
+            if (!overlay) return;
+
+            qs('#stockInPickerDestination').textContent = selectedLocationText();
+
+            var search = qs('#stockInPickerSearch');
+            if (search) search.value = '';
+
+            filteredItems = getItems().slice();
+            currentPage = 1;
+            renderRows();
+
+            overlay.classList.add('show');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('modal-open');
+            document.body.style.overflow = 'hidden';
+
+            setTimeout(function () {
+                if (search) search.focus();
+            }, 100);
+        }
+
+        window.WMC_STOCKIN_OPEN_PICKER = openStandaloneModal;
+
+        function closeStandaloneModal() {
+            var overlay = qs('#stockInStandalonePickerOverlay');
+            if (!overlay) return;
+
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+        }
+
+        function chooseItem(value) {
+            var isPoMode = (document.getElementById('po_stock_in_type') && document.getElementById('po_stock_in_type').value === 'purchase_order');
+
+            if (isPoMode && typeof window.WMC_STOCKIN_SELECT_PO_ITEM_BY_WAREHOUSE_ITEM === 'function') {
+                window.WMC_STOCKIN_SELECT_PO_ITEM_BY_WAREHOUSE_ITEM(value);
+            }
+
+            var sel = findItemSelect();
+            if (!sel) return;
+
+            if (!isPoMode) {
+                sel.value = value;
+            }
+
+            if (!isPoMode) {
+                if (window.jQuery) {
+                    window.jQuery(sel).val(value).trigger('change');
+                }
+
+                sel.dispatchEvent(new Event('input', { bubbles: true }));
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            var item = itemById(value);
+
+            if (!item) {
+                var opt = qsa('option', sel).find(function (o) { return String(o.value) === String(value); });
+                item = {
+                    id: value,
+                    code: opt ? opt.textContent.trim() : 'ITEM',
+                    name: '',
+                    category: '-',
+                    unit: '',
+                    is_serialized: opt ? opt.textContent.toLowerCase().indexOf('serial') !== -1 : false,
+                    image_url: null
+                };
+            }
+
+            var summary = qs('#stockInPickerSummary');
+            if (summary) {
+                summary.dataset.hasSelectedItem = '1';
+                summary.innerHTML =
+                    '<div class="stockin-selected-item-summary">' +
+                        imageHtml(item, 'stockin-thumb-selected') +
+                        '<div class="min-w-0 flex-grow-1">' +
+                            '<div class="fw-semibold text-dark text-truncate">' + esc(item.code || '') + ' - ' + esc(item.name || '') + '</div>' +
+                            '<div class="small text-muted text-truncate">' + esc(item.category || '-') + ' | ' + esc(item.unit || '-') + '</div>' +
+                            '<div class="small text-muted text-truncate">Receiving to: ' + esc(selectedLocationText()) + '</div>' +
+                        '</div>' +
+                        '<span class="badge ' + (item.is_serialized ? 'bg-primary' : 'bg-secondary') + '">' + (item.is_serialized ? 'Serialized' : 'Regular') + '</span>' +
+                    '</div>';
+            }
+
+            closeStandaloneModal();
+        }
+
+        function openImagePreview(src, title) {
+            var overlay = qs('#stockInImagePreviewOverlay');
+            var img = qs('#stockInImagePreviewImg');
+            var titleEl = qs('#stockInImagePreviewTitle');
+
+            if (!overlay || !img || !src) return;
+
+            img.src = src;
+            if (titleEl) titleEl.textContent = title || 'Warehouse Item';
+
+            overlay.classList.add('show');
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeImagePreview() {
+            var overlay = qs('#stockInImagePreviewOverlay');
+            if (!overlay) return;
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+
+        function bindStandaloneModal() {
+            var close = qs('#stockInPickerCloseBtn');
+            var overlay = qs('#stockInStandalonePickerOverlay');
+            var search = qs('#stockInPickerSearch');
+            var prev = qs('#stockInPickerPrev');
+            var next = qs('#stockInPickerNext');
+            var previewOverlay = qs('#stockInImagePreviewOverlay');
+            var previewClose = qs('#stockInImagePreviewClose');
+
+            if (close && close.dataset.bound !== '1') {
+                close.dataset.bound = '1';
+                close.addEventListener('click', closeStandaloneModal);
+            }
+
+            if (overlay && overlay.dataset.bound !== '1') {
+                overlay.dataset.bound = '1';
+                overlay.addEventListener('click', function (e) {
+                    if (e.target === overlay) closeStandaloneModal();
+
+                    var pickBtn = e.target.closest('.stockin-pick-item-btn');
+                    if (pickBtn) {
+                        e.preventDefault();
+                        chooseItem(pickBtn.getAttribute('data-value'));
+                    }
+
+                    var thumb = e.target.closest('.stockin-thumb-btn');
+                    if (thumb) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openImagePreview(
+                            thumb.getAttribute('data-preview-src') || thumb.getAttribute('data-preview-fallback') || thumb.getAttribute('data-preview-storage'),
+                            thumb.getAttribute('data-preview-title')
+                        );
+                    }
+                });
+            }
+
+            if (search && search.dataset.bound !== '1') {
+                search.dataset.bound = '1';
+                search.addEventListener('input', applyFilter);
+            }
+
+            if (prev && prev.dataset.bound !== '1') {
+                prev.dataset.bound = '1';
+                prev.addEventListener('click', function () {
+                    currentPage--;
+                    renderRows();
+                });
+            }
+
+            if (next && next.dataset.bound !== '1') {
+                next.dataset.bound = '1';
+                next.addEventListener('click', function () {
+                    currentPage++;
+                    renderRows();
+                });
+            }
+
+            if (previewOverlay && previewOverlay.dataset.bound !== '1') {
+                previewOverlay.dataset.bound = '1';
+                previewOverlay.addEventListener('click', function (e) {
+                    if (e.target === previewOverlay) closeImagePreview();
+                });
+            }
+
+            if (previewClose && previewClose.dataset.bound !== '1') {
+                previewClose.dataset.bound = '1';
+                previewClose.addEventListener('click', closeImagePreview);
+            }
+
+            if (document.body.dataset.stockInStandaloneEscBound !== '1') {
+                document.body.dataset.stockInStandaloneEscBound = '1';
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') {
+                        closeImagePreview();
+                        closeStandaloneModal();
+                    }
+                });
+            }
+        }
+
+        function boot() {
+            if (!onPage()) return;
+
+            var sel = findItemSelect();
+            if (sel) ensureVisibleBox(sel);
+
+            bindStandaloneModal();
+            syncPickerModeUi();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', boot);
+        } else {
+            boot();
+        }
+
+        setTimeout(boot, 300);
+        setTimeout(boot, 1000);
+        setInterval(function () {
+            if (!onPage()) return;
+            var sel = findItemSelect();
+            if (sel) hideSelectAndSelect2(sel);
+            syncPickerModeUi();
+        }, 1000);
+    })();
+    </script>
+
+    <style>
+        .stockin-picker-visible-box {
+            border: 1px solid rgba(58,87,232,.18);
+            border-radius: 10px;
+            padding: 10px;
+            background: linear-gradient(145deg,#fbfcff,#fff);
+            box-shadow: 0 8px 18px rgba(35,45,66,.045);
+        }
+
+        .stockin-picker-summary {
+            min-height: 46px;
+        }
+
+        .stockin-open-picker-btn {
+            width: 100%;
+            border-color: #3a57e8 !important;
+            color: #3a57e8 !important;
+            font-weight: 600;
+            border-radius: 8px;
+        }
+
+        .stockin-open-picker-btn:hover {
+            background: #3a57e8 !important;
+            color: #fff !important;
+            box-shadow: 0 8px 18px rgba(58,87,232,.22);
+        }
+
+        .stockin-selected-item-summary {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stockin-picker-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 30000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(20,24,38,.72);
+            backdrop-filter: blur(3px);
+        }
+
+        .stockin-picker-overlay.show {
+            display: flex !important;
+        }
+
+        .stockin-picker-modal {
+            width: min(980px, 96vw);
+            max-height: 88vh;
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid rgba(58,87,232,.24);
+            border-top: 5px solid #3a57e8;
+            border-radius: 18px;
+            box-shadow: 0 30px 90px rgba(0,0,0,.34);
+        }
+
+        .stockin-picker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 18px 22px;
+            background: linear-gradient(90deg, rgba(58,87,232,.10), #fff);
+            border-bottom: 1px solid rgba(58,87,232,.14);
+        }
+
+        .stockin-picker-title {
+            margin: 0;
+            font-weight: 700;
+            color: #232d42;
+        }
+
+        .stockin-picker-subtitle {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 3px;
+        }
+
+        .stockin-picker-close {
+            width: 36px;
+            height: 36px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(58,87,232,.10);
+            color: #232d42;
+            font-size: 26px;
+            line-height: 28px;
+            cursor: pointer;
+        }
+
+        .stockin-picker-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 280px;
+            gap: 14px;
+            padding: 16px 22px 8px;
+        }
+
+        .stockin-picker-label {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .stockin-picker-destination {
+            min-height: 38px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 9px 12px;
+            color: #232d42;
+            background: #f8f9fa;
+        }
+
+        .stockin-picker-count-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0 22px 10px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .stockin-picker-body {
+            padding: 0 22px 20px;
+        }
+
+        .stockin-picker-table-wrap {
+            max-height: 50vh;
+            overflow: auto;
+            border: 1px solid rgba(58,87,232,.10);
+            border-radius: 12px;
+        }
+
+        .stockin-picker-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f4f6fa;
+            color: #6c757d;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            border-bottom: 1px solid rgba(58,87,232,.10);
+        }
+
+        .stockin-picker-table tbody tr:hover {
+            background: rgba(58,87,232,.045);
+        }
+
+        .stockin-picker-item-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .stockin-thumb-btn,
+        .stockin-thumb-empty {
+            flex: 0 0 auto;
+            border-radius: 10px;
+            border: 1px solid rgba(58,87,232,.25);
+            background: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stockin-thumb-btn {
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .stockin-thumb-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .stockin-thumb-btn span {
+            position: absolute;
+            right: 3px;
+            bottom: 3px;
+            background: #3a57e8;
+            color: #fff;
+            border-radius: 999px;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 3px 5px;
+        }
+
+        .stockin-thumb-empty {
+            color: #8a92a6;
+            background: #f7f8fb;
+            font-size: 10px;
+        }
+
+        .stockin-thumb-list {
+            width: 52px;
+            height: 52px;
+        }
+
+        .stockin-thumb-selected {
+            width: 54px;
+            height: 54px;
+        }
+
+        .stockin-picker-pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            padding-top: 12px;
+        }
+
+        .bg-soft-primary {
+            background: rgba(58,87,232,.10) !important;
+        }
+
+        .bg-soft-secondary {
+            background: rgba(108,117,125,.12) !important;
+        }
+
+        .stockin-image-preview-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 40000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(20,24,38,.76);
+            backdrop-filter: blur(3px);
+        }
+
+        .stockin-image-preview-overlay.show {
+            display: flex;
+        }
+
+        .stockin-image-preview-panel {
+            width: min(850px, 96vw);
+            max-height: 90vh;
+            background: #fff;
+            border: 1px solid rgba(58,87,232,.24);
+            border-top: 5px solid #3a57e8;
+            border-radius: 18px;
+            box-shadow: 0 30px 90px rgba(0,0,0,.36);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stockin-image-preview-close {
+            position: absolute;
+            top: 13px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            border: 0;
+            background: rgba(58,87,232,.10);
+            color: #232d42;
+            border-radius: 999px;
+            font-size: 26px;
+            line-height: 30px;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .stockin-image-preview-header {
+            padding: 18px 62px 14px 22px;
+            background: linear-gradient(90deg, rgba(58,87,232,.10), #fff);
+            border-bottom: 1px solid rgba(58,87,232,.14);
+        }
+
+        .stockin-image-preview-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #232d42;
+        }
+
+        .stockin-image-preview-subtitle {
+            font-size: 13px;
+            color: #6c757d;
+            margin-top: 2px;
+        }
+
+        .stockin-image-preview-body {
+            min-height: 380px;
+            max-height: calc(90vh - 90px);
+            overflow: auto;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                linear-gradient(45deg,rgba(58,87,232,.04) 25%,transparent 25%),
+                linear-gradient(-45deg,rgba(58,87,232,.04) 25%,transparent 25%),
+                linear-gradient(45deg,transparent 75%,rgba(58,87,232,.04) 75%),
+                linear-gradient(-45deg,transparent 75%,rgba(58,87,232,.04) 75%);
+            background-size: 24px 24px;
+            background-position: 0 0,0 12px,12px -12px,-12px 0;
+        }
+
+        .stockin-image-preview-body img {
+            max-width: 100%;
+            max-height: calc(90vh - 150px);
+            object-fit: contain;
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        @media (max-width: 768px) {
+            .stockin-picker-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .stockin-picker-modal {
+                width: 98vw;
+            }
+        }
+    </style>
+    {{-- stockin-standalone-picker-thumbnail-pagination-end --}}
+
 </x-app-layout>
+
+
+
+
+
+
+<script>
+(function wmcStockInPoUrlAutoLoadRealFields() {
+    function trigger(el) {
+        if (!el) return;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        if (window.jQuery) {
+            try { window.jQuery(el).trigger('change'); } catch (e) {}
+        }
+    }
+
+    function findSelectByOptionText(textNeedle) {
+        const needle = String(textNeedle).toLowerCase();
+        return Array.from(document.querySelectorAll('select')).find(function (select) {
+            return Array.from(select.options || []).some(function (opt) {
+                return (opt.textContent || '').toLowerCase().includes(needle);
+            });
+        });
+    }
+
+    function selectByText(select, textNeedle) {
+        if (!select) return false;
+        const needle = String(textNeedle).toLowerCase();
+        const opt = Array.from(select.options || []).find(function (option) {
+            return (option.textContent || '').toLowerCase().includes(needle);
+        });
+        if (!opt) return false;
+        select.value = opt.value;
+        opt.selected = true;
+        trigger(select);
+        return true;
+    }
+
+    function selectByValue(select, value) {
+        if (!select) return false;
+        const opt = Array.from(select.options || []).find(function (option) {
+            return String(option.value) === String(value);
+        });
+        if (!opt) return false;
+        select.value = opt.value;
+        opt.selected = true;
+        trigger(select);
+        return true;
+    }
+
+    function applyPoUrlSelection() {
+        const params = new URLSearchParams(window.location.search);
+        const poId = params.get('purchase_order_id');
+        if (!poId) return;
+
+        // Real hidden fields from this blade.
+        const sourceHidden = document.getElementById('stock_in_source') || document.querySelector('input[name="stock_in_source"]');
+        const poHidden = document.getElementById('purchase_order_id') || document.querySelector('input[name="purchase_order_id"]');
+
+        if (sourceHidden) {
+            sourceHidden.value = 'purchase_order';
+            trigger(sourceHidden);
+        }
+
+        if (poHidden) {
+            poHidden.value = poId;
+            trigger(poHidden);
+        }
+
+        // Visible Stock In Type select.
+        const sourceSelect =
+            document.querySelector('select[name="stock_in_type"]') ||
+            document.querySelector('select#stock_in_type') ||
+            findSelectByOptionText('Manual Stock In') ||
+            findSelectByOptionText('From Purchase Order');
+
+        if (sourceSelect) {
+            selectByText(sourceSelect, 'From Purchase Order') || selectByText(sourceSelect, 'Purchase Order');
+        }
+
+        // Visible Purchase Order select.
+        const poSelect =
+            document.querySelector('select[name="purchase_order_select"]') ||
+            document.querySelector('select#purchase_order_select') ||
+            document.querySelector('select[name="po_id"]') ||
+            document.querySelector('select#po_id') ||
+            findSelectByOptionText('PO-');
+
+        let poText = '';
+
+        if (poSelect) {
+            selectByValue(poSelect, poId);
+            const selected = poSelect.options[poSelect.selectedIndex];
+            poText = selected ? (selected.textContent || '').trim() : '';
+        }
+
+        // If PO select did not select by value because it loads late, try any select with option value = PO id.
+        if (!poText) {
+            Array.from(document.querySelectorAll('select')).forEach(function (select) {
+                if (!poText && selectByValue(select, poId)) {
+                    const selected = select.options[select.selectedIndex];
+                    poText = selected ? (selected.textContent || '').trim() : '';
+                }
+            });
+        }
+
+        // Reference No.
+        const refInput = document.querySelector('input[name="reference_no"]') || document.getElementById('reference_no');
+        if (refInput && poText) {
+            const match = poText.match(/PO-\d{8}-\d{4}/i);
+            if (match) {
+                refInput.value = match[0].toUpperCase();
+                trigger(refInput);
+            }
+        }
+
+        // Click/trigger existing PO controlled mode if the page has custom buttons.
+        document.body.classList.add('wmc-po-url-autoloaded');
+    }
+
+    document.addEventListener('DOMContentLoaded', applyPoUrlSelection);
+    window.addEventListener('load', applyPoUrlSelection);
+
+    let tries = 0;
+    const timer = setInterval(function () {
+        tries++;
+        applyPoUrlSelection();
+        if (tries >= 25) clearInterval(timer);
+    }, 250);
+})();
+</script>

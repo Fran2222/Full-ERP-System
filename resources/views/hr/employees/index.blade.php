@@ -170,11 +170,12 @@
         |--------------------------------------------------------------------------
         | Employee List Width Fix
         |--------------------------------------------------------------------------
-        | Goal: makita ang tanan columns sa standard 100% browser scale.
+        | Goal: makita ang tanan columns including Action sa 125% browser/Windows scale
+        | without dragging horizontally. Long values are shortened with ellipsis.
         */
         .wmc-employee-page {
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
         }
 
         .wmc-employee-card {
@@ -184,88 +185,117 @@
         }
 
         .wmc-employee-card .card-header {
-            padding-left: 1rem;
-            padding-right: 1rem;
+            padding-left: 0.95rem;
+            padding-right: 0.95rem;
         }
 
         .wmc-employee-card .card-body {
-            padding-left: 1rem;
-            padding-right: 1rem;
+            padding-left: 0.95rem;
+            padding-right: 0.95rem;
         }
 
         .wmc-employee-table-wrap {
             width: 100%;
-            overflow-x: auto;
+            max-width: 100%;
+            overflow-x: hidden;
             padding-bottom: 0.25rem;
         }
 
         .wmc-employee-table {
             width: 100%;
-            min-width: 1080px;
+            min-width: 0 !important;
             table-layout: fixed;
-            font-size: 14px;
+            font-size: 13.2px;
         }
 
         .wmc-employee-table th,
         .wmc-employee-table td {
-            padding: 0.82rem 0.85rem !important;
+            padding: 0.78rem 0.62rem !important;
             vertical-align: middle;
-            white-space: normal !important;
             word-break: normal;
-            overflow-wrap: anywhere;
+            overflow: hidden;
         }
 
         .wmc-employee-table th:nth-child(1),
         .wmc-employee-table td:nth-child(1) {
-            width: 55px;
+            width: 5%;
             text-align: center;
+            white-space: nowrap;
         }
 
         .wmc-employee-table th:nth-child(2),
         .wmc-employee-table td:nth-child(2) {
-            width: 180px;
+            width: 15.5%;
         }
 
         .wmc-employee-table th:nth-child(3),
         .wmc-employee-table td:nth-child(3) {
-            width: 205px;
+            width: 18%;
         }
 
         .wmc-employee-table th:nth-child(4),
         .wmc-employee-table td:nth-child(4) {
-            width: 165px;
+            width: 15%;
         }
 
         .wmc-employee-table th:nth-child(5),
         .wmc-employee-table td:nth-child(5) {
-            width: 220px;
+            width: 19%;
         }
 
         .wmc-employee-table th:nth-child(6),
         .wmc-employee-table td:nth-child(6) {
-            width: 220px;
+            width: 15%;
         }
 
         .wmc-employee-table th:nth-child(7),
         .wmc-employee-table td:nth-child(7) {
-            width: 85px;
+            width: 6%;
             text-align: center;
+            white-space: nowrap;
         }
 
         .wmc-employee-table th:nth-child(8),
         .wmc-employee-table td:nth-child(8) {
-            width: 75px;
-            text-align: center;
+            width: 6.5%;
+            text-align: center !important;
+            white-space: nowrap;
+        }
+
+        .wmc-employee-table th:nth-child(2),
+        .wmc-employee-table th:nth-child(3),
+        .wmc-employee-table th:nth-child(4),
+        .wmc-employee-table th:nth-child(5),
+        .wmc-employee-table th:nth-child(6),
+        .wmc-employee-table td:nth-child(2),
+        .wmc-employee-table td:nth-child(3),
+        .wmc-employee-table td:nth-child(4),
+        .wmc-employee-table td:nth-child(5),
+        .wmc-employee-table td:nth-child(6) {
+            white-space: nowrap !important;
+            text-overflow: ellipsis;
+        }
+
+        .wmc-employee-table td:nth-child(2) > *,
+        .wmc-employee-table td:nth-child(3),
+        .wmc-employee-table td:nth-child(4),
+        .wmc-employee-table td:nth-child(5),
+        .wmc-employee-table td:nth-child(6) {
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .wmc-employee-table .badge {
-            font-size: 12px;
-            padding: 0.32rem 0.55rem;
+            font-size: 11.5px;
+            padding: 0.28rem 0.48rem;
             white-space: nowrap;
         }
 
-        .wmc-employee-table .btn {
+        .wmc-employee-table .btn,
+        .wmc-employee-table .wmc-action-buttons {
             white-space: nowrap;
+            flex-wrap: nowrap !important;
+            gap: 0.25rem !important;
         }
 
         /*
@@ -308,30 +338,18 @@
         }
 
         @media (min-width: 1400px) {
-            .wmc-employee-page {
-                padding-left: 0.75rem !important;
-                padding-right: 0.75rem !important;
-            }
-
-            .wmc-employee-card .card-body {
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-
             .wmc-employee-table {
-                min-width: 1060px;
-                font-size: 13.8px;
-            }
-
-            .wmc-employee-table th,
-            .wmc-employee-table td {
-                padding: 0.78rem 0.82rem !important;
+                font-size: 13.2px;
             }
         }
 
         @media (max-width: 1199.98px) {
+            .wmc-employee-table-wrap {
+                overflow-x: auto;
+            }
+
             .wmc-employee-table {
-                min-width: 1080px;
+                min-width: 980px !important;
             }
         }
     </style>
@@ -429,7 +447,7 @@
                                 <thead>
                                     <tr>
                                         <th>
-                                            <a href="{{ $sortUrl('id') }}" class="wmc-sort-link">ID {!! $sortIconSvg('id') !!}</a>
+                                            <a href="{{ $sortUrl('id') }}" class="wmc-sort-link">No. {!! $sortIconSvg('id') !!}</a>
                                         </th>
                                         <th>
                                             <a href="{{ $sortUrl('name') }}" class="wmc-sort-link">Name {!! $sortIconSvg('name') !!}</a>
@@ -477,7 +495,7 @@
                                         <tr class="{{ Route::has('hr.employees.show') ? 'wmc-clickable-row' : '' }}"
                                             data-href="{{ Route::has('hr.employees.show') ? route('hr.employees.show', $employee->id) : '' }}"
                                             title="{{ Route::has('hr.employees.show') ? 'Click row to view ' . $employeeName . ' profile' : '' }}">
-                                            <td>{{ $employee->id }}</td>
+                                            <td>{{ ($employees->firstItem() ?? 1) + $loop->index }}</td>
 
                                             <td>
                                                 <span class="wmc-employee-name-text">
@@ -591,123 +609,221 @@
         </div>
     </div>
 
-    {{-- Server-side realtime search without whole-card preload/refresh effect --}}
+    {{-- Client-side all-page instant search: no delay because all employee rows are preloaded once. --}}
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            let employeeSearchTimer = null;
-            let employeeSearchController = null;
+            const allEmployeeRows = @json($employeeClientRows ?? []);
+            const state = {
+                search: document.getElementById('employee-search')?.value.trim() || '',
+                perPage: parseInt(document.querySelector('select[name="per_page"], select[data-wmc-per-page="true"]')?.value || '10', 10),
+                page: 1,
+                sort: @json($sort ?? request('sort', 'id')),
+                direction: @json($direction ?? request('direction', 'asc')),
+            };
 
-            function getCurrentSearchValue() {
-                const input = document.getElementById('employee-search');
-                return input ? input.value.trim() : '';
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
             }
 
-            function getCurrentPerPageValue() {
-                const select = document.querySelector('select[name="per_page"], select[data-wmc-per-page="true"]');
-                return select ? select.value : '10';
+            function normalized(value) {
+                return String(value ?? '').toLowerCase();
             }
 
-            function buildEmployeeUrl(pageUrl = null) {
-                const url = new URL(pageUrl || window.location.href);
-                const searchValue = getCurrentSearchValue();
-                const perPageValue = getCurrentPerPageValue();
+            function currentRows() {
+                const keyword = normalized(state.search).trim();
+                let rows = allEmployeeRows.slice();
 
-                url.searchParams.set('per_page', perPageValue);
+                if (keyword !== '') {
+                    rows = rows.filter(function (row) {
+                        return normalized(row.search_text).includes(keyword);
+                    });
+                }
 
-                if (searchValue !== '') {
-                    url.searchParams.set('search', searchValue);
+                rows.sort(function (a, b) {
+                    let left;
+                    let right;
+
+                    if (state.sort === 'id') {
+                        left = Number(a.id || 0);
+                        right = Number(b.id || 0);
+                    } else {
+                        left = normalized(a[state.sort] || '');
+                        right = normalized(b[state.sort] || '');
+                    }
+
+                    if (left < right) {
+                        return state.direction === 'asc' ? -1 : 1;
+                    }
+
+                    if (left > right) {
+                        return state.direction === 'asc' ? 1 : -1;
+                    }
+
+                    return Number(a.id || 0) - Number(b.id || 0);
+                });
+
+                return rows;
+            }
+
+            function pageUrl(page) {
+                const url = new URL(window.location.href);
+
+                url.searchParams.set('per_page', state.perPage);
+                url.searchParams.set('sort', state.sort);
+                url.searchParams.set('direction', state.direction);
+
+                if (state.search.trim() !== '') {
+                    url.searchParams.set('search', state.search.trim());
                 } else {
                     url.searchParams.delete('search');
                 }
 
-                if (!pageUrl) {
+                if (page && page > 1) {
+                    url.searchParams.set('page', page);
+                } else {
                     url.searchParams.delete('page');
                 }
 
                 return url;
             }
 
-            function updateEmployeeListFromHtml(html, url, keepFocus = true) {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
+            function updateUrl() {
+                window.history.replaceState({}, '', pageUrl(state.page).toString());
+            }
 
-                const currentThead = document.querySelector('.wmc-employee-table thead');
-                const newThead = doc.querySelector('.wmc-employee-table thead');
+            function renderTable(rows, totalRows, startIndex) {
+                const tbody = document.querySelector('.wmc-employee-table tbody');
 
-                const currentTbody = document.querySelector('.wmc-employee-table tbody');
-                const newTbody = doc.querySelector('.wmc-employee-table tbody');
-
-                const currentFooter = document.querySelector('.wmc-employee-footer');
-                const newFooter = doc.querySelector('.wmc-employee-footer');
-
-                const currentInput = document.getElementById('employee-search');
-                const currentValue = currentInput ? currentInput.value : '';
-                const currentCursor = currentInput ? currentInput.selectionStart : currentValue.length;
-
-                if (currentThead && newThead) {
-                    currentThead.innerHTML = newThead.innerHTML;
+                if (!tbody) {
+                    return;
                 }
 
-                if (currentTbody && newTbody) {
-                    currentTbody.innerHTML = newTbody.innerHTML;
+                if (!rows.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center">No employees found.</td></tr>';
+                    return;
                 }
 
-                if (currentFooter && newFooter) {
-                    currentFooter.innerHTML = newFooter.innerHTML;
+                tbody.innerHTML = rows.map(function (row, index) {
+                    const badgeClass = normalized(row.status_key) === 'active' ? 'success' : 'secondary';
+                    const clickableClass = row.show_url ? 'wmc-clickable-row' : '';
+                    const title = row.show_url ? 'Click row to view ' + row.name + ' profile' : '';
+
+                    return ''
+                        + '<tr class="' + clickableClass + '" data-href="' + escapeHtml(row.show_url || '') + '" title="' + escapeHtml(title) + '">'
+                        + '<td>' + escapeHtml(startIndex + index + 1) + '</td>'
+                        + '<td><span class="wmc-employee-name-text">' + escapeHtml(row.name) + '</span></td>'
+                        + '<td>' + escapeHtml(row.email) + '</td>'
+                        + '<td>' + escapeHtml(row.branch) + '</td>'
+                        + '<td>' + escapeHtml(row.department) + '</td>'
+                        + '<td>' + escapeHtml(row.designation) + '</td>'
+                        + '<td><span class="badge bg-' + badgeClass + '">' + escapeHtml(row.status) + '</span></td>'
+                        + '<td class="text-end wmc-action-cell">' + (row.action_html || '') + '</td>'
+                        + '</tr>';
+                }).join('');
+            }
+
+            function paginationWindow(currentPage, lastPage) {
+                const pages = [];
+
+                if (lastPage <= 7) {
+                    for (let page = 1; page <= lastPage; page++) {
+                        pages.push(page);
+                    }
+                    return pages;
                 }
 
-                window.history.replaceState({}, '', url.toString());
+                pages.push(1);
 
-                initWmcEmployeeControls();
+                if (currentPage > 3) {
+                    pages.push('ellipsis-left');
+                }
 
-                const refreshedInput = document.getElementById('employee-search');
+                const start = Math.max(2, currentPage - 1);
+                const end = Math.min(lastPage - 1, currentPage + 1);
 
-                if (refreshedInput) {
-                    refreshedInput.value = currentValue;
+                for (let page = start; page <= end; page++) {
+                    pages.push(page);
+                }
 
-                    if (keepFocus) {
-                        refreshedInput.focus();
+                if (currentPage < lastPage - 2) {
+                    pages.push('ellipsis-right');
+                }
 
-                        try {
-                            refreshedInput.setSelectionRange(currentCursor, currentCursor);
-                        } catch (e) {
-                            // Ignore unsupported cursor restore cases.
+                pages.push(lastPage);
+
+                return pages;
+            }
+
+            function renderFooter(totalRows) {
+                const footer = document.querySelector('.wmc-employee-footer');
+
+                if (!footer) {
+                    return;
+                }
+
+                const lastPage = Math.max(1, Math.ceil(totalRows / state.perPage));
+
+                if (state.page > lastPage) {
+                    state.page = lastPage;
+                }
+
+                const firstItem = totalRows === 0 ? 0 : ((state.page - 1) * state.perPage) + 1;
+                const lastItem = Math.min(state.page * state.perPage, totalRows);
+
+                let paginationHtml = '';
+
+                if (lastPage > 1) {
+                    const previousDisabled = state.page === 1 ? ' disabled' : '';
+                    const nextDisabled = state.page === lastPage ? ' disabled' : '';
+
+                    paginationHtml += '<nav aria-label="Employee list pagination"><ul class="pagination mb-0">';
+                    paginationHtml += '<li class="page-item' + previousDisabled + '"><a class="page-link" href="#" data-page="' + Math.max(1, state.page - 1) + '" tabindex="-1">Previous</a></li>';
+
+                    paginationWindow(state.page, lastPage).forEach(function (item) {
+                        if (typeof item === 'string') {
+                            paginationHtml += '<li class="page-item disabled"><a class="page-link" href="#">...</a></li>';
+                            return;
                         }
-                    }
+
+                        const active = item === state.page ? ' active' : '';
+                        const aria = item === state.page ? ' aria-current="page"' : '';
+
+                        paginationHtml += '<li class="page-item' + active + '"' + aria + '><a class="page-link" href="#" data-page="' + item + '">' + item + '</a></li>';
+                    });
+
+                    paginationHtml += '<li class="page-item' + nextDisabled + '"><a class="page-link" href="#" data-page="' + Math.min(lastPage, state.page + 1) + '">Next</a></li>';
+                    paginationHtml += '</ul></nav>';
                 }
+
+                footer.innerHTML = ''
+                    + '<div class="wmc-employee-showing-text">Showing ' + firstItem + ' to ' + lastItem + ' of ' + totalRows + ' entries</div>'
+                    + paginationHtml;
             }
 
-            function fetchEmployeeList(url, keepFocus = true) {
-                if (employeeSearchController) {
-                    employeeSearchController.abort();
+            function renderEmployees() {
+                const rows = currentRows();
+                const totalRows = rows.length;
+                const lastPage = Math.max(1, Math.ceil(totalRows / state.perPage));
+
+                if (state.page > lastPage) {
+                    state.page = lastPage;
                 }
 
-                employeeSearchController = new AbortController();
+                const startIndex = (state.page - 1) * state.perPage;
+                const pageRows = rows.slice(startIndex, startIndex + state.perPage);
 
-                fetch(url.toString(), {
-                    method: 'GET',
-                    signal: employeeSearchController.signal,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'text/html'
-                    }
-                })
-                .then(function (response) {
-                    return response.text();
-                })
-                .then(function (html) {
-                    updateEmployeeListFromHtml(html, url, keepFocus);
-                })
-                .catch(function (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Employee list update failed:', error);
-                    }
-                });
+                renderTable(pageRows, totalRows, startIndex);
+                renderFooter(totalRows);
+                updateUrl();
             }
 
-            function setupRealtimeServerSearch() {
+            function setupInstantSearch() {
                 const input = document.getElementById('employee-search');
-                const form = document.getElementById('employee-search-form');
 
                 if (!input || input.dataset.wmcSearchReady === '1') {
                     return;
@@ -717,40 +833,20 @@
                 input.setAttribute('autocomplete', 'off');
 
                 input.addEventListener('input', function () {
-                    clearTimeout(employeeSearchTimer);
-
-                    employeeSearchTimer = setTimeout(function () {
-                        const url = buildEmployeeUrl();
-                        fetchEmployeeList(url, true);
-                    }, 0);
+                    state.search = input.value.trim();
+                    state.page = 1;
+                    renderEmployees();
+                    input.focus();
                 });
 
                 input.addEventListener('keydown', function (event) {
                     if (event.key === 'Enter') {
                         event.preventDefault();
-
-                        clearTimeout(employeeSearchTimer);
-
-                        const url = buildEmployeeUrl();
-                        fetchEmployeeList(url, true);
                     }
                 });
-
-                if (form && form.dataset.wmcSubmitReady !== '1') {
-                    form.dataset.wmcSubmitReady = '1';
-
-                    form.addEventListener('submit', function (event) {
-                        event.preventDefault();
-
-                        clearTimeout(employeeSearchTimer);
-
-                        const url = buildEmployeeUrl();
-                        fetchEmployeeList(url, true);
-                    });
-                }
             }
 
-            function setupAjaxPerPage() {
+            function setupPerPage() {
                 const select = document.querySelector('select[name="per_page"], select[data-wmc-per-page="true"]');
 
                 if (!select || select.dataset.wmcPerPageReady === '1') {
@@ -761,23 +857,14 @@
                 select.dataset.wmcPerPage = 'true';
                 select.removeAttribute('onchange');
 
-                const form = select.closest('form');
-
-                if (form && form.dataset.wmcPerPageFormReady !== '1') {
-                    form.dataset.wmcPerPageFormReady = '1';
-
-                    form.addEventListener('submit', function (event) {
-                        event.preventDefault();
-                    });
-                }
-
                 select.addEventListener('change', function () {
-                    const url = buildEmployeeUrl();
-                    fetchEmployeeList(url, false);
+                    state.perPage = parseInt(select.value || '10', 10);
+                    state.page = 1;
+                    renderEmployees();
                 });
             }
 
-            function setupAjaxPagination() {
+            function setupPagination() {
                 const footer = document.querySelector('.wmc-employee-footer');
 
                 if (!footer || footer.dataset.wmcPaginationReady === '1') {
@@ -787,21 +874,21 @@
                 footer.dataset.wmcPaginationReady = '1';
 
                 footer.addEventListener('click', function (event) {
-                    const link = event.target.closest('.pagination a');
+                    const link = event.target.closest('.pagination a[data-page]');
 
-                    if (!link) {
+                    if (!link || link.closest('.disabled')) {
+                        event.preventDefault();
                         return;
                     }
 
                     event.preventDefault();
 
-                    const url = buildEmployeeUrl(link.href);
-                    fetchEmployeeList(url, false);
+                    state.page = parseInt(link.dataset.page || '1', 10);
+                    renderEmployees();
                 });
             }
 
-
-            function setupAjaxSorting() {
+            function setupSorting() {
                 document.querySelectorAll('.wmc-sort-link').forEach(function (link) {
                     if (link.dataset.wmcSortReady === '1') {
                         return;
@@ -812,43 +899,59 @@
                     link.addEventListener('click', function (event) {
                         event.preventDefault();
 
-                        const url = buildEmployeeUrl(link.href);
-                        fetchEmployeeList(url, false);
+                        const href = new URL(link.href);
+                        const nextSort = href.searchParams.get('sort') || 'id';
+                        const nextDirection = href.searchParams.get('direction') || 'asc';
+
+                        state.sort = nextSort;
+                        state.direction = nextDirection;
+                        state.page = 1;
+                        renderEmployees();
                     });
                 });
             }
 
             function setupEmployeeRowClick() {
-                document.querySelectorAll('.wmc-clickable-row[data-href]').forEach(function (row) {
-                    if (row.dataset.wmcClickReady === '1') {
+                const table = document.querySelector('.wmc-employee-table');
+
+                if (!table || table.dataset.wmcClickReady === '1') {
+                    return;
+                }
+
+                table.dataset.wmcClickReady = '1';
+
+                table.addEventListener('click', function (event) {
+                    if (event.target.closest('.wmc-action-cell, a, button, input, select, textarea, label')) {
                         return;
                     }
 
-                    row.dataset.wmcClickReady = '1';
+                    const row = event.target.closest('.wmc-clickable-row[data-href]');
 
-                    row.addEventListener('click', function (event) {
-                        if (event.target.closest('.wmc-action-cell, a, button, input, select, textarea, label')) {
-                            return;
-                        }
+                    if (!row) {
+                        return;
+                    }
 
-                        const href = row.getAttribute('data-href');
+                    const href = row.getAttribute('data-href');
 
-                        if (href && href.trim() !== '') {
-                            window.location.href = href;
-                        }
-                    });
+                    if (href && href.trim() !== '') {
+                        window.location.href = href;
+                    }
                 });
             }
 
-            function initWmcEmployeeControls() {
-                setupRealtimeServerSearch();
-                setupAjaxPerPage();
-                setupAjaxPagination();
-                setupAjaxSorting();
-                setupEmployeeRowClick();
+            const form = document.getElementById('employee-search-form');
+            if (form) {
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                });
             }
 
-            initWmcEmployeeControls();
+            setupInstantSearch();
+            setupPerPage();
+            setupPagination();
+            setupSorting();
+            setupEmployeeRowClick();
+            renderEmployees();
         });
     </script>
 

@@ -1067,6 +1067,98 @@
         }
     }
 
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Employee 201 Tabs - Show All Tabs Without Horizontal Drag
+    |--------------------------------------------------------------------------
+    | Converts the tab bar into responsive compact pills so all tabs are visible
+    | at 125% display scale. No horizontal scrollbar/dragging is needed.
+    */
+    .wmc-employee-tabs-card {
+        overflow: visible !important;
+    }
+
+    .wmc-employee-tabs-card .wmc-tabs {
+        display: grid !important;
+        grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+        padding: 10px 12px !important;
+        overflow-x: visible !important;
+        overflow-y: visible !important;
+        white-space: normal !important;
+        scrollbar-width: none !important;
+    }
+
+    .wmc-employee-tabs-card .wmc-tabs::-webkit-scrollbar {
+        display: none !important;
+    }
+
+    .wmc-employee-tabs-card .wmc-tab-link {
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 42px !important;
+        flex: unset !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        padding: 9px 8px !important;
+        border: 1px solid #e8eef8 !important;
+        border-bottom: 1px solid #e8eef8 !important;
+        border-radius: 12px !important;
+        color: #64748b !important;
+        background: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        line-height: 1.15 !important;
+        text-align: center !important;
+        white-space: normal !important;
+        word-break: normal !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    .wmc-employee-tabs-card .wmc-tab-link i {
+        font-size: 12px !important;
+        line-height: 1 !important;
+        flex: 0 0 auto !important;
+    }
+
+    .wmc-employee-tabs-card .wmc-tab-link.active,
+    .wmc-employee-tabs-card .wmc-tab-link:hover {
+        color: #2563eb !important;
+        background: #eef4ff !important;
+        border-color: #2563eb !important;
+        box-shadow: 0 6px 14px rgba(37, 99, 235, .10) !important;
+    }
+
+    @media (max-width: 1599.98px) {
+        .wmc-employee-tabs-card .wmc-tabs {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        }
+    }
+
+    @media (max-width: 1199.98px) {
+        .wmc-employee-tabs-card .wmc-tabs {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .wmc-employee-tabs-card .wmc-tabs {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 7px !important;
+            padding: 9px !important;
+        }
+
+        .wmc-employee-tabs-card .wmc-tab-link {
+            min-height: 40px !important;
+            font-size: 12.5px !important;
+            padding: 8px 6px !important;
+        }
+    }
+
     @media print {
         .btn,
         .wmc-tabs,
@@ -1699,7 +1791,7 @@
         </div>
 
         {{-- TABS CARD --}}
-        <div class="card wmc-201-card mb-3">
+        <div class="card wmc-201-card mb-3 wmc-employee-tabs-card">
             <div class="wmc-tabs">
                 @foreach($tabs as $key => $tab)
                     <a href="#tab-{{ $key }}"
@@ -2220,6 +2312,55 @@
                                         <div class="wmc-detail-label">Contact Number</div>
                                         <div class="wmc-detail-value">{{ $employee->phone_number ?: '-' }}</div>
                                     </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Name of Spouse</div>
+                                        <div class="wmc-detail-value">{{ $profile->spouse_name ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Name of Father</div>
+                                        <div class="wmc-detail-value">{{ $profile->father_name ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Name of Mother</div>
+                                        <div class="wmc-detail-value">{{ $profile->mother_name ?: '-' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="wmc-detail-section-card">
+                            <div class="wmc-detail-section-header">
+                                <div>
+                                    <h5 class="wmc-detail-section-title">
+                                        <i class="fas fa-graduation-cap"></i> Education Information
+                                    </h5>
+                                </div>
+                            </div>
+
+                            <div class="wmc-detail-section-body">
+                                <div class="wmc-detail-grid">
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Highest Educational Attainment</div>
+                                        <div class="wmc-detail-value">{{ $profile->highest_education_attainment ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Course</div>
+                                        <div class="wmc-detail-value">{{ $profile->course ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">School</div>
+                                        <div class="wmc-detail-value">{{ $profile->school ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Year Graduated</div>
+                                        <div class="wmc-detail-value">{{ $profile->year_graduated ?: '-' }}</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2329,6 +2470,10 @@
                                     <div class="wmc-detail-item">
                                         <div class="wmc-detail-label">Date Hired</div>
                                         <div class="wmc-detail-value">{{ $dateHired }}</div>
+                                    </div>
+                                    <div class="wmc-detail-item">
+                                        <div class="wmc-detail-label">Date of Regularization</div>
+                                        <div class="wmc-detail-value">{{ optional($profile->regularization_date)->format('M d, Y') ?: '-' }}</div>
                                     </div>
                                 </div>
                             </div>

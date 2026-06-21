@@ -1,0 +1,391 @@
+<?php
+
+namespace App\Support;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+
+class ServiceOperationsPhase3Helper
+{
+    private static function tableExists($table)
+    {
+        try {
+            return Schema::hasTable($table);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private static function col($table, array $candidates)
+    {
+        foreach ($candidates as $candidate) {
+            try {
+                if (Schema::hasColumn($table, $candidate)) {
+                    return $candidate;
+                }
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static function getValue($row, array $columns, $default = null)
+    {
+        foreach ($columns as $column) {
+            if (isset($row->{$column}) && $row->{$column} !== null && $row->{$column} !== '') {
+                return $row->{$column};
+            }
+        }
+
+        return $default;
+    }
+
+    public static function inventoryOptions()
+    {
+        try {
+            $inventoryTable = self::tableExists('warehouse_inventories') ? 'warehouse_inventories' : null;
+            if (!$inventoryTable) {
+                return collect();
+            }
+
+            $itemTable = self::tableExists('warehouse_items') ? 'warehouse_items' : null;
+            $unitTable = self::tableExists('warehouse_units') ? 'warehouse_units' : null;
+            $branchTable = self::tableExists('branches') ? 'branches' : null;
+            $locationTable = self::tableExists('warehouse_locations') ? 'warehouse_locations' : null;
+
+            $inventoryItemCol = self::col($inventoryTable, ['warehouse_item_id', 'item_id']);
+            if (!$inventoryItemCol) {
+                return collect();
+            }
+
+            $rows = DB::table($inventoryTable)->get();
+
+            $itemIds = $rows->pluck($inventoryItemCol)->filter()->unique()->values()->all();
+
+            $items = collect();
+            if ($itemTable && !empty($itemIds)) {
+                $items = DB::table($itemTable)->whereIn('id', $itemIds)->get()->keyBy('id');
+            }
+
+            $unitIds = $items->pluck(self::col($itemTable, ['warehouse_unit_id', 'unit_id']))->filter()->unique()->values()->all();
+            $units = collect();
+            if ($unitTable && !empty($unitIds)) {
+                $units = DB::table($unitTable)->whereIn('id', $unitIds)->get()->keyBy('id');
+            }
+
+            $branchCol = self::col($inventoryTable, ['branch_id']);
+            $branchIds = $branchCol ? $rows->pluck($branchCol)->filter()->unique()->values()->all() : [];
+            $branches = collect();
+            if ($branchTable && !empty($branchIds)) {
+                $branches = DB::table($branchTable)->whereIn('id', $branchIds)->get()->keyBy('id');
+            }
+
+            $locationCol = self::col($inventoryTable, ['warehouse_location_id', 'location_id']);
+            $locationIds = $locationCol ? $rows->pluck($locationCol)->filter()->unique()->values()->all() : [];
+            $locations = collect();
+            if ($locationTable && !empty($locationIds)) {
+                $locations = DB::table($locationTable)->whereIn('id', $locationIds)->get()->keyBy('id');
+            }
+
+            $onHandCol = self::col($inventoryTable, ['on_hand', 'quantity', 'qty']);
+            $availableCol = self::col($inventoryTable, ['available', 'available_qty']);
+            $borrowedCol = self::col($inventoryTable, ['borrowed', 'borrowed_qty']);
+
+            $itemCodeCol = $itemTable ? self::col($itemTable, ['item_code', 'code', 'sku']) : null;
+            $itemNameCol = $itemTable ? self::col($itemTable, ['item_name', 'name', 'description']) : null;
+            $serializedCol = $itemTable ? self::col($itemTable, ['is_serialized', 'serialized']) : null;
+            $unitIdCol = $itemTable ? self::col($itemTable, ['warehouse_unit_id', 'unit_id']) : null;
+            $unitNameCol = $unitTable ? self::col($unitTable, ['name', 'unit_name']) : null;
+            $branchNameCol = $branchTable ? self::col($branchTable, ['name', 'branch_name']) : null;
+            $locationNameCol = $locationTable ? self::col($locationTable, ['name', 'location_name']) : null;
+
+            return $rows->map(function ($row) use (
+                $inventoryItemCol,
+                $items,
+                $units,
+                $branches,
+                $locations,
+                $branchCol,
+                $locationCol,
+                $onHandCol,
+                $availableCol,
+                $borrowedCol,
+                $itemCodeCol,
+                $itemNameCol,
+                $serializedCol,
+                $unitIdCol,
+                $unitNameCol,
+                $branchNameCol,
+                $locationNameCol
+            ) {
+                $itemId = $row->{$inventoryItemCol} ?? null;
+                $item = $itemId ? ($items[$itemId] ?? null) : null;
+
+                $unit = null;
+                if ($item && $unitIdCol && !empty($item->{$unitIdCol})) {
+                    $unit = $units[$item->{$unitIdCol}] ?? null;
+                }
+
+                $branch = null;
+                if ($branchCol && !empty($row->{$branchCol})) {
+                    $branch = $branches[$row->{$branchCol}] ?? null;
+                }
+
+                $location = null;
+                if ($locationCol && !empty($row->{$locationCol})) {
+                    $location = $locations[$row->{$locationCol}] ?? null;
+                }
+
+                $onHand = $onHandCol ? (float) ($row->{$onHandCol} ?? 0) : 0;
+                $available = $availableCol ? (float) ($row->{$availableCol} ?? $onHand) : $onHand;
+                $borrowed = $borrowedCol ? (float) ($row->{$borrowedCol} ?? 0) : 0;
+
+                return (object) [
+                    'inventory_id' => $row->id,
+                    'warehouse_item_id' => $itemId,
+                    'on_hand' => $onHand,
+                    'available' => $available,
+                    'borrowed' => $borrowed,
+                    'item_code' => $item && $itemCodeCol ? ($item->{$itemCodeCol} ?? '') : '',
+                    'item_name' => $item && $itemNameCol ? ($item->{$itemNameCol} ?? ('Item #' . $itemId)) : ('Item #' . $itemId),
+                    'is_serialized' => $item && $serializedCol ? (bool) ($item->{$serializedCol} ?? false) : false,
+                    'unit_name' => $unit && $unitNameCol ? ($unit->{$unitNameCol} ?? '') : '',
+                    'branch_name' => $branch && $branchNameCol ? ($branch->{$branchNameCol} ?? 'Central / unassigned') : 'Central / unassigned',
+                    'location_name' => $location && $locationNameCol ? ($location->{$locationNameCol} ?? '') : '',
+                ];
+            })->filter(function ($row) {
+                return (float) $row->available > 0;
+            })->sortBy('item_name')->values();
+        } catch (\Throwable $e) {
+            Log::error('Phase 3 inventoryOptions failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return collect();
+        }
+    }
+
+    public static function serialOptions()
+    {
+        try {
+            if (!self::tableExists('warehouse_item_serials')) {
+                return collect();
+            }
+
+            $serialTable = 'warehouse_item_serials';
+            $serialItemCol = self::col($serialTable, ['warehouse_item_id', 'item_id']);
+            $serialNoCol = self::col($serialTable, ['serial_number', 'serial_no', 'code']);
+            $statusCol = self::col($serialTable, ['status']);
+
+            $query = DB::table($serialTable);
+
+            if ($statusCol) {
+                $query->where(function ($q) use ($statusCol) {
+                    $q->where($statusCol, 'available')
+                        ->orWhere($statusCol, 'Available')
+                        ->orWhereNull($statusCol);
+                });
+            }
+
+            return $query->get()->map(function ($row) use ($serialItemCol, $serialNoCol) {
+                return (object) [
+                    'id' => $row->id,
+                    'warehouse_item_id' => $serialItemCol ? ($row->{$serialItemCol} ?? null) : null,
+                    'serial_number' => $serialNoCol ? ($row->{$serialNoCol} ?? ('Serial #' . $row->id)) : ('Serial #' . $row->id),
+                ];
+            })->sortBy('serial_number')->values();
+        } catch (\Throwable $e) {
+            Log::error('Phase 3 serialOptions failed', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return collect();
+        }
+    }
+
+    public static function deductMaterial(array $material, int $jobOrderId, int $reportId, $now): void
+    {
+        if (!self::tableExists('warehouse_inventories') || !self::tableExists('service_job_order_report_materials')) {
+            return;
+        }
+
+        $inventoryId = $material['warehouse_inventory_id'] ?? null;
+        $serialId = $material['warehouse_item_serial_id'] ?? null;
+        $qty = (float) ($material['quantity'] ?? 0);
+
+        if (!$inventoryId || $qty <= 0) {
+            return;
+        }
+
+        $inventoryTable = 'warehouse_inventories';
+        $inventory = DB::table($inventoryTable)->where('id', $inventoryId)->first();
+        if (!$inventory) {
+            return;
+        }
+
+        $itemCol = self::col($inventoryTable, ['warehouse_item_id', 'item_id']);
+        $onHandCol = self::col($inventoryTable, ['on_hand', 'quantity', 'qty']);
+        $availableCol = self::col($inventoryTable, ['available', 'available_qty']);
+        $itemId = $itemCol ? ($inventory->{$itemCol} ?? null) : null;
+
+        $currentOnHand = $onHandCol ? (float) ($inventory->{$onHandCol} ?? 0) : 0;
+        $currentAvailable = $availableCol ? (float) ($inventory->{$availableCol} ?? $currentOnHand) : $currentOnHand;
+
+        if ($qty > $currentAvailable) {
+            throw new \RuntimeException('Insufficient available stock for selected warehouse item.');
+        }
+
+        DB::table('service_job_order_report_materials')->insert([
+            'service_job_order_report_id' => $reportId,
+            'service_job_order_id' => $jobOrderId,
+            'warehouse_inventory_id' => $inventoryId,
+            'warehouse_item_id' => $itemId,
+            'warehouse_item_serial_id' => $serialId ?: null,
+            'quantity' => $qty,
+            'unit' => $material['unit'] ?? null,
+            'remarks' => $material['remarks'] ?? null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $update = [];
+        if ($onHandCol) {
+            $update[$onHandCol] = max(0, $currentOnHand - $qty);
+        }
+        if ($availableCol) {
+            $update[$availableCol] = max(0, $currentAvailable - $qty);
+        }
+        if (Schema::hasColumn($inventoryTable, 'updated_at')) {
+            $update['updated_at'] = $now;
+        }
+
+        if ($update) {
+            DB::table($inventoryTable)->where('id', $inventoryId)->update($update);
+        }
+
+        if ($serialId && self::tableExists('warehouse_item_serials')) {
+            $serialUpdate = [];
+            if (Schema::hasColumn('warehouse_item_serials', 'status')) {
+                $serialUpdate['status'] = 'used_service';
+            }
+            if (Schema::hasColumn('warehouse_item_serials', 'remarks')) {
+                $serialUpdate['remarks'] = 'Used under Service Job Order #' . $jobOrderId;
+            }
+            if (Schema::hasColumn('warehouse_item_serials', 'updated_at')) {
+                $serialUpdate['updated_at'] = $now;
+            }
+            if ($serialUpdate) {
+                DB::table('warehouse_item_serials')->where('id', $serialId)->update($serialUpdate);
+            }
+        }
+
+        self::ledger($inventory, $itemId, $qty, $jobOrderId, $now);
+    }
+
+    private static function ledger($inventory, $itemId, float $qty, int $jobOrderId, $now): void
+    {
+        try {
+            if (!self::tableExists('warehouse_stock_ledgers')) {
+                return;
+            }
+
+            $columns = Schema::getColumnListing('warehouse_stock_ledgers');
+            $data = [];
+
+            $branchCol = self::col('warehouse_inventories', ['branch_id']);
+            $locationCol = self::col('warehouse_inventories', ['warehouse_location_id', 'location_id']);
+            $onHandCol = self::col('warehouse_inventories', ['on_hand', 'quantity', 'qty']);
+
+            $map = [
+                'warehouse_item_id' => $itemId,
+                'warehouse_inventory_id' => $inventory->id ?? null,
+                'branch_id' => $branchCol ? ($inventory->{$branchCol} ?? null) : null,
+                'warehouse_location_id' => $locationCol ? ($inventory->{$locationCol} ?? null) : null,
+                'type' => 'service_job_order',
+                'movement_type' => 'service_job_order',
+                'reference_type' => 'Service Job Order',
+                'reference_no' => 'SJO-' . $jobOrderId,
+                'reference_id' => $jobOrderId,
+                'quantity' => -abs($qty),
+                'qty' => -abs($qty),
+                'balance' => max(0, ((float) ($onHandCol ? ($inventory->{$onHandCol} ?? 0) : 0)) - $qty),
+                'remarks' => 'Used in Service Job Order #' . $jobOrderId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            foreach ($map as $column => $value) {
+                if (in_array($column, $columns, true)) {
+                    $data[$column] = $value;
+                }
+            }
+
+            if ($data) {
+                DB::table('warehouse_stock_ledgers')->insert($data);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Phase 3 ledger insert skipped/failed', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    public static function materialsForReports($reportIds)
+    {
+        try {
+            if (!self::tableExists('service_job_order_report_materials') || empty($reportIds)) {
+                return collect();
+            }
+
+            $materials = DB::table('service_job_order_report_materials')
+                ->whereIn('service_job_order_report_id', $reportIds)
+                ->orderBy('id')
+                ->get();
+
+            if (!$materials->count()) {
+                return collect();
+            }
+
+            $itemIds = $materials->pluck('warehouse_item_id')->filter()->unique()->values()->all();
+            $serialIds = $materials->pluck('warehouse_item_serial_id')->filter()->unique()->values()->all();
+
+            $items = collect();
+            if (self::tableExists('warehouse_items') && $itemIds) {
+                $items = DB::table('warehouse_items')->whereIn('id', $itemIds)->get()->keyBy('id');
+            }
+
+            $serials = collect();
+            if (self::tableExists('warehouse_item_serials') && $serialIds) {
+                $serials = DB::table('warehouse_item_serials')->whereIn('id', $serialIds)->get()->keyBy('id');
+            }
+
+            $itemCodeCol = self::tableExists('warehouse_items') ? self::col('warehouse_items', ['item_code', 'code', 'sku']) : null;
+            $itemNameCol = self::tableExists('warehouse_items') ? self::col('warehouse_items', ['item_name', 'name', 'description']) : null;
+            $serialNoCol = self::tableExists('warehouse_item_serials') ? self::col('warehouse_item_serials', ['serial_number', 'serial_no', 'code']) : null;
+
+            return $materials->map(function ($material) use ($items, $serials, $itemCodeCol, $itemNameCol, $serialNoCol) {
+                $item = !empty($material->warehouse_item_id) ? ($items[$material->warehouse_item_id] ?? null) : null;
+                $serial = !empty($material->warehouse_item_serial_id) ? ($serials[$material->warehouse_item_serial_id] ?? null) : null;
+
+                $material->item_code = $item && $itemCodeCol ? ($item->{$itemCodeCol} ?? '') : '';
+                $material->item_name = $item && $itemNameCol ? ($item->{$itemNameCol} ?? '-') : '-';
+                $material->serial_number = $serial && $serialNoCol ? ($serial->{$serialNoCol} ?? '-') : '-';
+
+                return $material;
+            })->groupBy('service_job_order_report_id');
+        } catch (\Throwable $e) {
+            Log::error('Phase 3 materialsForReports failed', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return collect();
+        }
+    }
+}

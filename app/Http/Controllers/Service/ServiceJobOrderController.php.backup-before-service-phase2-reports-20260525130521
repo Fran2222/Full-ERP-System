@@ -1,0 +1,251 @@
+<?php
+
+namespace App\Http\Controllers\Service;
+
+use App\Http\Controllers\Controller;
+use App\Models\Service\ServiceJobOrder;
+use App\Models\Service\ServiceStatus;
+use App\Models\Service\ServiceType;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class ServiceJobOrderController extends Controller
+{
+    public function index(Request $request)
+    {
+        $jobOrders = ServiceJobOrder::with(['customer', 'serviceType', 'serviceStatus', 'assignedTo'])
+            ->when($request->input('search'), function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('job_order_no', 'like', "%{$search}%")
+                        ->orWhere('subject', 'like', "%{$search}%")
+                        ->orWhere('site_address', 'like', "%{$search}%")
+                        ->orWhere('priority', 'like', "%{$search}%")
+                        ->orWhere('status_text', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->input('status_id'), function ($query, $statusId) {
+                $query->where('service_status_id', $statusId);
+            })
+            ->latest('id')
+            ->paginate(10)
+            ->appends($request->query());
+
+        $statuses = ServiceStatus::orderBy('sort_order')->orderBy('name')->get();
+
+        return view('service.job-orders.index', compact('jobOrders', 'statuses'));
+    }
+
+    public function create()
+    {
+        return view('service.job-orders.create', $this->formData());
+    }
+
+    public function store(Request $request)
+    {
+        $data = $this->validated($request);
+        $data['job_order_no'] = $this->generateJobOrderNo();
+        $data['created_by'] = auth()->id();
+        $data['updated_by'] = auth()->id();
+        $data['status_text'] = $this->statusText($data['service_status_id'] ?? null);
+
+        $jobOrder = ServiceJobOrder::create($data);
+
+        return redirect()->route('service.job-orders.show', $jobOrder)
+            ->with('success', 'Service Job Order created successfully.');
+    }
+
+
+    public function show($job_order)
+    {
+        $id = is_object($job_order) ? ($job_order->id ?? null) : $job_order;
+
+        $jobOrder = \Illuminate\Support\Facades\DB::table('service_job_orders as jo')
+            ->leftJoin('customers as c', 'c.id', '=', 'jo.customer_id')
+            ->leftJoin('service_types as st', 'st.id', '=', 'jo.service_type_id')
+            ->leftJoin('service_statuses as ss', 'ss.id', '=', 'jo.service_status_id')
+            ->leftJoin('branches as b', 'b.id', '=', 'jo.branch_id')
+            ->leftJoin('users as u', 'u.id', '=', 'jo.assigned_to_user_id')
+            ->leftJoin('vehicles as v', 'v.id', '=', 'jo.vehicle_id')
+            ->where('jo.id', $id)
+            ->select([
+                'jo.*',
+                'c.customer_code',
+                'c.customer_name',
+                'c.contact_person',
+                'c.phone as customer_phone',
+                'c.email as customer_email',
+                'c.billing_address',
+                'st.name as service_type_name',
+                'ss.name as service_status_name',
+                'ss.color as service_status_color',
+                'b.name as branch_name',
+                'u.first_name as technician_first_name',
+                'u.last_name as technician_last_name',
+                'u.email as technician_email',
+                'v.vehicle_code',
+                'v.plate_number',
+                'v.brand as vehicle_brand',
+                'v.model as vehicle_model',
+            ])
+            ->first();
+
+        abort_if(! $jobOrder, 404);
+
+        $assets = [];
+
+        return view('service.job-orders.show', compact('jobOrder', 'assets'));
+    }
+
+    public function edit(ServiceJobOrder $jobOrder)
+    {
+        return view('service.job-orders.edit', array_merge($this->formData(), compact('jobOrder')));
+    }
+
+    public function update(Request $request, ServiceJobOrder $jobOrder)
+    {
+        $data = $this->validated($request);
+        $data['updated_by'] = auth()->id();
+        $data['status_text'] = $this->statusText($data['service_status_id'] ?? null);
+
+        if ($data['status_text'] === 'Completed' && empty($data['completed_at'])) {
+            $data['completed_at'] = now();
+        }
+
+        $jobOrder->update($data);
+
+        return redirect()->route('service.job-orders.show', $jobOrder)
+            ->with('success', 'Service Job Order updated successfully.');
+    }
+
+    public function destroy(ServiceJobOrder $jobOrder)
+    {
+        $jobOrder->delete();
+
+        return redirect()->route('service.job-orders.index')
+            ->with('success', 'Service Job Order deleted successfully.');
+    }
+
+    protected function validated(Request $request): array
+    {
+        return $request->validate([
+            'customer_id' => ['nullable', 'integer'],
+            'service_type_id' => ['nullable', 'integer'],
+            'service_status_id' => ['nullable', 'integer'],
+            'branch_id' => ['nullable', 'integer'],
+            'assigned_to_user_id' => ['nullable', 'integer'],
+            'vehicle_id' => ['nullable', 'integer'],
+            'subject' => ['required', 'string', 'max:255'],
+            'priority' => ['required', 'string', 'max:50'],
+            'requested_date' => ['nullable', 'date'],
+            'scheduled_at' => ['nullable', 'date'],
+            'started_at' => ['nullable', 'date'],
+            'completed_at' => ['nullable', 'date'],
+            'site_address' => ['nullable', 'string'],
+            'concern' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+    }
+
+    protected function formData(): array
+    {
+        return [
+            'customers' => $this->tableRows('customers', ['customer_name', 'name'], 'customer_name'),
+            'serviceTypes' => Schema::hasTable('service_types') ? ServiceType::where('status', 'active')->orderBy('name')->get() : collect(),
+            'statuses' => Schema::hasTable('service_statuses') ? ServiceStatus::where('status', 'active')->orderBy('sort_order')->orderBy('name')->get() : collect(),
+            'branches' => $this->tableRows('branches', ['name', 'branch_name'], 'name'),
+            'users' => $this->tableRows('users', ['last_name', 'first_name', 'name', 'email'], 'name'),
+            'vehicles' => $this->tableRows('vehicles', ['vehicle_code', 'plate_number'], 'vehicle_code'),
+        ];
+    }
+
+
+
+    private function tableRows(string $table, array $columns = [], string $orderBy = 'id')
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return collect();
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table($table);
+
+        /*
+         * PostgreSQL-safe status filtering:
+         * Do NOT use Schema::getColumnType() here because this Laravel version may require
+         * Doctrine DBAL. Instead, read the actual database type from information_schema.
+         */
+        if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'status')) {
+            $statusType = null;
+
+            try {
+                $row = \Illuminate\Support\Facades\DB::selectOne(
+                    "select data_type, udt_name from information_schema.columns
+                     where table_schema = current_schema()
+                       and table_name = ?
+                       and column_name = ?
+                     limit 1",
+                    [$table, 'status']
+                );
+
+                if ($row) {
+                    $statusType = strtolower((string) ($row->udt_name ?: $row->data_type));
+                }
+            } catch (\Throwable $e) {
+                $statusType = null;
+            }
+
+            $query->where(function ($statusQuery) use ($table, $statusType) {
+                if (in_array($statusType, ['bool', 'boolean'], true)) {
+                    $statusQuery->where($table . '.status', true)
+                        ->orWhereNull($table . '.status');
+                    return;
+                }
+
+                if (in_array($statusType, ['int2', 'int4', 'int8', 'smallint', 'integer', 'bigint'], true)) {
+                    $statusQuery->where($table . '.status', 1)
+                        ->orWhereNull($table . '.status');
+                    return;
+                }
+
+                /*
+                 * Text/varchar fallback.
+                 * Keep this only for text status columns like 'active'/'inactive'.
+                 */
+                $statusQuery->where($table . '.status', 'active')
+                    ->orWhere($table . '.status', 'Active')
+                    ->orWhere($table . '.status', '1')
+                    ->orWhereNull($table . '.status');
+            });
+        }
+
+        if ($orderBy && \Illuminate\Support\Facades\Schema::hasColumn($table, $orderBy)) {
+            $query->orderBy($orderBy);
+        } elseif (\Illuminate\Support\Facades\Schema::hasColumn($table, 'name')) {
+            $query->orderBy('name');
+        } elseif (\Illuminate\Support\Facades\Schema::hasColumn($table, 'id')) {
+            $query->orderBy('id');
+        }
+
+        return $query->get();
+    }
+
+    protected function statusText($statusId): string
+    {
+        if ($statusId && Schema::hasTable('service_statuses')) {
+            $status = ServiceStatus::find($statusId);
+            if ($status) {
+                return $status->name;
+            }
+        }
+
+        return 'Pending';
+    }
+
+    protected function generateJobOrderNo(): string
+    {
+        $prefix = 'JO-' . now()->format('Ymd') . '-';
+        $count = ServiceJobOrder::where('job_order_no', 'like', $prefix . '%')->count() + 1;
+
+        return $prefix . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+    }
+}

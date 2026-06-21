@@ -1,0 +1,225 @@
+<?php
+
+namespace App\Support;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class ServiceOperationsPhase3Helper
+{
+    public static function inventoryOptions()
+    {
+        if (!Schema::hasTable('warehouse_inventories')) {
+            return collect();
+        }
+
+        $query = DB::table('warehouse_inventories as wi');
+
+        if (Schema::hasTable('warehouse_items')) {
+            $query->leftJoin('warehouse_items as item', 'item.id', '=', 'wi.warehouse_item_id');
+        }
+
+        if (Schema::hasTable('warehouse_units')) {
+            $query->leftJoin('warehouse_units as unit', 'unit.id', '=', 'item.warehouse_unit_id');
+        }
+
+        if (Schema::hasTable('branches')) {
+            $query->leftJoin('branches as branch', 'branch.id', '=', 'wi.branch_id');
+        }
+
+        if (Schema::hasTable('warehouse_locations')) {
+            $query->leftJoin('warehouse_locations as loc', 'loc.id', '=', 'wi.warehouse_location_id');
+        }
+
+        $select = [
+            'wi.id as inventory_id',
+            'wi.warehouse_item_id',
+            'wi.on_hand',
+            'wi.available',
+            'wi.borrowed',
+            DB::raw("COALESCE(item.item_code, item.code, '') as item_code"),
+            DB::raw("COALESCE(item.item_name, item.name, '') as item_name"),
+            DB::raw("COALESCE(item.is_serialized, false) as is_serialized"),
+            DB::raw("COALESCE(unit.name, '') as unit_name"),
+            DB::raw("COALESCE(branch.name, branch.branch_name, 'Central / unassigned') as branch_name"),
+            DB::raw("COALESCE(loc.name, loc.location_name, '') as location_name"),
+        ];
+
+        return $query->select($select)
+            ->where(function ($q) {
+                if (Schema::hasColumn('warehouse_inventories', 'available')) {
+                    $q->where('wi.available', '>', 0);
+                } else {
+                    $q->where('wi.on_hand', '>', 0);
+                }
+            })
+            ->orderBy('item_name')
+            ->get();
+    }
+
+    public static function serialOptions()
+    {
+        if (!Schema::hasTable('warehouse_item_serials')) {
+            return collect();
+        }
+
+        $query = DB::table('warehouse_item_serials as serial');
+
+        if (Schema::hasTable('warehouse_items')) {
+            $query->leftJoin('warehouse_items as item', 'item.id', '=', 'serial.warehouse_item_id');
+        }
+
+        $statusColumn = Schema::hasColumn('warehouse_item_serials', 'status') ? 'serial.status' : null;
+
+        if ($statusColumn) {
+            $query->where(function ($q) {
+                $q->where('serial.status', 'available')
+                    ->orWhere('serial.status', 'Available')
+                    ->orWhereNull('serial.status');
+            });
+        }
+
+        return $query->select([
+                'serial.id',
+                'serial.warehouse_item_id',
+                DB::raw("COALESCE(serial.serial_number, serial.serial_no, serial.code, '') as serial_number"),
+                DB::raw("COALESCE(item.item_name, item.name, '') as item_name"),
+            ])
+            ->orderBy('serial_number')
+            ->get();
+    }
+
+    public static function deductMaterial(array $material, int $jobOrderId, int $reportId, $now): void
+    {
+        $inventoryId = $material['warehouse_inventory_id'] ?? null;
+        $serialId = $material['warehouse_item_serial_id'] ?? null;
+        $qty = (float) ($material['quantity'] ?? 0);
+
+        if (!$inventoryId || $qty <= 0 || !Schema::hasTable('warehouse_inventories')) {
+            return;
+        }
+
+        $inventory = DB::table('warehouse_inventories')->where('id', $inventoryId)->first();
+        if (!$inventory) {
+            return;
+        }
+
+        $itemId = $inventory->warehouse_item_id ?? null;
+        $currentOnHand = (float) ($inventory->on_hand ?? 0);
+        $currentAvailable = property_exists($inventory, 'available') ? (float) ($inventory->available ?? 0) : $currentOnHand;
+
+        if ($qty > $currentAvailable) {
+            throw new \RuntimeException('Insufficient available stock for selected warehouse item.');
+        }
+
+        DB::table('service_job_order_report_materials')->insert([
+            'service_job_order_report_id' => $reportId,
+            'service_job_order_id' => $jobOrderId,
+            'warehouse_inventory_id' => $inventoryId,
+            'warehouse_item_id' => $itemId,
+            'warehouse_item_serial_id' => $serialId ?: null,
+            'quantity' => $qty,
+            'unit' => $material['unit'] ?? null,
+            'remarks' => $material['remarks'] ?? null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $update = [];
+        if (Schema::hasColumn('warehouse_inventories', 'on_hand')) {
+            $update['on_hand'] = max(0, $currentOnHand - $qty);
+        }
+        if (Schema::hasColumn('warehouse_inventories', 'available')) {
+            $update['available'] = max(0, $currentAvailable - $qty);
+        }
+        if ($update) {
+            $update['updated_at'] = $now;
+            DB::table('warehouse_inventories')->where('id', $inventoryId)->update($update);
+        }
+
+        if ($serialId && Schema::hasTable('warehouse_item_serials')) {
+            $serialUpdate = [];
+            if (Schema::hasColumn('warehouse_item_serials', 'status')) {
+                $serialUpdate['status'] = 'used_service';
+            }
+            if (Schema::hasColumn('warehouse_item_serials', 'remarks')) {
+                $serialUpdate['remarks'] = 'Used under Service Job Order #' . $jobOrderId;
+            }
+            if (Schema::hasColumn('warehouse_item_serials', 'updated_at')) {
+                $serialUpdate['updated_at'] = $now;
+            }
+
+            if ($serialUpdate) {
+                DB::table('warehouse_item_serials')->where('id', $serialId)->update($serialUpdate);
+            }
+        }
+
+        self::ledger($inventory, $itemId, $qty, $jobOrderId, $now);
+    }
+
+    private static function ledger($inventory, $itemId, float $qty, int $jobOrderId, $now): void
+    {
+        if (!Schema::hasTable('warehouse_stock_ledgers')) {
+            return;
+        }
+
+        $columns = Schema::getColumnListing('warehouse_stock_ledgers');
+        $data = [];
+
+        $map = [
+            'warehouse_item_id' => $itemId,
+            'warehouse_inventory_id' => $inventory->id ?? null,
+            'branch_id' => $inventory->branch_id ?? null,
+            'warehouse_location_id' => $inventory->warehouse_location_id ?? null,
+            'type' => 'service_job_order',
+            'movement_type' => 'service_job_order',
+            'reference_type' => 'Service Job Order',
+            'reference_no' => 'SJO-' . $jobOrderId,
+            'reference_id' => $jobOrderId,
+            'quantity' => -abs($qty),
+            'qty' => -abs($qty),
+            'balance' => max(0, ((float) ($inventory->on_hand ?? 0)) - $qty),
+            'remarks' => 'Used in Service Job Order #' . $jobOrderId,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        foreach ($map as $column => $value) {
+            if (in_array($column, $columns, true)) {
+                $data[$column] = $value;
+            }
+        }
+
+        if ($data) {
+            DB::table('warehouse_stock_ledgers')->insert($data);
+        }
+    }
+
+    public static function materialsForReports($reportIds)
+    {
+        if (!Schema::hasTable('service_job_order_report_materials') || empty($reportIds)) {
+            return collect();
+        }
+
+        $query = DB::table('service_job_order_report_materials as m');
+
+        if (Schema::hasTable('warehouse_items')) {
+            $query->leftJoin('warehouse_items as item', 'item.id', '=', 'm.warehouse_item_id');
+        }
+
+        if (Schema::hasTable('warehouse_item_serials')) {
+            $query->leftJoin('warehouse_item_serials as serial', 'serial.id', '=', 'm.warehouse_item_serial_id');
+        }
+
+        return $query->whereIn('m.service_job_order_report_id', $reportIds)
+            ->select([
+                'm.*',
+                DB::raw("COALESCE(item.item_code, item.code, '') as item_code"),
+                DB::raw("COALESCE(item.item_name, item.name, '') as item_name"),
+                DB::raw("COALESCE(serial.serial_number, serial.serial_no, serial.code, '') as serial_number"),
+            ])
+            ->orderBy('m.id')
+            ->get()
+            ->groupBy('service_job_order_report_id');
+    }
+}

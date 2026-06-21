@@ -6,7 +6,8 @@
         $suffixes = $suffixes ?? ['N/A', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V', 'VI'];
         $maritalStatuses = $maritalStatuses ?? ['Single', 'Married', 'Divorced', 'Separated', 'Widowed'];
         $sexes = $sexes ?? ['Male', 'Female'];
-        $employmentTypes = $employmentTypes ?? ['Regular', 'Probationary', 'Contractual', 'Project-based', 'Part-time', 'Intern'];
+        $educationAttainments = $educationAttainments ?? ['Vocational and Technical','Undergraduate', 'Graduate', 'Post Graduate'];
+        $employmentTypes = $employmentTypes ?? ['Probationary', 'Regular', 'Project-based', 'Casual', 'Fixed Term', 'Part-time', 'Intern'];
         $employmentStatuses = $employmentStatuses ?? ['Active', 'Inactive', 'Probationary', 'Resigned', 'Terminated'];
         $selectedDepartmentId = (string) old('department_id', $employee->department_id ?? '');
         $selectedPositionId = (string) old('position_id', $employee->position_id ?? $profile->position_id ?? '');
@@ -125,6 +126,47 @@
                                         @endforeach
                                     </select>
                                 </div>
+
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Name of Spouse</label>
+                                    <input type="text" name="spouse_name" class="form-control" value="{{ old('spouse_name', $profile->spouse_name ?? '') }}" placeholder="Enter spouse name">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Name of Father</label>
+                                    <input type="text" name="father_name" class="form-control" value="{{ old('father_name', $profile->father_name ?? '') }}" placeholder="Enter father name">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Name of Mother</label>
+                                    <input type="text" name="mother_name" class="form-control" value="{{ old('mother_name', $profile->mother_name ?? '') }}" placeholder="Enter mother name">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Educational Attainment</label>
+                                    <select name="highest_education_attainment" class="form-select">
+                                        <option value="">Select</option>
+                                        @foreach($educationAttainments as $attainment)
+                                            <option value="{{ $attainment }}" {{ old('highest_education_attainment', $profile->highest_education_attainment ?? '') === $attainment ? 'selected' : '' }}>{{ $attainment }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Course</label>
+                                    <input type="text" name="course" class="form-control" value="{{ old('course', $profile->course ?? '') }}" placeholder="Enter course">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">School</label>
+                                    <input type="text" name="school" class="form-control" value="{{ old('school', $profile->school ?? '') }}" placeholder="Enter school">
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="form-label">Year Graduated</label>
+                                    <input type="number" name="year_graduated" class="form-control" min="1900" max="{{ now()->year + 10 }}" value="{{ old('year_graduated', $profile->year_graduated ?? '') }}" placeholder="e.g. {{ now()->year }}">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -236,6 +278,10 @@
                                     <input type="date" name="hire_date" class="form-control" value="{{ old('hire_date', optional($profile->hire_date)->format('Y-m-d')) }}" required>
                                 </div>
                                 <div class="col-md-3">
+                                    <label class="form-label">Date of Regularization</label>
+                                    <input type="date" name="regularization_date" class="form-control" value="{{ old('regularization_date', optional($profile->regularization_date)->format('Y-m-d')) }}">
+                                </div>
+                                <div class="col-md-3">
                                     <label class="form-label">Branch <span class="required-mark">*</span></label>
                                     <select name="branch_id" class="form-select" required>
                                         <option value="">Select Branch</option>
@@ -250,7 +296,6 @@
                                         <span class="input-group-text">₱</span>
                                         <input type="number" step="0.01" min="0" name="employee_rate" class="form-control" value="{{ old('employee_rate', $profile->employee_rate ?? $profile->salary ?? '') }}" required>
                                     </div>
-                                    <small class="text-secondary">Used to automatically compute overtime Rate per Hour ÷ 8 hours.</small>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label">Department <span class="required-mark">*</span></label>
@@ -274,7 +319,7 @@
                                 <div class="col-md-3">
                                     <label class="form-label">Immediate Supervisor</label>
                                     <select name="supervisor_id" class="form-select">
-                                        <option value="">Select Immediate Supervisor</option>
+                                        <option value="">Select</option>
                                         @foreach($supervisors as $supervisor)
                                             <option value="{{ $supervisor->id }}" {{ (string) old('supervisor_id', $profile->supervisor_id ?? '') === (string) $supervisor->id ? 'selected' : '' }}>{{ $supervisor->full_name ?: $supervisor->username }}</option>
                                         @endforeach
@@ -297,10 +342,58 @@
                                     <label class="form-label">TIN Number</label>
                                     <input type="text" name="tax_id_number" class="form-control" value="{{ old('tax_id_number', $profile->tax_id_number ?? '') }}">
                                 </div>
+                                <div class="col-12 mt-2">
+                                    <div class="border rounded-4 p-3 bg-light-subtle">
+                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                                            <div>
+                                                <h6 class="mb-1 fw-bold">Payroll Default Amounts</h6>
+                                                <small class="text-secondary">These amounts are pulled automatically when generating payroll. Leave blank/0 if not applicable.</small>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3">
+                                            @php
+                                                $payrollFields = [
+                                                    'payroll_sss' => 'SSS',
+                                                    'payroll_pagibig' => 'Pag-IBIG',
+                                                    'payroll_philhealth' => 'PhilHealth',
+                                                    'payroll_cash_advance' => 'Cash Advance',
+                                                    'payroll_account_receivables' => 'Account Receivables',
+                                                    'payroll_stl_mpl' => 'STL/MPL',
+                                                    'payroll_charitable_contribution' => 'Charitable Contribution',
+                                                    'payroll_savings_share' => 'Savings / Share',
+                                                    'payroll_rice_loan' => 'Rice Loan',
+                                                    'payroll_loan_payment' => 'Loan Payment',
+                                                    'payroll_lot_payment' => 'Lot Payment',
+                                                    'payroll_birthday_savings' => 'Birthday Savings',
+                                                    'payroll_tax_withheld' => 'TAX Withheld',
+                                                    'payroll_allowances' => 'Allowances',
+                                                    'payroll_other_adjustment' => 'Other Adjustment',
+                                                ];
+                                            @endphp
+
+                                            @foreach($payrollFields as $field => $label)
+                                                <div class="col-md-3">
+                                                    <label class="form-label">{{ $label }}</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">₱</span>
+                                                        <input type="number"
+                                                               step="0.01"
+                                                               min="{{ $field === 'payroll_other_adjustment' ? '' : '0' }}"
+                                                               name="{{ $field }}"
+                                                               class="form-control"
+                                                               value="{{ old($field, $profile->{$field} ?? 0) }}">
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="col-md-3">
                                     <label class="form-label">Employment Type</label>
                                     <select name="employment_type" class="form-select" required>
-                                        <option value="">Select Employment Type</option>
+                                        <option value="">Select</option>
                                         @foreach($employmentTypes as $type)
                                             <option value="{{ $type }}" {{ old('employment_type', $profile->employment_type ?? '') === $type ? 'selected' : '' }}>{{ $type }}</option>
                                         @endforeach
@@ -309,7 +402,7 @@
                                 <div class="col-md-3">
                                     <label class="form-label">Employment Status</label>
                                     <select name="employment_status" class="form-select" required>
-                                        <option value="">Select Employment Status</option>
+                                        <option value="">Select</option>
                                         @foreach($employmentStatuses as $status)
                                             <option value="{{ $status }}" {{ old('employment_status', $profile->employment_status ?? $employee->status ?? '') === $status ? 'selected' : '' }}>{{ $status }}</option>
                                         @endforeach

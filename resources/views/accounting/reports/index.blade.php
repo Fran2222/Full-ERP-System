@@ -17,7 +17,15 @@
                             <div class="card border-0 shadow-sm h-100 accounting-report-card">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3">
-                                        <div class="accounting-report-icon">TB</div>
+                                        <div class="accounting-report-icon accounting-report-icon-blue" aria-hidden="true">
+                                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M12 3V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M5 7H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M6.5 7L3.75 13.25C3.75 15.05 5.05 16.25 6.5 16.25C7.95 16.25 9.25 15.05 9.25 13.25L6.5 7Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M17.5 7L14.75 13.25C14.75 15.05 16.05 16.25 17.5 16.25C18.95 16.25 20.25 15.05 20.25 13.25L17.5 7Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M9 21H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </div>
                                         <span class="accounting-badge accounting-badge-posted">Available</span>
                                     </div>
                                     <h5 class="fw-bold text-dark mb-2">Trial Balance</h5>
@@ -32,7 +40,16 @@
                             <div class="card border-0 shadow-sm h-100 accounting-report-card">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3">
-                                        <div class="accounting-report-icon">IS</div>
+                                        <div class="accounting-report-icon accounting-report-icon-green" aria-hidden="true">
+                                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M4 19V5C4 3.9 4.9 3 6 3H18C19.1 3 20 3.9 20 5V19C20 20.1 19.1 21 18 21H6C4.9 21 4 20.1 4 19Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M8 8H16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                                <path d="M8 12H11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                                <path d="M8 16H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                                <path d="M14 16L16 14L18 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M16 14V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </div>
                                         <span class="accounting-badge accounting-badge-posted">Available</span>
                                     </div>
                                     <h5 class="fw-bold text-dark mb-2">Income Statement</h5>
@@ -47,7 +64,15 @@
                             <div class="card border-0 shadow-sm h-100 accounting-report-card">
                                 <div class="card-body p-4">
                                     <div class="d-flex align-items-center justify-content-between mb-3">
-                                        <div class="accounting-report-icon">BS</div>
+                                        <div class="accounting-report-icon accounting-report-icon-purple" aria-hidden="true">
+                                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M4 20H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                                <path d="M6 20V10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M12 20V6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M18 20V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <path d="M4 10L12 4L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </div>
                                         <span class="accounting-badge accounting-badge-posted">Available</span>
                                     </div>
                                     <h5 class="fw-bold text-dark mb-2">Balance Sheet</h5>
@@ -75,15 +100,28 @@
             }
 
             .accounting-report-icon {
-                width: 44px;
-                height: 44px;
-                border-radius: 14px;
-                background: #eef2ff;
-                color: #3a57e8;
+                width: 48px;
+                height: 48px;
+                border-radius: 15px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-weight: 900;
+                flex: 0 0 48px;
+            }
+
+            .accounting-report-icon-blue {
+                background: #eef2ff;
+                color: #3a57e8;
+            }
+
+            .accounting-report-icon-green {
+                background: #e8f8ef;
+                color: #079455;
+            }
+
+            .accounting-report-icon-purple {
+                background: #f4edff;
+                color: #7c3aed;
             }
         </style>
     @endpush

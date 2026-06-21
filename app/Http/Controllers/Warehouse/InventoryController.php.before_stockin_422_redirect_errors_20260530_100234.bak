@@ -1,0 +1,1322 @@
+<?php
+
+namespace App\Http\Controllers\Warehouse;
+
+use App\Http\Controllers\Controller;
+use App\Models\AccountingAccount;
+use App\Models\AccountingJournalEntry;
+use App\Models\AccountingJournalLine;
+use App\Models\Branch;
+use App\Models\Purchasing\PurchaseBill;
+use App\Models\Warehouse\Inventory;
+use App\Models\Warehouse\StockMovement;
+use App\Models\Warehouse\WarehouseLocation;
+use App\Models\Warehouse\WarehouseItem;
+use App\Models\Warehouse\WarehouseItemSerial;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Yajra\DataTables\Facades\DataTables;
+
+class InventoryController extends Controller
+{
+    private function access(string $permission): void
+    {
+        $user = auth()->user();
+
+        abort_unless(
+            $user && (
+                $user->can($permission)
+                || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+            ),
+            403,
+            'Unauthorized warehouse inventory action.'
+        );
+    }
+    private function canUseStockOut(): bool
+    {
+        $user = auth()->user();
+
+        return $user && (
+            (method_exists($user, 'canUseStockOut') && $user->canUseStockOut())
+            || $user->hasAnyRole([
+                'Super Admin',
+                'Super Administrator',
+                'Admin',
+                'BOD',
+                'Bod',
+                'Board of Directors',
+                'Board Of Directors',
+            ])
+        );
+    }
+
+    private function authorizeStockOut(): void
+    {
+        abort_unless($this->canUseStockOut(), 403, 'Only BOD or Admin can use Stock Out.');
+    }
+
+    private function canAccess(string $permission): bool
+    {
+        $user = auth()->user();
+
+        return $user && (
+            $user->can($permission)
+            || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+        );
+    }
+
+
+    private function inventoryNumberHtml(float $value, string $class = 'text-dark'): string
+    {
+        return '<span class="fw-bold d-block text-end ' . $class . '">' . number_format($value, 2) . '</span>';
+    }
+
+    private function serialCountForInventory($row, array $statuses): float
+    {
+        if (! DB::getSchemaBuilder()->hasTable('warehouse_item_serials')) {
+            return 0;
+        }
+
+        $query = DB::table('warehouse_item_serials')
+            ->where('item_id', $row->item_id)
+            ->where('location_id', $row->location_id)
+            ->whereIn('status', $statuses);
+
+        if (is_null($row->branch_id)) {
+            $query->whereNull('branch_id');
+        } else {
+            $query->where('branch_id', $row->branch_id);
+        }
+
+        return (float) $query->count();
+    }
+
+
+    private function isSerializedInventoryRow($row): bool
+    {
+        $item = $row->item ?? null;
+
+        if (! $item) {
+            return false;
+        }
+
+        foreach (['is_serialized', 'serialized', 'has_serials', 'track_serials', 'requires_serials'] as $column) {
+            if (isset($item->{$column})) {
+                return (bool) $item->{$column};
+            }
+        }
+
+        return false;
+    }
+
+    private function effectiveAvailableQuantity($row): float
+    {
+        if ($this->isSerializedInventoryRow($row)) {
+            return $this->serialCountForInventory($row, ['available', 'Available']);
+        }
+
+        return (float) $row->quantity;
+    }
+
+    private function effectiveBorrowedQuantity($row): float
+    {
+        if ($this->isSerializedInventoryRow($row)) {
+            return $this->serialCountForInventory($row, ['borrowed', 'Borrowed']);
+        }
+
+        return 0;
+    }
+
+    private function effectiveUnavailableQuantity($row): float
+    {
+        if ($this->isSerializedInventoryRow($row)) {
+            return $this->serialCountForInventory($row, ['for_repair', 'damaged', 'lost', 'For Repair', 'Damaged', 'Lost']);
+        }
+
+        return 0;
+    }
+
+    public function index(Request $request)
+    {
+        $this->access('warehouse.inventory.view');
+
+        if ($request->ajax()) {
+            $inventories = Inventory::with([
+                    'item.category',
+                    'item.unit',
+                    'branch',
+                    'location',
+                ])
+                ->select('warehouse_inventories.*')
+                ->orderByDesc('warehouse_inventories.id');
+
+            if ($request->filled('branch_id')) {
+                if ($request->branch_id === '__central') {
+                    $inventories->whereNull('branch_id');
+                } else {
+                    $inventories->where('branch_id', $request->branch_id);
+                }
+            }
+
+            if ($request->filled('location_id')) {
+                $inventories->where('location_id', $request->location_id);
+            }
+
+            return DataTables::eloquent($inventories)
+                ->addIndexColumn()
+                ->filter(function ($query) use ($request) {
+                    $search = $request->input('search.value');
+
+                    if ($search) {
+                        $query->where(function ($q) use ($search) {
+                            $q->whereHas('item', function ($itemQuery) use ($search) {
+                                $itemQuery->where('code', 'ilike', '%' . $search . '%')
+                                    ->orWhere('item_code', 'ilike', '%' . $search . '%')
+                                    ->orWhere('name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('item_name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('description', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('item.category', function ($categoryQuery) use ($search) {
+                                $categoryQuery->where('name', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('item.unit', function ($unitQuery) use ($search) {
+                                $unitQuery->where('name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('abbreviation', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('branch', function ($branchQuery) use ($search) {
+                                $branchQuery->where('name', 'ilike', '%' . $search . '%');
+                            })
+                            ->orWhereHas('location', function ($locationQuery) use ($search) {
+                                $locationQuery->where('location_name', 'ilike', '%' . $search . '%')
+                                    ->orWhere('name', 'ilike', '%' . $search . '%');
+                            });
+                        });
+                    }
+                })
+                ->addColumn('item_code', function ($row) {
+                    $code = $row->item?->code ?: $row->item?->item_code ?: '-';
+
+                    if (! $row->item_id || $code === '-') {
+                        return '<span class="fw-semibold text-muted">' . e($code) . '</span>';
+                    }
+
+                    $url = route('warehouse.items.show', $row->item_id) . '?return_url=' . urlencode(request()->fullUrl());
+
+                    return '<a href="' . e($url) . '" class="fw-semibold text-primary text-decoration-none">' . e($code) . '</a>';
+                })
+                ->addColumn('item_name', function ($row) {
+                    $name = $row->item?->name ?: $row->item?->item_name ?: '-';
+
+                    return '<div class="fw-semibold text-dark">' . e($name) . '</div>';
+                })
+                ->addColumn('category_name', function ($row) {
+                    return '<span class="text-secondary">' . e($row->item?->category?->name ?? '-') . '</span>';
+                })
+                ->addColumn('branch_name', function ($row) {
+                    return '<span class="text-secondary">' . e($row->branch?->name ?? 'Central / Unassigned') . '</span>';
+                })
+                ->addColumn('location_name', function ($row) {
+                    $locationName = $row->location?->location_name
+                        ?? $row->location?->name
+                        ?? '-';
+
+                    return '<span class="text-secondary">' . e($locationName) . '</span>';
+                })
+                ->addColumn('unit_name', function ($row) {
+                    $unitName = $row->item?->unit?->name
+                        ?? $row->item?->unit?->abbreviation
+                        ?? '-';
+
+                    return '<span class="text-secondary">' . e($unitName) . '</span>';
+                })
+                ->addColumn('on_hand_quantity', function ($row) {
+                    $available = $this->effectiveAvailableQuantity($row);
+                    $borrowed = $this->effectiveBorrowedQuantity($row);
+                    $unavailable = $this->effectiveUnavailableQuantity($row);
+
+                    return $this->inventoryNumberHtml($available + $borrowed + $unavailable, 'text-dark');
+                })
+                ->addColumn('borrowed_quantity', function ($row) {
+                    $borrowed = $this->effectiveBorrowedQuantity($row);
+
+                    return $this->inventoryNumberHtml($borrowed, $borrowed > 0 ? 'text-warning' : 'text-secondary');
+                })
+                ->addColumn('available_quantity', function ($row) {
+                    $item = $row->item;
+                    $available = $this->effectiveAvailableQuantity($row);
+                    $reorderLevel = $item?->reorder_level ?? $item?->minimum_stock ?? 0;
+                    $lowStock = $available <= (float) $reorderLevel;
+
+                    return $this->inventoryNumberHtml($available, $lowStock ? 'text-danger' : 'text-success');
+                })
+                ->editColumn('quantity', function ($row) {
+                    $item = $row->item;
+                    $available = $this->effectiveAvailableQuantity($row);
+                    $reorderLevel = $item?->reorder_level ?? $item?->minimum_stock ?? 0;
+                    $lowStock = $available <= (float) $reorderLevel;
+
+                    return '<span class="fw-bold d-block text-end ' . ($lowStock ? 'text-danger' : 'text-success') . '">'
+                        . number_format($available, 2)
+                        . '</span>';
+                })
+                ->addColumn('stock_status', function ($row) {
+                    $item = $row->item;
+                    $available = $this->effectiveAvailableQuantity($row);
+                    $reorderLevel = $item?->reorder_level ?? $item?->minimum_stock ?? 0;
+                    $lowStock = $available <= (float) $reorderLevel;
+
+                    if ($lowStock) {
+                        return '<span class="badge rounded-pill bg-danger-subtle text-danger px-3 py-2">Low Stock</span>';
+                    }
+
+                    return '<span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">OK</span>';
+                })
+                ->rawColumns([
+                    'item_code',
+                    'item_name',
+                    'category_name',
+                    'branch_name',
+                    'location_name',
+                    'unit_name',
+                    'on_hand_quantity',
+                    'borrowed_quantity',
+                    'available_quantity',
+                    'quantity',
+                    'stock_status',
+                ])
+                ->toJson();
+        }
+
+        $branches = Branch::orderBy('name')->get();
+        $locations = WarehouseLocation::with('branch')->orderBy('location_name')->get();
+
+        $canStockIn = $this->canAccess('warehouse.stock_in.create');
+        $canStockOut = $this->canUseStockOut();
+        $canViewLedger = $this->canAccess('warehouse.ledger.view');
+
+        return view('warehouse.inventory.index', compact(
+            'branches',
+            'locations',
+            'canStockIn',
+            'canStockOut',
+            'canViewLedger'
+        ));
+    }
+
+    private function tableHasColumn(string $table, string $column): bool
+    {
+        try {
+            return DB::getSchemaBuilder()->hasColumn($table, $column);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function firstExistingColumn(string $table, array $columns): ?string
+    {
+        foreach ($columns as $column) {
+            if ($this->tableHasColumn($table, $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+
+
+    private function generateAutoWarehouseReceivingNo(): string
+    {
+        $prefix = 'RCV-' . now()->format('Ymd') . '-';
+
+        $last = DB::table('warehouse_receivings')
+            ->where('receiving_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('receiving_no');
+
+        $next = 1;
+
+        if ($last) {
+            $next = ((int) substr($last, -4)) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function createPurchasingReceivingRecordFromPoStockIn(
+        object $purchaseOrder,
+        object $purchaseOrderItem,
+        WarehouseLocation $location,
+        float $quantity,
+        ?string $remarks = null
+    ): ?int {
+        if (! DB::getSchemaBuilder()->hasTable('warehouse_receivings')
+            || ! DB::getSchemaBuilder()->hasTable('warehouse_receiving_items')) {
+            return null;
+        }
+
+        $receivingNo = $this->generateAutoWarehouseReceivingNo();
+        $now = now();
+
+        $receivingRow = [
+            'receiving_no' => $receivingNo,
+            'supplier_id' => $purchaseOrder->supplier_id ?? null,
+            'location_id' => $purchaseOrder->location_id ?? $location->id,
+            'reference_no' => $purchaseOrder->po_no ?? null,
+            'received_date' => $now->toDateString(),
+            'remarks' => trim('Auto-created from Warehouse Stock In for PO ' . ($purchaseOrder->po_no ?? '') . ($remarks ? ' - ' . $remarks : '')),
+            'received_by' => auth()->id(),
+            'status' => 'partially_received',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        foreach (['purchase_order_id' => $purchaseOrder->id ?? null, 'created_by' => auth()->id()] as $column => $value) {
+            if ($this->tableHasColumn('warehouse_receivings', $column)) {
+                $receivingRow[$column] = $value;
+            }
+        }
+
+        $receivingId = DB::table('warehouse_receivings')->insertGetId($receivingRow);
+
+        $unitCost = (float) ($purchaseOrderItem->unit_price ?? 0);
+        $itemRow = [
+            'receiving_id' => $receivingId,
+            'item_id' => $purchaseOrderItem->item_id,
+            'quantity' => (int) round($quantity),
+            'unit_cost' => $unitCost,
+            'total_cost' => $quantity * $unitCost,
+            'remarks' => 'Auto-created from Warehouse Stock In / PO item #' . ($purchaseOrderItem->id ?? ''),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        foreach (['purchase_order_item_id' => $purchaseOrderItem->id ?? null] as $column => $value) {
+            if ($this->tableHasColumn('warehouse_receiving_items', $column)) {
+                $itemRow[$column] = $value;
+            }
+        }
+
+        DB::table('warehouse_receiving_items')->insert($itemRow);
+
+        return (int) $receivingId;
+    }
+
+    private function generateAutoPurchaseBillNo(): string
+    {
+        $prefix = 'PB-' . now()->format('Ymd') . '-';
+
+        $last = DB::table('purchase_bills')
+            ->where('bill_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('bill_no');
+
+        $next = 1;
+
+        if ($last) {
+            $next = ((int) substr($last, -4)) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function generateAutoPurchaseBillJournalEntryNo(): string
+    {
+        $prefix = 'JE-' . now()->format('Ymd') . '-';
+
+        $last = AccountingJournalEntry::where('entry_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('entry_no');
+
+        $next = 1;
+
+        if ($last) {
+            $next = ((int) substr($last, -4)) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function findAutoBillAccountingAccountByCode(string $code, string $name): ?AccountingAccount
+    {
+        return AccountingAccount::where('code', $code)
+            ->where('name', $name)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    private function findOrCreateAutoBillGrniAccount(): AccountingAccount
+    {
+        $account = AccountingAccount::where('code', '2100')
+            ->where('is_active', true)
+            ->first();
+
+        if ($account) {
+            return $account;
+        }
+
+        return AccountingAccount::create([
+            'code' => '2100',
+            'name' => 'Goods Received Not Invoiced',
+            'type' => 'liability',
+            'normal_balance' => 'credit',
+            'description' => 'Auto-created clearing account for purchase receiving before supplier billing.',
+            'is_active' => true,
+        ]);
+    }
+
+    private function createAutoPurchaseBillJournalEntry(string $billNo, string $billDate, string $memo, float $amount): AccountingJournalEntry
+    {
+        $grniAccount = $this->findOrCreateAutoBillGrniAccount();
+        $accountsPayableAccount = $this->findAutoBillAccountingAccountByCode('2000', 'Accounts Payable');
+
+        if (! $accountsPayableAccount || ! $grniAccount) {
+            throw ValidationException::withMessages([
+                'accounting' => 'Accounting setup is incomplete. Please make sure Chart of Accounts has 2000 - Accounts Payable and 2100 - Goods Received Not Invoiced.',
+            ]);
+        }
+
+        $journalEntry = AccountingJournalEntry::create([
+            'entry_no' => $this->generateAutoPurchaseBillJournalEntryNo(),
+            'entry_date' => $billDate,
+            'description' => $memo,
+            'status' => 'posted',
+            'created_by' => auth()->id(),
+            'posted_by' => auth()->id(),
+            'posted_at' => now(),
+        ]);
+
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $grniAccount->id,
+            'line_no' => 1,
+            'description' => $memo,
+            'debit' => $amount,
+            'credit' => 0,
+        ]);
+
+        AccountingJournalLine::create([
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'accounting_account_id' => $accountsPayableAccount->id,
+            'line_no' => 2,
+            'description' => $memo,
+            'debit' => 0,
+            'credit' => $amount,
+        ]);
+
+        return $journalEntry;
+    }
+
+    private function autoCreatePurchaseBillIfFullyReceived(int $purchaseOrderId): ?int
+    {
+        if (! DB::getSchemaBuilder()->hasTable('purchase_bills')) {
+            return null;
+        }
+
+        $purchaseOrder = DB::table('purchase_orders')
+            ->where('id', $purchaseOrderId)
+            ->first();
+
+        if (! $purchaseOrder || $purchaseOrder->status !== 'received') {
+            return null;
+        }
+
+        $items = DB::table('purchase_order_items')
+            ->where('purchase_order_id', $purchaseOrderId)
+            ->get();
+
+        $hasIncompleteItem = $items->contains(function ($item) {
+            return (float) ($item->received_quantity ?? 0) < (float) ($item->quantity ?? 0);
+        });
+
+        if ($hasIncompleteItem) {
+            return null;
+        }
+
+        $existingBillId = DB::table('purchase_bills')
+            ->where('purchase_order_id', $purchaseOrderId)
+            ->whereNull('deleted_at')
+            ->where('status', '!=', 'voided')
+            ->value('id');
+
+        if ($existingBillId) {
+            return (int) $existingBillId;
+        }
+
+        $amount = round((float) ($purchaseOrder->total_amount ?? 0), 2);
+
+        if ($amount <= 0) {
+            $amount = round((float) $items->sum(function ($item) {
+                return (float) ($item->line_total ?? 0);
+            }), 2);
+        }
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $billNo = $this->generateAutoPurchaseBillNo();
+        $billDate = now()->toDateString();
+        $memo = 'Auto-created Purchase Bill ' . $billNo . ' for fully received PO ' . $purchaseOrder->po_no;
+        $journalEntry = $this->createAutoPurchaseBillJournalEntry($billNo, $billDate, $memo, $amount);
+
+        $dueDate = $billDate;
+
+        if (! empty($purchaseOrder->expected_date)) {
+            $dueDate = $purchaseOrder->expected_date;
+        }
+
+        $bill = PurchaseBill::create([
+            'bill_no' => $billNo,
+            'purchase_order_id' => $purchaseOrder->id,
+            'supplier_id' => $purchaseOrder->supplier_id,
+            'accounting_journal_entry_id' => $journalEntry->id,
+            'bill_date' => $billDate,
+            'due_date' => $dueDate,
+            'reference_no' => $purchaseOrder->po_no,
+            'subtotal' => $amount,
+            'tax_amount' => 0,
+            'total_amount' => $amount,
+            'description' => $memo,
+            'status' => 'posted',
+            'created_by' => auth()->id(),
+        ]);
+
+        return (int) $bill->id;
+    }
+
+    private function normalizeSubmittedSerial(?string $serial): ?string
+    {
+        $serial = strtoupper(trim((string) $serial));
+        $serial = preg_replace('/\s+/', '', $serial);
+
+        return $serial !== '' ? $serial : null;
+    }
+
+    private function extractAcceptedSerials(Request $request): array
+    {
+        $serials = [];
+
+        $pushSerial = function ($value) use (&$serials) {
+            $serial = $this->normalizeSubmittedSerial(is_scalar($value) ? (string) $value : null);
+
+            if ($serial !== null) {
+                $serials[] = $serial;
+            }
+        };
+
+        $jsonPayload = $request->input('accepted_serial_numbers');
+        if (is_string($jsonPayload) && trim($jsonPayload) !== '') {
+            $decoded = json_decode($jsonPayload, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $value) {
+                    $pushSerial($value);
+                }
+            }
+        }
+
+        foreach (['serials', 'serial_numbers_array'] as $arrayField) {
+            $values = $request->input($arrayField, []);
+            if (is_array($values)) {
+                foreach ($values as $value) {
+                    $pushSerial($value);
+                }
+            }
+        }
+
+        $textareaPayload = $request->input('serial_numbers');
+        if (is_string($textareaPayload) && trim($textareaPayload) !== '') {
+            foreach (preg_split('/\r?\n|,|;/', $textareaPayload) as $value) {
+                $pushSerial($value);
+            }
+        }
+
+        $serials = array_values(array_unique($serials));
+
+        return $serials;
+    }
+
+    private function warehouseItemIsSerialized(int $itemId): bool
+    {
+        $item = DB::table('warehouse_items')->where('id', $itemId)->first();
+
+        if (! $item) {
+            return false;
+        }
+
+        foreach (['is_serialized', 'serialized', 'has_serials', 'track_serials', 'requires_serials'] as $column) {
+            if (property_exists($item, $column)) {
+                return (bool) $item->{$column};
+            }
+        }
+
+        return false;
+    }
+
+    private function assertSerialsAreUnique(array $serials): void
+    {
+        if (count($serials) !== count(array_unique($serials))) {
+            throw ValidationException::withMessages([
+                'serial_numbers' => 'Duplicate serial numbers were submitted. Please remove duplicate scans before saving.',
+            ]);
+        }
+    }
+
+    private function assertSerialsDoNotExist(array $serials): void
+    {
+        if (empty($serials) || ! DB::getSchemaBuilder()->hasTable('warehouse_item_serials')) {
+            return;
+        }
+
+        $serialColumn = $this->firstExistingColumn('warehouse_item_serials', ['serial_number', 'serial_no']);
+
+        if (! $serialColumn) {
+            return;
+        }
+
+        $existing = DB::table('warehouse_item_serials')
+            ->whereIn(DB::raw('LOWER(' . $serialColumn . ')'), array_map('strtolower', $serials))
+            ->pluck($serialColumn)
+            ->map(fn ($serial) => strtoupper((string) $serial))
+            ->values()
+            ->all();
+
+        if (! empty($existing)) {
+            throw ValidationException::withMessages([
+                'serial_numbers' => 'These serial numbers already exist: ' . implode(', ', $existing),
+            ]);
+        }
+    }
+
+    private function createStockInSerialRows(array $serials, array $data, $branchId, int $movementId, string $referenceNo): void
+    {
+        if (empty($serials) || ! DB::getSchemaBuilder()->hasTable('warehouse_item_serials')) {
+            return;
+        }
+
+        $serialColumn = $this->firstExistingColumn('warehouse_item_serials', ['serial_number', 'serial_no']);
+
+        if (! $serialColumn) {
+            throw ValidationException::withMessages([
+                'serial_numbers' => 'Serial number column was not found in warehouse_item_serials table.',
+            ]);
+        }
+
+        $now = now();
+
+        foreach ($serials as $serial) {
+            $row = [
+                'item_id' => $data['item_id'],
+                'branch_id' => $branchId ?: null,
+                'location_id' => $data['location_id'],
+                $serialColumn => $serial,
+                'status' => 'available',
+                'remarks' => 'Received via ' . $referenceNo,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+
+            if ($this->tableHasColumn('warehouse_item_serials', 'stock_in_movement_id')) {
+                $row['stock_in_movement_id'] = $movementId;
+            }
+
+            if ($this->tableHasColumn('warehouse_item_serials', 'created_by')) {
+                $row['created_by'] = auth()->id();
+            }
+
+            DB::table('warehouse_item_serials')->insert($row);
+        }
+    }
+
+    public function stockIn(Request $request)
+    {
+        $this->access('warehouse.stock_in.create');
+
+        $data = $request->validate([
+            'stock_in_source' => ['nullable', 'in:manual,purchase_order'],
+            'purchase_order_id' => ['nullable', 'integer', 'exists:purchase_orders,id'],
+            'purchase_order_item_id' => ['nullable', 'integer', 'exists:purchase_order_items,id'],
+            'item_id' => ['nullable', 'exists:warehouse_items,id'],
+            'branch_id' => ['nullable', 'exists:branches,id'],
+            'location_id' => ['required', 'exists:warehouse_locations,id'],
+            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $isFromPurchaseOrder = ($data['stock_in_source'] ?? null) === 'purchase_order'
+            || ! empty($data['purchase_order_id'])
+            || ! empty($data['purchase_order_item_id']);
+
+        if ($isFromPurchaseOrder) {
+            if (empty($data['purchase_order_id']) || empty($data['purchase_order_item_id'])) {
+                throw ValidationException::withMessages([
+                    'purchase_order_id' => 'Please select a purchase order and purchase order item before saving PO stock in.',
+                ]);
+            }
+
+            $poItemPreview = DB::table('purchase_order_items')
+                ->where('id', $data['purchase_order_item_id'])
+                ->where('purchase_order_id', $data['purchase_order_id'])
+                ->first();
+
+            if (! $poItemPreview) {
+                throw ValidationException::withMessages([
+                    'purchase_order_item_id' => 'Selected purchase order item does not belong to the selected purchase order.',
+                ]);
+            }
+
+            $purchaseOrderPreview = DB::table('purchase_orders')
+                ->where('id', $data['purchase_order_id'])
+                ->first();
+
+            if (! $purchaseOrderPreview || ! in_array($purchaseOrderPreview->status, ['ordered', 'partially_received'], true)) {
+                throw ValidationException::withMessages([
+                    'purchase_order_id' => 'Only approved/ordered or partially received purchase orders can be stocked in.',
+                ]);
+            }
+
+            $data['item_id'] = (int) $poItemPreview->item_id;
+        }
+
+        if (empty($data['item_id'])) {
+            throw ValidationException::withMessages([
+                'item_id' => 'Please select a warehouse item before saving stock in.',
+            ]);
+        }
+
+        $acceptedSerials = $this->extractAcceptedSerials($request);
+        $isSerializedItem = $this->warehouseItemIsSerialized((int) $data['item_id']);
+
+        if ($isSerializedItem && empty($acceptedSerials)) {
+            throw ValidationException::withMessages([
+                'serial_numbers' => 'Please scan or accept at least one serial number before saving this serialized item.',
+            ]);
+        }
+
+        if (! empty($acceptedSerials)) {
+            $this->assertSerialsAreUnique($acceptedSerials);
+            $this->assertSerialsDoNotExist($acceptedSerials);
+
+            // For serialized stock-in, the accepted serial list is the source of truth.
+            // This prevents the old fallback behavior from saving generated serials
+            // like TPL8P-001 instead of the actual scanned serials.
+            $data['quantity'] = count($acceptedSerials);
+        }
+
+        $resultMessage = 'Stock in saved successfully.';
+
+        DB::transaction(function () use (&$data, $acceptedSerials, $isFromPurchaseOrder, &$resultMessage) {
+            $location = WarehouseLocation::findOrFail($data['location_id']);
+            $branchId = $data['branch_id'] ?? $location->branch_id;
+
+            abort_unless($branchId, 422, 'Selected location has no assigned branch.');
+
+            $purchaseOrder = null;
+            $purchaseOrderItem = null;
+
+            if ($isFromPurchaseOrder) {
+                $purchaseOrder = DB::table('purchase_orders')
+                    ->where('id', $data['purchase_order_id'])
+                    ->lockForUpdate()
+                    ->first();
+
+                $purchaseOrderItem = DB::table('purchase_order_items')
+                    ->where('id', $data['purchase_order_item_id'])
+                    ->where('purchase_order_id', $data['purchase_order_id'])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $purchaseOrder || ! $purchaseOrderItem) {
+                    throw ValidationException::withMessages([
+                        'purchase_order_item_id' => 'The selected purchase order item could not be verified.',
+                    ]);
+                }
+
+                if (! in_array($purchaseOrder->status, ['ordered', 'partially_received'], true)) {
+                    throw ValidationException::withMessages([
+                        'purchase_order_id' => 'This purchase order is not open for warehouse receiving.',
+                    ]);
+                }
+
+                if ((int) $purchaseOrderItem->item_id !== (int) $data['item_id']) {
+                    throw ValidationException::withMessages([
+                        'item_id' => 'Selected item does not match the selected purchase order item.',
+                    ]);
+                }
+
+                $orderedQty = (float) $purchaseOrderItem->quantity;
+                $alreadyReceivedQty = (float) ($purchaseOrderItem->received_quantity ?? 0);
+                $remainingQty = max(0, $orderedQty - $alreadyReceivedQty);
+                $receivingQty = (float) $data['quantity'];
+
+                if ($receivingQty > $remainingQty) {
+                    throw ValidationException::withMessages([
+                        'quantity' => 'Receive quantity cannot exceed the remaining PO quantity. Remaining: ' . number_format($remainingQty, 2),
+                    ]);
+                }
+            }
+
+            $referenceNo = $data['reference_no']
+                ?: ($purchaseOrder?->po_no ?? ('STOCK-IN-' . now()->format('YmdHis')));
+            $quantity = (float) $data['quantity'];
+
+            $inventory = Inventory::firstOrCreate(
+                [
+                    'item_id' => $data['item_id'],
+                    'branch_id' => $branchId ?: null,
+                    'location_id' => $data['location_id'],
+                ],
+                [
+                    'quantity' => 0,
+                ]
+            );
+
+            $inventory->quantity = (float) $inventory->quantity + $quantity;
+            $inventory->save();
+
+            $remarks = $data['remarks'] ?? null;
+
+            if ($isFromPurchaseOrder && $purchaseOrder) {
+                $poRemarks = 'PO Receiving: ' . $purchaseOrder->po_no;
+                $remarks = trim($poRemarks . ($remarks ? ' - ' . $remarks : ''));
+            }
+
+            $movement = StockMovement::create([
+                'item_id' => $data['item_id'],
+                'location_id' => $data['location_id'],
+                'movement_type' => 'stock_in',
+                'quantity' => $quantity,
+                'balance_after' => $inventory->quantity,
+                'reference_type' => $referenceNo,
+                'reference_id' => $purchaseOrder?->id,
+                'remarks' => $remarks,
+                'transaction_date' => now(),
+                'created_by' => auth()->id(),
+            ]);
+
+            $this->createStockInSerialRows($acceptedSerials, $data, (int) $branchId, (int) $movement->id, $referenceNo);
+
+            if ($isFromPurchaseOrder && $purchaseOrder && $purchaseOrderItem) {
+                $autoReceivingId = $this->createPurchasingReceivingRecordFromPoStockIn(
+                    $purchaseOrder,
+                    $purchaseOrderItem,
+                    $location,
+                    $quantity,
+                    $data['remarks'] ?? null
+                );
+
+                if ($autoReceivingId) {
+                    $movement->reference_type = 'purchase_order_receiving';
+                    $movement->reference_id = $autoReceivingId;
+                    $movement->save();
+                }
+
+                $newReceivedQty = round((float) ($purchaseOrderItem->received_quantity ?? 0) + $quantity, 2);
+
+                DB::table('purchase_order_items')
+                    ->where('id', $purchaseOrderItem->id)
+                    ->update([
+                        'received_quantity' => $newReceivedQty,
+                        'updated_at' => now(),
+                    ]);
+
+                $poItems = DB::table('purchase_order_items')
+                    ->where('purchase_order_id', $purchaseOrder->id)
+                    ->get();
+
+                $totalOrdered = (float) $poItems->sum(fn ($item) => (float) $item->quantity);
+                $totalReceived = (float) $poItems->sum(fn ($item) => (float) $item->received_quantity);
+
+                $newPoStatus = 'ordered';
+
+                if ($totalOrdered > 0 && $totalReceived >= $totalOrdered) {
+                    $newPoStatus = 'received';
+                } elseif ($totalReceived > 0) {
+                    $newPoStatus = 'partially_received';
+                }
+
+                $poUpdate = [
+                    'status' => $newPoStatus,
+                    'updated_at' => now(),
+                ];
+
+                if ($this->tableHasColumn('purchase_orders', 'received_by')) {
+                    $poUpdate['received_by'] = auth()->id();
+                }
+
+                if ($this->tableHasColumn('purchase_orders', 'received_at')) {
+                    $poUpdate['received_at'] = now();
+                }
+
+                DB::table('purchase_orders')
+                    ->where('id', $purchaseOrder->id)
+                    ->update($poUpdate);
+
+                if (! empty($autoReceivingId)) {
+                    DB::table('warehouse_receivings')
+                        ->where('id', $autoReceivingId)
+                        ->update([
+                            'status' => $newPoStatus === 'received' ? 'received' : 'partially_received',
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                $autoBillId = null;
+
+                if ($newPoStatus === 'received') {
+                    $autoBillId = $this->autoCreatePurchaseBillIfFullyReceived((int) $purchaseOrder->id);
+                }
+
+                if ($newPoStatus === 'received') {
+                    $resultMessage = $autoBillId
+                        ? 'PO stock in saved. Purchase order is fully received and purchase bill was auto-created.'
+                        : 'PO stock in saved. Purchase order is now fully received.';
+                } else {
+                    $resultMessage = 'PO stock in saved. Purchasing receiving record auto-created. Purchase order is now partially received.';
+                }
+            }
+        });
+
+        return redirect()
+            ->route('warehouse.inventory')
+            ->with('success', $resultMessage);
+    }
+
+    public function stockOut(Request $request)
+    {
+        $this->authorizeStockOut();
+
+        $data = $request->validate([
+            'item_id' => ['required', 'exists:warehouse_items,id'],
+            'branch_id' => ['nullable', 'exists:branches,id'],
+            'location_id' => ['required', 'exists:warehouse_locations,id'],
+            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'remarks' => ['nullable', 'string'],
+            'serial_ids' => ['nullable', 'array'],
+            'serial_ids.*' => ['integer', 'exists:warehouse_item_serials,id'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            $location = WarehouseLocation::findOrFail($data['location_id']);
+            $branchId = array_key_exists('branch_id', $data) && $data['branch_id'] !== null && $data['branch_id'] !== ''
+                ? $data['branch_id']
+                : $location->branch_id;
+
+            $item = WarehouseItem::findOrFail($data['item_id']);
+            $serialIds = collect($data['serial_ids'] ?? [])->filter()->unique()->values()->all();
+            $isSerialized = (bool) ($item->is_serialized ?? false);
+
+            if ($isSerialized) {
+                if (count($serialIds) < 1) {
+                    throw ValidationException::withMessages([
+                        'serial_ids' => 'Please select at least one serial number for serialized stock out.',
+                    ]);
+                }
+
+                $data['quantity'] = count($serialIds);
+            }
+
+            $inventoryQuery = Inventory::where('item_id', $data['item_id'])
+                ->where('location_id', $data['location_id'])
+                ->lockForUpdate();
+
+            if ($branchId !== null && $branchId !== '') {
+                $inventoryQuery->where('branch_id', $branchId);
+            } else {
+                $inventoryQuery->whereNull('branch_id');
+            }
+
+            $inventory = $inventoryQuery->first();
+
+            if (!$inventory || (float) $inventory->quantity < (float) $data['quantity']) {
+                abort(422, 'Insufficient stock for this item/location.');
+            }
+
+            if ($isSerialized) {
+                $serialQuery = WarehouseItemSerial::whereIn('id', $serialIds)
+                    ->where('item_id', $data['item_id'])
+                    ->where('location_id', $data['location_id'])
+                    ->where('status', 'available')
+                    ->lockForUpdate();
+
+                if ($branchId !== null && $branchId !== '') {
+                    $serialQuery->where('branch_id', $branchId);
+                } else {
+                    $serialQuery->whereNull('branch_id');
+                }
+
+                if ((clone $serialQuery)->count() !== count($serialIds)) {
+                    throw ValidationException::withMessages([
+                        'serial_ids' => 'One or more selected serial numbers are no longer available in the selected source location.',
+                    ]);
+                }
+            }
+
+            $qty = abs((float) $data['quantity']);
+            $inventory->quantity = (float) $inventory->quantity - $qty;
+            $inventory->save();
+
+            $movement = StockMovement::create([
+                'item_id' => $data['item_id'],
+                'location_id' => $data['location_id'],
+                'movement_type' => 'stock_out',
+                'quantity' => -$qty,
+                'balance_after' => $inventory->quantity,
+                'reference_type' => $data['reference_no'] ?: 'STOCK-OUT-' . now()->format('YmdHis'),
+                'reference_id' => null,
+                'remarks' => $data['remarks'] ?? null,
+                'transaction_date' => now(),
+                'created_by' => auth()->id(),
+            ]);
+
+            if ($isSerialized) {
+                WarehouseItemSerial::whereIn('id', $serialIds)->update([
+                    'status' => 'stock_out',
+                    'stock_out_movement_id' => $movement->id,
+                    'issued_at' => now(),
+                    'remarks' => $data['remarks'] ?? null,
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('warehouse.inventory')
+            ->with('success', 'Stock out saved successfully.');
+    }
+
+    public function transfer(Request $request)
+    {
+        $this->access('warehouse.transfer.create');
+
+        $data = $request->validate([
+            'item_id' => ['required', 'exists:warehouse_items,id'],
+            'from_branch_id' => ['nullable', 'exists:branches,id'],
+            'from_location_id' => ['required', 'exists:warehouse_locations,id'],
+            'to_branch_id' => ['nullable', 'exists:branches,id'],
+            'to_location_id' => ['required', 'exists:warehouse_locations,id', 'different:from_location_id'],
+            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'remarks' => ['nullable', 'string'],
+        ]);
+
+        $data['from_branch_id'] = $data['from_branch_id'] ?? null;
+        $data['to_branch_id'] = $data['to_branch_id'] ?? null;
+        $data['reference_no'] = $data['reference_no'] ?? null;
+        $data['remarks'] = $data['remarks'] ?? null;
+
+        DB::transaction(function () use ($data) {
+            WarehouseLocation::findOrFail($data['from_location_id']);
+            WarehouseLocation::findOrFail($data['to_location_id']);
+
+            $fromInventoryQuery = Inventory::where('item_id', $data['item_id'])
+                ->where('location_id', $data['from_location_id'])
+                ->lockForUpdate();
+
+            if ($data['from_branch_id']) {
+                $fromInventoryQuery->where('branch_id', $data['from_branch_id']);
+            } else {
+                $fromInventoryQuery->whereNull('branch_id');
+            }
+
+            $fromInventory = $fromInventoryQuery->first();
+
+            if (! $fromInventory || (float) $fromInventory->quantity < (float) $data['quantity']) {
+                abort(422, 'Insufficient stock in source location.');
+            }
+
+            $toInventory = Inventory::firstOrCreate(
+                [
+                    'item_id' => $data['item_id'],
+                    'branch_id' => $data['to_branch_id'],
+                    'location_id' => $data['to_location_id'],
+                ],
+                [
+                    'quantity' => 0,
+                ]
+            );
+
+            $qty = abs((float) $data['quantity']);
+            $ref = $data['reference_no'] ?: 'TRANSFER-' . now()->format('YmdHis');
+
+            $fromInventory->quantity = (float) $fromInventory->quantity - $qty;
+            $fromInventory->save();
+
+            $toInventory->quantity = (float) $toInventory->quantity + $qty;
+            $toInventory->save();
+
+            StockMovement::create([
+                'item_id' => $data['item_id'],
+                'location_id' => $data['from_location_id'],
+                'movement_type' => 'transfer_out',
+                'quantity' => -$qty,
+                'balance_after' => $fromInventory->quantity,
+                'reference_type' => $ref,
+                'reference_id' => null,
+                'remarks' => $data['remarks'],
+                'transaction_date' => now(),
+                'created_by' => auth()->id(),
+            ]);
+
+            StockMovement::create([
+                'item_id' => $data['item_id'],
+                'location_id' => $data['to_location_id'],
+                'movement_type' => 'transfer_in',
+                'quantity' => $qty,
+                'balance_after' => $toInventory->quantity,
+                'reference_type' => $ref,
+                'reference_id' => null,
+                'remarks' => $data['remarks'],
+                'transaction_date' => now(),
+                'created_by' => auth()->id(),
+            ]);
+        });
+
+        return redirect()
+            ->route('warehouse.inventory')
+            ->with('success', 'Stock transfer saved successfully.');
+    }
+
+    public function adjustment(Request $request)
+    {
+        $this->access('warehouse.adjustment.create');
+
+        $data = $request->validate([
+            'item_id' => ['required', 'exists:warehouse_items,id'],
+            'branch_id' => ['nullable', 'exists:branches,id'],
+            'location_id' => ['required', 'exists:warehouse_locations,id'],
+            'adjustment_type' => ['required', 'in:add,deduct'],
+            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'remarks' => ['nullable', 'string'],
+            'serial_ids' => ['nullable', 'array'],
+            'serial_ids.*' => ['integer', 'exists:warehouse_item_serials,id'],
+        ]);
+
+        $acceptedSerials = $this->extractAcceptedSerials($request);
+
+        DB::transaction(function () use ($data, $acceptedSerials) {
+            $location = WarehouseLocation::findOrFail($data['location_id']);
+            $branchId = array_key_exists('branch_id', $data) && $data['branch_id'] !== null && $data['branch_id'] !== ''
+                ? $data['branch_id']
+                : $location->branch_id;
+
+            $item = WarehouseItem::findOrFail($data['item_id']);
+            $isSerialized = (bool) ($item->is_serialized ?? false);
+            $serialIds = collect($data['serial_ids'] ?? [])->filter()->unique()->values()->all();
+            $referenceNo = $data['reference_no'] ?: 'ADJ-' . now()->format('YmdHis');
+
+            if ($isSerialized) {
+                if ($data['adjustment_type'] === 'add') {
+                    if (empty($acceptedSerials)) {
+                        throw ValidationException::withMessages([
+                            'serial_numbers' => 'Please enter at least one serial number for serialized stock adjustment add.',
+                        ]);
+                    }
+
+                    $this->assertSerialsAreUnique($acceptedSerials);
+                    $this->assertSerialsDoNotExist($acceptedSerials);
+                    $data['quantity'] = count($acceptedSerials);
+                }
+
+                if ($data['adjustment_type'] === 'deduct') {
+                    if (count($serialIds) < 1) {
+                        throw ValidationException::withMessages([
+                            'serial_ids' => 'Please select at least one serial number for serialized stock adjustment deduction.',
+                        ]);
+                    }
+
+                    $data['quantity'] = count($serialIds);
+                }
+            }
+
+            $inventoryQuery = Inventory::where('item_id', $data['item_id'])
+                ->where('location_id', $data['location_id'])
+                ->lockForUpdate();
+
+            if ($branchId !== null && $branchId !== '') {
+                $inventoryQuery->where('branch_id', $branchId);
+            } else {
+                $inventoryQuery->whereNull('branch_id');
+            }
+
+            $inventory = $inventoryQuery->first();
+
+            if (! $inventory) {
+                $inventory = Inventory::create([
+                    'item_id' => $data['item_id'],
+                    'branch_id' => $branchId ?: null,
+                    'location_id' => $data['location_id'],
+                    'quantity' => 0,
+                ]);
+            }
+
+            $qty = abs((float) $data['quantity']);
+
+            if ($data['adjustment_type'] === 'deduct') {
+                if ((float) $inventory->quantity < $qty) {
+                    abort(422, 'Insufficient stock for deduction adjustment.');
+                }
+
+                if ($isSerialized) {
+                    $serialQuery = WarehouseItemSerial::whereIn('id', $serialIds)
+                        ->where('item_id', $data['item_id'])
+                        ->where('location_id', $data['location_id'])
+                        ->where('status', 'available')
+                        ->lockForUpdate();
+
+                    if ($branchId !== null && $branchId !== '') {
+                        $serialQuery->where('branch_id', $branchId);
+                    } else {
+                        $serialQuery->whereNull('branch_id');
+                    }
+
+                    if ((clone $serialQuery)->count() !== count($serialIds)) {
+                        throw ValidationException::withMessages([
+                            'serial_ids' => 'One or more selected serial numbers are no longer available in the selected location.',
+                        ]);
+                    }
+                }
+
+                $qty = -$qty;
+            }
+
+            $inventory->quantity = (float) $inventory->quantity + $qty;
+            $inventory->save();
+
+            $movement = StockMovement::create([
+                'item_id' => $data['item_id'],
+                'location_id' => $data['location_id'],
+                'movement_type' => $data['adjustment_type'] === 'add' ? 'adjustment_add' : 'adjustment_deduct',
+                'quantity' => $qty,
+                'balance_after' => $inventory->quantity,
+                'reference_type' => $referenceNo,
+                'reference_id' => null,
+                'remarks' => $data['remarks'] ?? null,
+                'transaction_date' => now(),
+                'created_by' => auth()->id(),
+            ]);
+
+            if ($isSerialized && $data['adjustment_type'] === 'add') {
+                $this->createStockInSerialRows($acceptedSerials, $data, (int) ($branchId ?: 0), (int) $movement->id, $referenceNo);
+            }
+
+            if ($isSerialized && $data['adjustment_type'] === 'deduct') {
+                WarehouseItemSerial::whereIn('id', $serialIds)->update([
+                    'status' => 'adjusted_out',
+                    'stock_out_movement_id' => $movement->id,
+                    'issued_at' => now(),
+                    'remarks' => $data['remarks'] ?? 'Deducted via stock adjustment ' . $referenceNo,
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('warehouse.inventory')
+            ->with('success', 'Stock adjustment saved successfully.');
+    }
+}

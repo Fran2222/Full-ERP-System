@@ -1,0 +1,324 @@
+<!-- Backend Bundle JavaScript -->
+<script src="{{ asset('js/libs.min.js')}}"></script>
+@if(in_array('data-table',$assets ?? []))
+<script src="{{ asset('vendor/datatables/buttons.server-side.js')}}"></script>
+@endif
+@if(in_array('chart',$assets ?? []))
+    <!-- apexchart JavaScript -->
+    <script src="{{asset('js/charts/apexcharts.js') }}"></script>
+    <!-- widgetchart JavaScript -->
+    <script src="{{asset('js/charts/widgetcharts.js') }}"></script>
+    <script src="{{asset('js/charts/dashboard.js') }}"></script>
+@endif
+
+<!-- mapchart JavaScript -->
+<script src="{{asset('vendor/Leaflet/leaflet.js') }} "></script>
+<script src="{{asset('js/charts/vectore-chart.js') }}"></script>
+
+
+<!-- fslightbox JavaScript -->
+<script src="{{asset('js/plugins/fslightbox.js')}}"></script>
+<script src="{{asset('js/plugins/slider-tabs.js') }}"></script>
+<script src="{{asset('js/plugins/form-wizard.js')}}"></script>
+
+<!-- settings JavaScript -->
+<script src="{{asset('js/plugins/setting.js')}}"></script>
+
+<script src="{{asset('js/plugins/circle-progress.js') }}"></script>
+@if(in_array('animation',$assets ?? []))
+<!--aos javascript-->
+<script src="{{asset('vendor/aos/dist/aos.js')}}"></script>
+@endif
+
+@if(in_array('calender',$assets ?? []))
+<!-- Fullcalender Javascript -->
+<script src="{{asset('vendor/fullcalendar/core/main.js')}}"></script>
+<script src="{{asset('vendor/fullcalendar/daygrid/main.js')}}"></script>
+<script src="{{asset('vendor/fullcalendar/timegrid/main.js')}}"></script>
+<script src="{{asset('vendor/fullcalendar/list/main.js')}}"></script>
+<script src="{{asset('vendor/fullcalendar/interaction/main.js')}}"></script>
+<script src="{{asset('vendor/moment.min.js')}}"></script>
+<script src="{{asset('js/plugins/calender.js')}}"></script>
+@endif
+
+<script src="{{asset('vendor/vanillajs-datepicker/dist/js/datepicker-full.js')}}"></script>
+
+@stack('scripts')
+
+<script src="{{asset('js/plugins/prism.mini.js')}}"></script>
+
+<!-- Custom JavaScript -->
+<script src="{{asset('js/hope-ui.js') }}"></script>
+<script src="{{asset('js/modelview.js')}}"></script>
+
+{{-- WMC_CHAT_PRESENCE_PING --}}
+@auth
+<script>
+(function () {
+    const pingUrl = "{{ route('chat.presence.ping') }}";
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    async function wmcPingPresence() {
+        if (!csrfToken) return;
+
+        try {
+            await fetch(pingUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+        } catch (error) {
+            // Silent fail: presence should never interrupt normal system use.
+        }
+    }
+
+    wmcPingPresence();
+    setInterval(wmcPingPresence, 60000);
+})();
+</script>
+@endauth
+
+
+{{-- WMC_CHAT_BADGE_REALTIME_POLL --}}
+@auth
+<script>
+(function () {
+    const chatUnreadUrl = "{{ route('chat.unread-count') }}";
+
+    function setChatBadge(count) {
+        const badge = document.getElementById('wmcChatHeaderBadge');
+        if (!badge) return;
+
+        const value = Number(count || 0);
+
+        if (value > 0) {
+            badge.textContent = value > 99 ? '99+' : String(value);
+            badge.classList.remove('d-none');
+        } else {
+            badge.textContent = '0';
+            badge.classList.add('d-none');
+        }
+    }
+
+    async function refreshChatBadge() {
+        try {
+            const response = await fetch(chatUnreadUrl, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            setChatBadge(data.unread_count || 0);
+        } catch (error) {
+            // Silent fail: badge should not interrupt normal system use.
+        }
+    }
+
+    window.wmcRefreshChatBadge = refreshChatBadge;
+
+    refreshChatBadge();
+    setInterval(refreshChatBadge, 5000);
+
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+            refreshChatBadge();
+        }
+    });
+})();
+</script>
+@endauth
+
+
+{{-- WMC_SIDEBAR_STATE_MEMORY --}}
+<script>
+(function () {
+    const storageKey = 'wmc_sidebar_collapsed';
+
+    function isSidebarCollapsed() {
+        return document.body.classList.contains('sidebar-main') ||
+               document.body.classList.contains('sidebar-mini') ||
+               document.documentElement.classList.contains('sidebar-main') ||
+               document.documentElement.classList.contains('sidebar-mini');
+    }
+
+    function applySavedSidebarState() {
+        const saved = localStorage.getItem(storageKey);
+
+        if (saved === '1') {
+            document.body.classList.add('sidebar-main');
+        } else if (saved === '0') {
+            document.body.classList.remove('sidebar-main');
+        }
+    }
+
+    function saveSidebarState() {
+        localStorage.setItem(storageKey, isSidebarCollapsed() ? '1' : '0');
+    }
+
+    // Apply as early as this partial loads.
+    applySavedSidebarState();
+
+    // Save after common Hope UI sidebar toggle clicks.
+    document.addEventListener('click', function (event) {
+        const toggle = event.target.closest(
+            '[data-toggle="main-sidebar"], [data-toggle="sidebar"], .sidebar-toggle, .wrapper-menu, [data-sidebar-toggle]'
+        );
+
+        if (!toggle) return;
+
+        setTimeout(saveSidebarState, 150);
+        setTimeout(saveSidebarState, 350);
+    });
+
+    // Also monitor body class changes in case the theme toggles through JS.
+    const observer = new MutationObserver(function () {
+        saveSidebarState();
+    });
+
+    observer.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class']
+    });
+
+    window.addEventListener('load', function () {
+        applySavedSidebarState();
+        setTimeout(applySavedSidebarState, 100);
+    });
+})();
+</script>
+
+
+{{-- WMC_SIDEBAR_STATE_MEMORY_V2 --}}
+<script>
+(function () {
+    const storageKey = 'wmc_sidebar_state_v2'; // values: collapsed | expanded
+
+    function getToggles() {
+        return Array.from(document.querySelectorAll('[data-toggle="sidebar"], [data-toggle="main-sidebar"], .sidebar-toggle, .wrapper-menu, [data-sidebar-toggle]'));
+    }
+
+    function hasCollapsedClass() {
+        const classTargets = [document.body, document.documentElement].filter(Boolean);
+        return classTargets.some(function (el) {
+            return el.classList.contains('sidebar-main') ||
+                   el.classList.contains('sidebar-mini') ||
+                   el.classList.contains('mini-sidebar') ||
+                   el.classList.contains('sidebar-collapsed') ||
+                   el.classList.contains('nav-small');
+        });
+    }
+
+    function setCollapsedClasses(collapsed) {
+        const classTargets = [document.body, document.documentElement].filter(Boolean);
+
+        classTargets.forEach(function (el) {
+            if (collapsed) {
+                el.classList.add('sidebar-main');
+                el.classList.add('sidebar-mini');
+            } else {
+                el.classList.remove('sidebar-main');
+                el.classList.remove('sidebar-mini');
+                el.classList.remove('mini-sidebar');
+                el.classList.remove('sidebar-collapsed');
+                el.classList.remove('nav-small');
+            }
+        });
+
+        getToggles().forEach(function (toggle) {
+            toggle.setAttribute('data-active', collapsed ? 'false' : 'true');
+        });
+    }
+
+    function applySavedState() {
+        const saved = localStorage.getItem(storageKey);
+
+        if (saved === 'collapsed') {
+            setCollapsedClasses(true);
+        }
+
+        if (saved === 'expanded') {
+            setCollapsedClasses(false);
+        }
+    }
+
+    function saveStateFromDom() {
+        const toggles = getToggles();
+        const hasInactiveToggle = toggles.some(function (toggle) {
+            return toggle.getAttribute('data-active') === 'false';
+        });
+
+        const collapsed = hasCollapsedClass() || hasInactiveToggle;
+        localStorage.setItem(storageKey, collapsed ? 'collapsed' : 'expanded');
+    }
+
+    function saveStateAfterThemeToggle() {
+        setTimeout(saveStateFromDom, 80);
+        setTimeout(saveStateFromDom, 250);
+        setTimeout(saveStateFromDom, 600);
+    }
+
+    // Apply immediately when this script loads.
+    applySavedState();
+
+    // Theme scripts sometimes override after load, so re-apply.
+    document.addEventListener('DOMContentLoaded', function () {
+        applySavedState();
+        setTimeout(applySavedState, 50);
+        setTimeout(applySavedState, 250);
+        setTimeout(applySavedState, 700);
+        setTimeout(applySavedState, 1200);
+    });
+
+    window.addEventListener('load', function () {
+        applySavedState();
+        setTimeout(applySavedState, 100);
+        setTimeout(applySavedState, 500);
+        setTimeout(applySavedState, 1200);
+    });
+
+    // Save when user clicks sidebar toggle.
+    document.addEventListener('click', function (event) {
+        const toggle = event.target.closest('[data-toggle="sidebar"], [data-toggle="main-sidebar"], .sidebar-toggle, .wrapper-menu, [data-sidebar-toggle]');
+        if (!toggle) return;
+
+        saveStateAfterThemeToggle();
+    });
+
+    // Watch class/data-active changes.
+    const observer = new MutationObserver(function () {
+        saveStateFromDom();
+    });
+
+    function startObserver() {
+        if (document.body) {
+            observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        }
+
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+        getToggles().forEach(function (toggle) {
+            observer.observe(toggle, { attributes: true, attributeFilter: ['data-active', 'class'] });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startObserver);
+    } else {
+        startObserver();
+    }
+
+    window.wmcApplySidebarState = applySavedState;
+    window.wmcSaveSidebarState = saveStateFromDom;
+})();
+</script>
+

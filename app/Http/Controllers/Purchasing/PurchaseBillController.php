@@ -8,6 +8,7 @@ use App\Models\AccountingJournalEntry;
 use App\Models\AccountingJournalLine;
 use App\Models\Purchasing\PurchaseBill;
 use App\Models\Purchasing\PurchaseOrder;
+use App\Services\Purchasing\PurchaseBillAutoService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -33,6 +34,8 @@ class PurchaseBillController extends Controller
     public function index(Request $request)
     {
         $this->authorizePurchasing('purchasing.bills.view');
+
+        app(PurchaseBillAutoService::class)->createMissingBillsForFullyReceivedPurchaseOrders();
 
         $perPage = (int) $request->input('per_page', 10);
 
@@ -94,8 +97,10 @@ class PurchaseBillController extends Controller
     {
         $this->authorizePurchasing('purchasing.bills.create');
 
+        app(PurchaseBillAutoService::class)->createMissingBillsForFullyReceivedPurchaseOrders();
+
         $purchaseOrders = PurchaseOrder::with(['supplier'])
-            ->whereIn('status', ['partially_received', 'received'])
+            ->where('status', 'received')
             ->orderByDesc('id')
             ->get()
             ->map(fn ($po) => $this->hydrateBillableAmounts($po))
@@ -106,7 +111,7 @@ class PurchaseBillController extends Controller
 
         if ($request->filled('purchase_order_id')) {
             $selectedPO = PurchaseOrder::with(['supplier'])
-                ->whereIn('status', ['partially_received', 'received'])
+                ->where('status', 'received')
                 ->find($request->purchase_order_id);
 
             if ($selectedPO) {
@@ -138,6 +143,13 @@ class PurchaseBillController extends Controller
 
         $po = PurchaseOrder::with('supplier')->findOrFail($validated['purchase_order_id']);
 
+        if ($po->status !== 'received') {
+            return back()
+                ->withInput()
+                ->with('error', 'Purchase bill can only be created after the purchase order is fully received.');
+        }
+
+
         $receivedAmount = $this->getReceivedAmount($po);
         $billedAmount = $this->getBilledAmount($po);
         $directPaidAmount = $this->getDirectPaidAmount($po);
@@ -162,7 +174,9 @@ class PurchaseBillController extends Controller
                 ->with('error', 'Bill amount cannot exceed the billable balance of ' . number_format($billableBalance, 2) . '.');
         }
 
-        DB::transaction(function () use ($validated, $po, $amount) {
+        $createdBill = null;
+
+        DB::transaction(function () use ($validated, $po, $amount, &$createdBill) {
             $billNo = $this->generateBillNo($validated['bill_date']);
 
             $memo = trim((string) ($validated['description'] ?? ''));
@@ -178,7 +192,7 @@ class PurchaseBillController extends Controller
                 $amount
             );
 
-            PurchaseBill::create([
+            $createdBill = PurchaseBill::create([
                 'bill_no' => $billNo,
                 'purchase_order_id' => $po->id,
                 'supplier_id' => $po->supplier_id,
@@ -194,6 +208,10 @@ class PurchaseBillController extends Controller
                 'created_by' => Auth::id(),
             ]);
         });
+
+        if ($createdBill) {
+            \App\Services\SystemNotificationService::notifyPurchaseBillCreated($createdBill, Auth::id());
+        }
 
         return redirect()
             ->route('purchasing.bills.index')

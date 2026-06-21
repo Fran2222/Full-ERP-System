@@ -122,7 +122,7 @@
         @if($showFileLeavePage)
             @if($canManageLeaveRequests || $canManageLeaveTypes)
                 <div class="row g-3">
-                    <div class="col-xl-4 col-md-6">
+                    <div class="col-xl-6 col-md-6">
                         <div class="card rounded-4 h-100">
                             <div class="card-body">
                                 <div class="d-flex align-items-center justify-content-between gap-3">
@@ -149,33 +149,7 @@
                         </div>
                     </div>
 
-                    <div class="col-xl-4 col-md-6">
-                        <div class="card rounded-4 h-100">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center justify-content-between gap-3">
-                                    <div>
-                                        <small class="text-muted d-block mb-2">Leave Types</small>
-                                        <h3 class="mb-0">{{ $leaveTypes->count() }}</h3>
-                                    </div>
-
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-                                         style="width: 52px; height: 52px; background: rgba(34, 197, 94, .12); color: #16a34a;">
-                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                                            <path d="M8 2V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                            <path d="M16 2V5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                            <path d="M3.5 9H20.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                            <path d="M19 4H5C3.9 4 3 4.9 3 6V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V6C21 4.9 20.1 4 19 4Z"
-                                                  stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                                            <path d="M8 14H12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                            <path d="M8 17H15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                        </svg>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-4 col-md-6">
+                    <div class="col-xl-6 col-md-6">
                         <div class="card rounded-4 h-100">
                             <div class="card-body">
                                 <div class="d-flex align-items-center justify-content-between gap-3">
@@ -420,17 +394,9 @@
                                                             @if($paidLeaveTypes->count())
                                                                 <optgroup label="Leave With Pay">
                                                                     @foreach($paidLeaveTypes as $leaveType)
-                                                                        @php
-                                                                            $creditInfo = $leaveCreditsCollection->firstWhere('leave_type_id', $leaveType->id);
-                                                                        @endphp
-
                                                                         <option value="{{ $leaveType->id }}"
                                                                             {{ (string) old('leave_type_id') === (string) $leaveType->id ? 'selected' : '' }}>
                                                                             {{ $cleanText($leaveType->name) }}
-
-                                                                            @if($creditInfo)
-                                                                                — Remaining: {{ $formatNumber($creditInfo['remaining'] ?? 0) }} day(s)
-                                                                            @endif
                                                                         </option>
                                                                     @endforeach
                                                                 </optgroup>
@@ -439,21 +405,9 @@
                                                             @if($unpaidLeaveTypes->count())
                                                                 <optgroup label="Leave Without Pay">
                                                                     @foreach($unpaidLeaveTypes as $leaveType)
-                                                                        @php
-                                                                            $creditInfo = $leaveCreditsCollection->firstWhere('leave_type_id', $leaveType->id);
-                                                                            $allocatedCredit = (float) ($creditInfo['allocated'] ?? $leaveType->default_credits ?? 0);
-                                                                            $remainingCredit = (float) ($creditInfo['remaining'] ?? $allocatedCredit);
-                                                                        @endphp
-
                                                                         <option value="{{ $leaveType->id }}"
                                                                             {{ (string) old('leave_type_id') === (string) $leaveType->id ? 'selected' : '' }}>
                                                                             {{ $cleanText($leaveType->name) }}
-
-                                                                            @if($allocatedCredit > 0)
-                                                                                — Remaining: {{ $formatNumber($remainingCredit) }} day(s)
-                                                                            @else
-                                                                                — No credit limit
-                                                                            @endif
                                                                         </option>
                                                                     @endforeach
                                                                 </optgroup>

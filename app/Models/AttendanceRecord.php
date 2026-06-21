@@ -21,6 +21,11 @@ class AttendanceRecord extends Model
         'total_worked_hours',
         'status',
         'remarks',
+        'attendance_batch_key',
+        'cutoff_month',
+        'cutoff_period',
+        'submitted_at',
+        'submitted_by',
     ];
 
     protected $casts = [
@@ -28,10 +33,16 @@ class AttendanceRecord extends Model
         'break_hours' => 'decimal:2',
         'overtime_hours' => 'decimal:2',
         'total_worked_hours' => 'decimal:2',
+        'submitted_at' => 'datetime',
     ];
 
     public function employeeProfile()
     {
         return $this->belongsTo(EmployeeProfile::class);
+    }
+
+    public function submittedBy()
+    {
+        return $this->belongsTo(User::class, 'submitted_by');
     }
 }

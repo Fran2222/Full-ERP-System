@@ -110,7 +110,7 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
-        $recentAnnouncements = Announcement::with('user')
+        $recentAnnouncements = Announcement::with(['user', 'recipients'])
             ->where('is_published', true)
             ->where(function ($query) {
                 $query->whereNull('expires_at')
@@ -279,11 +279,32 @@ class DashboardController extends Controller
                 ->first()
             : null;
 
-        $recentAnnouncements = Announcement::with('user')
+        $employeeNameFormats = $this->employeeAnnouncementNameFormats($user);
+
+        $recentAnnouncements = Announcement::with(['user', 'recipients'])
             ->where('is_published', true)
             ->where(function ($query) {
                 $query->whereNull('expires_at')
                     ->orWhere('expires_at', '>=', now());
+            })
+            ->where(function ($query) use ($user, $employeeNameFormats) {
+                // All Employees = no legacy single recipient and no rows in the new recipient pivot table.
+                $query->where(function ($allQuery) {
+                    $allQuery->whereNull('memo_to_user_id')
+                        ->whereDoesntHave('recipients')
+                        ->where(function ($memoQuery) {
+                            $memoQuery->whereNull('memo_to')
+                                ->orWhereRaw("LOWER(TRIM(COALESCE(memo_to, ''))) = ?", ['all employees']);
+                        });
+                })
+                    // New multiple-recipient announcements.
+                    ->orWhereHas('recipients', function ($recipientQuery) use ($user) {
+                        $recipientQuery->where('users.id', $user->id);
+                    })
+                    // Old one-recipient announcements.
+                    ->orWhere('memo_to_user_id', $user->id)
+                    // Extra fallback for old records stored as plain text names/emails.
+                    ->orWhereIn('memo_to', $employeeNameFormats);
             })
             ->latest('published_at')
             ->latest()
@@ -307,5 +328,35 @@ class DashboardController extends Controller
             'latestPayslip',
             'recentAnnouncements'
         ));
+    }
+
+    private function employeeAnnouncementNameFormats(User $user): array
+    {
+        $middleInitial = trim((string) ($user->middle_name ?? ''));
+        $middleInitial = $middleInitial !== '' ? strtoupper(substr($middleInitial, 0, 1)) . '.' : '';
+
+        $firstName = trim((string) ($user->first_name ?? ''));
+        $lastName = trim((string) ($user->last_name ?? ''));
+        $email = trim((string) ($user->email ?? ''));
+        $fullName = trim((string) ($user->full_name ?? ''));
+
+        $lastFirst = collect([
+            $lastName,
+            trim(collect([$firstName, $middleInitial])->filter()->implode(' ')),
+        ])->filter()->implode(', ');
+
+        $firstLast = trim(collect([$firstName, $middleInitial, $lastName])->filter()->implode(' '));
+
+        return collect([
+            'All Employees',
+            $email,
+            $fullName,
+            $lastFirst,
+            $firstLast,
+        ])
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 }

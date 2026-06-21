@@ -5,21 +5,40 @@
 
     $user = auth()->user();
 
-    $canAccess = function ($permission) use ($user) {
-        return $user && (
-            $user->can($permission)
-            || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
-        );
-    };
+    /*
+     * Normalize role names because existing accounts may use different casing
+     * such as Admin/admin, BOD/bod, Super Admin/super-admin.
+     */
+    $userRoleNames = $user && method_exists($user, 'getRoleNames')
+        ? $user->getRoleNames()->map(fn ($role) => strtolower(trim((string) $role)))->values()->all()
+        : [];
 
-    $isSystemAdmin = $user && $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin']);
+    $userRoleText = implode(' ', $userRoleNames);
+
+    $isSystemAdmin = $user && (
+        in_array('super-admin', $userRoleNames, true)
+        || in_array('super admin', $userRoleNames, true)
+        || in_array('super administrator', $userRoleNames, true)
+        || in_array('admin', $userRoleNames, true)
+        || (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'admin', 'super-admin']))
+    );
+
+    $isBoardOfDirector = $user && (
+        in_array('bod', $userRoleNames, true)
+        || in_array('board of directors', $userRoleNames, true)
+        || in_array('board of director', $userRoleNames, true)
+        || str_contains($userRoleText, 'board of director')
+        || (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['BOD', 'Bod', 'bod', 'Board of Directors', 'Board Of Directors']))
+    );
 
     /*
     |--------------------------------------------------------------------------
-    | Get Warehouse Module Access Level
+    | Warehouse Access Level
     |--------------------------------------------------------------------------
-    | This safely reads the user's module assignment without crashing if a table
-    | or column does not exist.
+    | Supported levels:
+    | - staff   = Dashboard, Inventory, Service Units, Transfer, Ledger
+    | - manager = Staff pages + Stock In, Stock Out, Adjustment
+    | - admin   = Full Warehouse access
     */
     $warehouseAccessLevel = null;
 
@@ -31,27 +50,11 @@
         ];
 
         foreach ($possibleTables as $table) {
-            if (! Schema::hasTable($table)) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
                 continue;
             }
 
-            $query = DB::table($table);
-
-            if (Schema::hasColumn($table, 'user_id')) {
-                $query->where('user_id', $user->id);
-            } else {
-                continue;
-            }
-
-            if (Schema::hasColumn($table, 'module')) {
-                $query->whereRaw('LOWER(module) = ?', ['warehouse']);
-            } elseif (Schema::hasColumn($table, 'module_name')) {
-                $query->whereRaw('LOWER(module_name) = ?', ['warehouse']);
-            } elseif (Schema::hasColumn($table, 'module_key')) {
-                $query->whereRaw('LOWER(module_key) = ?', ['warehouse']);
-            } else {
-                continue;
-            }
+            $query = DB::table($table)->where('user_id', $user->id);
 
             if (Schema::hasColumn($table, 'enabled')) {
                 $query->where('enabled', true);
@@ -61,226 +64,281 @@
                 $query->whereIn('status', ['active', 1, true]);
             }
 
-            $assignment = $query->first();
+            $assignments = $query->get();
 
-            if ($assignment) {
-                if (isset($assignment->access_level)) {
-                    $warehouseAccessLevel = strtolower((string) $assignment->access_level);
-                } elseif (isset($assignment->level)) {
-                    $warehouseAccessLevel = strtolower((string) $assignment->level);
-                } elseif (isset($assignment->role)) {
-                    $warehouseAccessLevel = strtolower((string) $assignment->role);
+            foreach ($assignments as $assignment) {
+                $haystack = strtolower(collect((array) $assignment)
+                    ->filter(fn ($value) => is_scalar($value) && $value !== null)
+                    ->implode(' '));
+
+                if (! str_contains($haystack, 'warehouse') && ! str_contains($haystack, 'inventory')) {
+                    continue;
                 }
 
-                break;
+                /*
+                 * Important:
+                 * A user may have multiple module access rows, example:
+                 * - Inventory - Staff (Primary)
+                 * - Warehouse - Manager
+                 * Do not stop at the first Staff row. Keep scanning and keep the highest
+                 * warehouse-related access level found.
+                 */
+                if (str_contains($haystack, 'admin')) {
+                    $warehouseAccessLevel = 'admin';
+                    break 2;
+                }
+
+                if (str_contains($haystack, 'manager')) {
+                    $warehouseAccessLevel = 'manager';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'staff') && ! in_array($warehouseAccessLevel, ['manager', 'admin'], true)) {
+                    $warehouseAccessLevel = 'staff';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'viewer') && ! $warehouseAccessLevel) {
+                    $warehouseAccessLevel = 'viewer';
+                }
             }
         }
     }
 
     $isWarehouseStaff = ! $isSystemAdmin && $warehouseAccessLevel === 'staff';
-    $isWarehouseViewer = ! $isSystemAdmin && $warehouseAccessLevel === 'viewer';
-    $isWarehouseManagerOrAdmin = $isSystemAdmin || in_array($warehouseAccessLevel, ['manager', 'admin'], true);
+    $isWarehouseManager = ! $isSystemAdmin && $warehouseAccessLevel === 'manager';
+    $isWarehouseAdmin = $isSystemAdmin || $warehouseAccessLevel === 'admin';
 
-    /*
-    |--------------------------------------------------------------------------
-    | Tab Visibility Rules
-    |--------------------------------------------------------------------------
-    | Staff:
-    | - Dashboard
-    | - Inventory
-    | - Stock In
-    | - Stock Out
-    | - Ledger
-    |
-    | Manager/Admin:
-    | - Full warehouse menu
-    */
-
-    $tabs = collect([
+    $canUseWarehouseStaffPages = $isSystemAdmin || in_array($warehouseAccessLevel, ['staff', 'manager', 'admin'], true);
+    $canUseWarehouseManagerPages = $isSystemAdmin || in_array($warehouseAccessLevel, ['manager', 'admin'], true);
+    $canUseWarehouseAdminPages = $isWarehouseAdmin;
+    // WMC_ADJUSTMENT_TAB_ADMIN_BOD_ONLY_V3
+    // UI only: backend remains protected by authorizeAdjustment().
+    $canUseWarehouseAdjustmentPages = $user && $user->hasAnyRole([
+        'Super Admin',
+        'Super Administrator',
+        'Admin',
+        'BOD',
+        'Bod',
+        'Board of Directors',
+        'Board Of Directors',
+        'Warehouse Admin',
+        'warehouse admin',
+        'Warehouse Administrator',
+        'warehouse administrator',
+    ]);
+    $canUseWarehouseStockOutPages = $user && (
+        $isSystemAdmin
+        || $isBoardOfDirector
+        || $warehouseAccessLevel === 'admin'
+        || (method_exists($user, 'canUseStockOut') && $user->canUseStockOut())
+        || (method_exists($user, 'hasAnyRole') && $user->hasAnyRole([
+            'Super Admin', 'Super Administrator', 'Admin', 'admin', 'Administrator',
+            'BOD', 'Bod', 'bod', 'Board of Directors', 'Board Of Directors',
+        ]))
+    );
+    $warehouseTabs = collect([
         [
             'label' => 'Dashboard',
             'route' => 'warehouse.dashboard',
             'active' => request()->routeIs('warehouse.dashboard') || request()->is('warehouse'),
             'show' => true,
         ],
-
         [
             'label' => 'Categories',
             'route' => 'warehouse.categories.index',
             'active' => request()->routeIs('warehouse.categories.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.categories.view'),
+            'show' => $canUseWarehouseAdminPages,
         ],
-
         [
             'label' => 'Units',
             'route' => 'warehouse.units.index',
             'active' => request()->routeIs('warehouse.units.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.units.view'),
+            'show' => $canUseWarehouseAdminPages,
         ],
-
         [
             'label' => 'Suppliers',
             'route' => 'warehouse.suppliers.index',
             'active' => request()->routeIs('warehouse.suppliers.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.suppliers.view'),
+            'show' => $canUseWarehouseAdminPages,
         ],
-
         [
             'label' => 'Locations',
             'route' => 'warehouse.locations.index',
             'active' => request()->routeIs('warehouse.locations.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.locations.view'),
+            'show' => $canUseWarehouseAdminPages,
         ],
-
         [
             'label' => 'Items',
             'route' => 'warehouse.items.index',
             'active' => request()->routeIs('warehouse.items.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.items.view'),
+            'show' => $canUseWarehouseAdminPages,
         ],
-
         [
             'label' => 'Inventory',
             'route' => 'warehouse.inventory',
             'active' => request()->routeIs('warehouse.inventory'),
-            'show' => $canAccess('warehouse.inventory.view'),
+            'show' => $canUseWarehouseStaffPages,
         ],
-
-
-
         [
             'label' => 'Service Units',
             'route' => 'warehouse.service-units.index',
             'active' => request()->routeIs('warehouse.service-units.*'),
-            'show' => $canAccess('warehouse.inventory.view') || $canAccess('warehouse.stock_in.create') || $canAccess('warehouse.stock_out.create'),
+            'show' => $canUseWarehouseStaffPages,
         ],
-
         [
             'label' => 'Stock In',
             'route' => 'warehouse.stock-in',
             'active' => request()->routeIs('warehouse.stock-in') || request()->routeIs('warehouse.stock-in.*'),
-            'show' => $canAccess('warehouse.stock_in.create'),
+            'show' => $canUseWarehouseManagerPages,
         ],
-
         [
             'label' => 'Stock Out',
             'route' => 'warehouse.stock-out',
             'active' => request()->routeIs('warehouse.stock-out') || request()->routeIs('warehouse.stock-out.*'),
-            'show' => $canAccess('warehouse.stock_out.create'),
+            'show' => $canUseWarehouseStockOutPages,
         ],
-
         [
             'label' => 'Transfer',
             'route' => 'warehouse.transfer',
             'active' => request()->routeIs('warehouse.transfer') || request()->routeIs('warehouse.transfer.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.transfer.create'),
+            'show' => $canUseWarehouseStaffPages,
         ],
-
         [
             'label' => 'Adjustment',
             'route' => 'warehouse.adjustment',
             'active' => request()->routeIs('warehouse.adjustment') || request()->routeIs('warehouse.adjustment.*'),
-            'show' => $isWarehouseManagerOrAdmin && $canAccess('warehouse.adjustment.create'),
+            'show' => $canUseWarehouseAdjustmentPages,
         ],
-
         [
             'label' => 'Ledger',
             'route' => 'warehouse.ledger',
             'active' => request()->routeIs('warehouse.ledger') || request()->routeIs('warehouse.ledger.*'),
-            'show' => $canAccess('warehouse.ledger.view'),
+            'show' => $canUseWarehouseStaffPages,
         ],
-    ])
-        ->filter(fn ($tab) => $tab['show'] && Route::has($tab['route']))
-        ->values();
+    ])->filter(fn ($tab) => $tab['show'] && Route::has($tab['route']))->values();
 @endphp
 
 <style>
-    .warehouse-nav-wrap {
+    .warehouse-nav-shell {
+        position: relative;
         margin-bottom: 18px;
-        width: 100%;
     }
 
     .warehouse-nav-card {
-        background: #ffffff;
-        border-radius: 18px;
-        border: 1px solid #edf0f5;
-        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
-        padding: 14px;
-        overflow-x: auto;
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        border-radius: 20px;
+        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.07);
+        backdrop-filter: blur(10px);
+        overflow: hidden;
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Compact one-row Warehouse module navigation
+    |--------------------------------------------------------------------------
+    | Goal: keep all Warehouse tabs visible in one row without horizontal drag
+    | or wrapping to a second line, even at browser zoom around 125%.
+    */
     .warehouse-nav-scroll {
         display: flex;
+        flex-wrap: nowrap;
         align-items: center;
-        gap: 10px;
+        justify-content: space-between;
+        gap: 6px;
         width: 100%;
+        padding: 13px 16px;
+        overflow: hidden;
     }
 
     .warehouse-nav-link {
         flex: 1 1 0;
-        min-width: 96px;
-        min-height: 38px;
-        padding: 9px 14px;
-        border-radius: 10px;
-        background: #f4f6fb;
-        color: #111827 !important;
-        font-size: 13px;
-        font-weight: 800;
-        line-height: 1;
-        text-align: center;
-        text-decoration: none !important;
+        min-width: 0;
+        min-height: 40px;
+        padding: 0 7px;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        background: transparent;
+        color: #475569;
+        font-size: 12.5px;
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.01em;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        text-align: center;
         white-space: nowrap;
-        cursor: pointer;
-        pointer-events: auto;
         transition: all 0.18s ease-in-out;
-        position: relative;
-        z-index: 2;
     }
 
     .warehouse-nav-link:hover {
-        color: #315cf6 !important;
-        background: #eef3ff;
+        background: #eef4ff;
+        color: #2f4cff;
+        border-color: #dce6ff;
+        transform: translateY(-1px);
     }
 
     .warehouse-nav-link.active {
         background: linear-gradient(135deg, #3f5cff 0%, #2448e8 100%);
-        color: #ffffff !important;
-        box-shadow: 0 8px 18px rgba(49, 92, 246, 0.28);
+        color: #ffffff;
+        border-color: #3f5cff;
+        box-shadow: 0 10px 20px rgba(63, 92, 255, 0.24);
     }
 
-    @media (max-width: 1399.98px) {
+    @media (max-width: 1400px) {
         .warehouse-nav-scroll {
-            overflow-x: auto;
-            scrollbar-width: thin;
+            gap: 5px;
+            padding: 12px 13px;
         }
 
         .warehouse-nav-link {
-            flex: 0 0 auto;
-            min-width: 120px;
+            min-height: 38px;
+            padding: 0 5px;
+            font-size: 11.5px;
+            border-radius: 10px;
         }
     }
 
-    @media (max-width: 767.98px) {
-        .warehouse-nav-card {
-            padding: 12px;
+    @media (max-width: 1200px) {
+        .warehouse-nav-scroll {
+            gap: 4px;
+            padding: 11px 10px;
         }
 
         .warehouse-nav-link {
-            min-width: 105px;
             min-height: 36px;
-            padding: 9px 14px;
-            font-size: 12px;
+            padding: 0 4px;
+            font-size: 10.5px;
+            letter-spacing: -0.03em;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .warehouse-nav-card {
+            border-radius: 16px;
+        }
+
+        .warehouse-nav-scroll {
+            gap: 3px;
+            padding: 10px 8px;
+        }
+
+        .warehouse-nav-link {
+            min-height: 34px;
+            padding: 0 3px;
+            font-size: 9.5px;
+            border-radius: 9px;
         }
     }
 </style>
 
-<div class="warehouse-nav-wrap">
+<div class="warehouse-nav-shell">
     <div class="warehouse-nav-card">
         <div class="warehouse-nav-scroll">
-            @foreach($tabs as $tab)
+            @foreach ($warehouseTabs as $tab)
                 <a href="{{ route($tab['route']) }}"
                    class="warehouse-nav-link {{ $tab['active'] ? 'active' : '' }}">
                     {{ $tab['label'] }}
@@ -289,3 +347,7 @@
         </div>
     </div>
 </div>
+<script>
+    window.wmcCanUseWarehouseStockOut = @json((bool) $canUseWarehouseStockOutPages);
+    window.wmcCanViewWarehouseCostPrice = @json((bool) $canUseWarehouseStockOutPages);
+</script>

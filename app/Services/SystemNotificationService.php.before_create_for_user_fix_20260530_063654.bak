@@ -1,0 +1,755 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\SystemNotification;
+use App\Models\User;
+use App\Models\Warehouse\WarehouseLocation;
+use App\Models\Warehouse\WarehouseTransfer;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class SystemNotificationService
+{
+    public static function notifyUser(
+        int $userId,
+        string $module,
+        string $type,
+        string $title,
+        ?string $message = null,
+        ?string $actionUrl = null,
+        ?string $relatedType = null,
+        ?int $relatedId = null,
+        ?int $createdBy = null
+    ): ?SystemNotification {
+        if (! Schema::hasTable('system_notifications')) {
+            return null;
+        }
+
+        return SystemNotification::firstOrCreate(
+            [
+                'user_id' => $userId,
+                'type' => $type,
+                'related_type' => $relatedType,
+                'related_id' => $relatedId,
+            ],
+            [
+                'module' => $module,
+                'title' => $title,
+                'message' => $message,
+                'action_url' => $actionUrl,
+                'is_read' => false,
+                'created_by' => $createdBy,
+            ]
+        );
+    }
+
+    public static function notifyUsers(
+        $userIds,
+        string $module,
+        string $type,
+        string $title,
+        ?string $message = null,
+        ?string $actionUrl = null,
+        ?string $relatedType = null,
+        ?int $relatedId = null,
+        ?int $createdBy = null
+    ): void {
+        collect($userIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->each(function ($userId) use ($module, $type, $title, $message, $actionUrl, $relatedType, $relatedId, $createdBy) {
+                self::notifyUser((int) $userId, $module, $type, $title, $message, $actionUrl, $relatedType, $relatedId, $createdBy);
+            });
+    }
+
+    public static function notifyWarehouseTransferDispatched(WarehouseTransfer $transfer, ?int $createdBy = null): void
+    {
+        if (! Schema::hasTable('system_notifications')) {
+            return;
+        }
+
+        $transfer->loadMissing(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']);
+
+        $recipientIds = self::warehouseTransferReceiverUserIds($transfer);
+
+        if ($recipientIds->isEmpty()) {
+            return;
+        }
+
+        $fromName = optional($transfer->fromLocation)->location_name
+            ?? optional($transfer->fromLocation)->name
+            ?? 'source';
+
+        $toName = optional($transfer->toLocation)->location_name
+            ?? optional($transfer->toLocation)->name
+            ?? optional($transfer->toBranch)->name
+            ?? 'destination';
+
+        self::notifyUsers(
+            $recipientIds,
+            'warehouse',
+            'warehouse_transfer_to_receive',
+            'Warehouse Transfer To Receive',
+            "{$transfer->transfer_no} was dispatched from {$fromName} to {$toName}.",
+            url('/warehouse/transfer/' . $transfer->id),
+            'warehouse_transfer',
+            (int) $transfer->id,
+            $createdBy
+        );
+    }
+
+                public static function warehouseTransferReceiverUserIds(WarehouseTransfer $transfer): Collection
+    {
+        $transfer->loadMissing(['toBranch', 'toLocation']);
+
+        $toLocation = $transfer->toLocation ?: WarehouseLocation::find($transfer->to_location_id);
+        $isWarehouseDestination = self::isWarehouseLocation($toLocation);
+
+        // Use actual TO location first. This is the important part.
+        // Example: to_branch_id may be Central, but to_location_id = Wizmaster Solana,
+        // so destination branch must be Wizmaster Solana's branch_id.
+        $destinationBranchId = null;
+        if ($toLocation && ! empty($toLocation->branch_id)) {
+            $destinationBranchId = (int) $toLocation->branch_id;
+        } elseif (! empty($transfer->to_branch_id)) {
+            $destinationBranchId = (int) $transfer->to_branch_id;
+        }
+
+        return User::query()
+            ->get()
+            ->filter(function ($user) use ($isWarehouseDestination, $destinationBranchId) {
+                if (! self::isActiveUser($user)) {
+                    return false;
+                }
+
+                if (self::isAdminOrBod($user)) {
+                    return true;
+                }
+
+                if ($isWarehouseDestination) {
+                    return self::isWarehouseDepartmentUser($user);
+                }
+
+                // Branch destination: only branch-assigned users can be receivers.
+                // Warehouse Department users should not receive branch-destination transfers.
+                if (self::isWarehouseDepartmentUser($user)) {
+                    return false;
+                }
+
+                if (! $destinationBranchId || (int) ($user->branch_id ?? 0) !== (int) $destinationBranchId) {
+                    return false;
+                }
+
+                return self::hasAnyModuleAccess($user, ['warehouse', 'inventory']);
+            })
+            ->pluck('id')
+            ->values();
+    }
+
+
+
+
+
+    public static function notifyWarehouseTransferReceived(WarehouseTransfer $transfer, ?int $createdBy = null): void
+    {
+        if (! Schema::hasTable('system_notifications')) {
+            return;
+        }
+
+        $transfer->loadMissing(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']);
+
+        $recipientIds = self::warehouseTransferSourceUserIds($transfer)
+            ->merge([
+                $transfer->created_by ?? null,
+                $transfer->dispatched_by ?? null,
+            ])
+            ->filter()
+            ->unique()
+            ->reject(fn ($userId) => $createdBy && (int) $userId === (int) $createdBy)
+            ->values();
+
+        if ($recipientIds->isEmpty()) {
+            return;
+        }
+
+        $fromName = optional($transfer->fromLocation)->location_name
+            ?? optional($transfer->fromLocation)->name
+            ?? optional($transfer->fromBranch)->name
+            ?? 'source';
+
+        $toName = optional($transfer->toLocation)->location_name
+            ?? optional($transfer->toLocation)->name
+            ?? optional($transfer->toBranch)->name
+            ?? 'destination';
+
+        self::notifyUsers(
+            $recipientIds,
+            'warehouse',
+            'warehouse_transfer_received',
+            'Warehouse Transfer Received',
+            "{$transfer->transfer_no} was received at {$toName}. Source: {$fromName}.",
+            url('/warehouse/transfer/' . $transfer->id),
+            'warehouse_transfer',
+            (int) $transfer->id,
+            $createdBy
+        );
+    }
+
+    public static function notifyWarehouseTransferCancelled(WarehouseTransfer $transfer, ?int $createdBy = null): void
+    {
+        if (! Schema::hasTable('system_notifications')) {
+            return;
+        }
+
+        $transfer->loadMissing(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']);
+
+        $recipientIds = self::warehouseTransferSourceUserIds($transfer)
+            ->merge(self::warehouseTransferReceiverUserIds($transfer))
+            ->merge([
+                $transfer->created_by ?? null,
+                $transfer->dispatched_by ?? null,
+                $transfer->received_by ?? null,
+            ])
+            ->filter()
+            ->unique()
+            ->reject(fn ($userId) => $createdBy && (int) $userId === (int) $createdBy)
+            ->values();
+
+        if ($recipientIds->isEmpty()) {
+            return;
+        }
+
+        $fromName = optional($transfer->fromLocation)->location_name
+            ?? optional($transfer->fromLocation)->name
+            ?? optional($transfer->fromBranch)->name
+            ?? 'source';
+
+        $toName = optional($transfer->toLocation)->location_name
+            ?? optional($transfer->toLocation)->name
+            ?? optional($transfer->toBranch)->name
+            ?? 'destination';
+
+        self::notifyUsers(
+            $recipientIds,
+            'warehouse',
+            'warehouse_transfer_cancelled',
+            'Warehouse Transfer Cancelled',
+            "{$transfer->transfer_no} from {$fromName} to {$toName} was cancelled.",
+            url('/warehouse/transfer/' . $transfer->id),
+            'warehouse_transfer',
+            (int) $transfer->id,
+            $createdBy
+        );
+    }
+
+    public static function warehouseTransferSourceUserIds(WarehouseTransfer $transfer): Collection
+    {
+        $transfer->loadMissing(['fromBranch', 'fromLocation']);
+
+        $fromLocation = $transfer->fromLocation ?: WarehouseLocation::find($transfer->from_location_id);
+        $isWarehouseSource = self::isWarehouseLocation($fromLocation);
+        $sourceBranchId = $fromLocation->branch_id ?? $transfer->from_branch_id ?? null;
+
+        return User::query()
+            ->get()
+            ->filter(function ($user) use ($isWarehouseSource, $sourceBranchId) {
+                if (! self::isActiveUser($user)) {
+                    return false;
+                }
+
+                if (self::isAdminOrBod($user)) {
+                    return true;
+                }
+
+                if ($isWarehouseSource) {
+                    return self::isWarehouseDepartmentUser($user);
+                }
+
+                if (! $sourceBranchId || (int) ($user->branch_id ?? 0) !== (int) $sourceBranchId) {
+                    return false;
+                }
+
+                return self::hasModuleAccess($user, 'warehouse') || self::hasModuleAccess($user, 'inventory');
+            })
+            ->pluck('id')
+            ->values();
+    }
+
+    public static function unreadCountForUser(?int $userId): int
+    {
+        if (! $userId || ! Schema::hasTable('system_notifications')) {
+            return 0;
+        }
+
+        return SystemNotification::where('user_id', $userId)->unread()->count();
+    }
+
+    public static function latestForUser(?int $userId, int $limit = 5): Collection
+    {
+        if (! $userId || ! Schema::hasTable('system_notifications')) {
+            return collect();
+        }
+
+        return SystemNotification::where('user_id', $userId)
+            ->latest()
+            ->limit($limit)
+            ->get();
+    }
+
+    private static function isActiveUser($user): bool
+    {
+        $status = strtolower((string) ($user->status ?? 'active'));
+
+        return in_array($status, ['active', '1', 'true', 'enabled'], true);
+    }
+
+    private static function isAdminOrBod($user): bool
+    {
+        $roleNames = [
+            'Super Admin',
+            'Super Administrator',
+            'super admin',
+            'super-admin',
+            'superadmin',
+            'Admin',
+            'admin',
+            'BOD',
+            'bod',
+            'Board of Directors',
+        ];
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole($roleNames)) {
+            return true;
+        }
+
+        $userType = strtolower((string) ($user->user_type ?? ''));
+
+        return in_array($userType, ['admin', 'super-admin', 'superadmin', 'bod'], true);
+    }
+
+            private static function hasModuleAccess($user, string $module): bool
+    {
+        return self::hasAnyModuleAccess($user, [$module]);
+    }
+
+
+
+
+        private static function hasAnyModuleAccess($user, array $modules): bool
+    {
+        $modules = collect($modules)
+            ->map(fn ($module) => strtolower(trim((string) $module)))
+            ->filter()
+            ->values()
+            ->all();
+
+        if (! $user || empty($modules)) {
+            return false;
+        }
+
+        $primaryModule = strtolower(trim((string) ($user->primary_module ?? '')));
+        if ($primaryModule && in_array($primaryModule, $modules, true)) {
+            return true;
+        }
+
+        if (! Schema::hasTable('user_module_accesses')) {
+            return false;
+        }
+
+        return DB::table('user_module_accesses')
+            ->where('user_id', $user->id)
+            ->pluck('module')
+            ->map(fn ($module) => strtolower(trim((string) $module)))
+            ->filter()
+            ->contains(fn ($module) => in_array($module, $modules, true));
+    }
+
+
+    private static function isWarehouseDepartmentUser($user): bool
+    {
+        if (! Schema::hasTable('departments') || empty($user->department_id)) {
+            return false;
+        }
+
+        $departmentName = DB::table('departments')
+            ->where('id', $user->department_id)
+            ->value('name');
+
+        return str_contains(strtolower((string) $departmentName), 'warehouse');
+    }
+
+        private static function isWarehouseLocation($location): bool
+    {
+        if (! $location) {
+            return false;
+        }
+
+        $type = strtolower(trim((string) ($location->location_type ?? '')));
+        $name = strtolower(trim((string) (($location->location_name ?? '') . ' ' . ($location->name ?? '') . ' ' . ($location->location_code ?? ''))));
+
+        return str_contains($type, 'warehouse')
+            || str_contains($type, 'stock room')
+            || str_contains($type, 'stockroom')
+            || str_contains($name, 'warehouse')
+            || str_contains($name, 'main warehouse');
+    }
+
+
+    public static function notifyPurchaseOrderMarkedOrdered($purchaseOrder, ?int $actorId = null): void
+    {
+        try {
+            $poId = (int) ($purchaseOrder->id ?? 0);
+            if ($poId <= 0) {
+                return;
+            }
+
+            $poNo = (string) ($purchaseOrder->po_no ?? ('PO #' . $poId));
+            $supplierName = self::wmcPurchasingSupplierName($purchaseOrder->supplier_id ?? null);
+            $recipients = collect()
+                ->merge(self::wmcNotificationUsersByModules(['warehouse', 'inventory', 'purchasing']))
+                ->merge(self::wmcNotificationUsersByDepartmentKeywords(['warehouse', 'purchasing']))
+                ->merge(self::wmcNotificationAdminUsers())
+                ->filter(fn ($id) => (int) $id > 0 && (int) $id !== (int) $actorId)
+                ->unique()
+                ->values();
+
+            self::wmcCreateNotifications(
+                $recipients,
+                'purchasing',
+                'purchase_order_ordered',
+                'Purchase Order Ready for Receiving',
+                trim($poNo . ($supplierName ? ' for ' . $supplierName : '') . ' is now ordered/approved and ready for receiving.'),
+                self::wmcRouteUrl('purchasing.purchase-orders.show', [$poId], '/purchasing/purchase-orders/' . $poId),
+                'purchase_order',
+                $poId,
+                $actorId
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    public static function notifyPurchaseOrderReceived($purchaseOrder, ?int $receivingId = null, ?string $status = null, ?int $actorId = null): void
+    {
+        try {
+            $poId = (int) ($purchaseOrder->id ?? 0);
+            if ($poId <= 0) {
+                return;
+            }
+
+            $poNo = (string) ($purchaseOrder->po_no ?? ('PO #' . $poId));
+            $statusText = $status === 'received' ? 'fully received' : 'partially received';
+
+            $directUsers = collect([
+                $purchaseOrder->created_by ?? null,
+                $purchaseOrder->approved_by ?? null,
+            ])->filter();
+
+            $recipients = collect()
+                ->merge($directUsers)
+                ->merge(self::wmcNotificationUsersByModules(['purchasing']))
+                ->merge(self::wmcNotificationUsersByDepartmentKeywords(['purchasing']))
+                ->merge(self::wmcNotificationAdminUsers())
+                ->filter(fn ($id) => (int) $id > 0 && (int) $id !== (int) $actorId)
+                ->unique()
+                ->values();
+
+            self::wmcCreateNotifications(
+                $recipients,
+                'purchasing',
+                'purchase_order_received',
+                'Purchase Order Received',
+                $poNo . ' has been ' . $statusText . '.',
+                self::wmcRouteUrl('purchasing.purchase-orders.show', [$poId], '/purchasing/purchase-orders/' . $poId),
+                'purchase_order',
+                $poId,
+                $actorId
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    public static function notifyPurchaseBillCreated($purchaseBill, ?int $actorId = null): void
+    {
+        try {
+            $billId = (int) ($purchaseBill->id ?? 0);
+            if ($billId <= 0) {
+                return;
+            }
+
+            $billNo = (string) ($purchaseBill->bill_no ?? ('Bill #' . $billId));
+            $poNo = null;
+            if (! empty($purchaseBill->purchase_order_id) && \Illuminate\Support\Facades\Schema::hasTable('purchase_orders')) {
+                $poNo = \Illuminate\Support\Facades\DB::table('purchase_orders')->where('id', $purchaseBill->purchase_order_id)->value('po_no');
+            }
+
+            $recipients = collect()
+                ->merge(self::wmcNotificationUsersByModules(['accounting']))
+                ->merge(self::wmcNotificationUsersByDepartmentKeywords(['accounting', 'finance']))
+                ->merge(self::wmcNotificationAdminUsers())
+                ->filter(fn ($id) => (int) $id > 0 && (int) $id !== (int) $actorId)
+                ->unique()
+                ->values();
+
+            self::wmcCreateNotifications(
+                $recipients,
+                'accounting',
+                'purchase_bill_created',
+                'New Supplier Bill To Pay',
+                trim($billNo . ($poNo ? ' from ' . $poNo : '') . ' is posted and ready for Accounting payment.'),
+                self::wmcRouteUrl('accounting.pay-bills.show', [$billId], '/accounting/pay-bills/' . $billId),
+                'purchase_bill',
+                $billId,
+                $actorId
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private static function wmcPurchasingSupplierName($supplierId): ?string
+    {
+        try {
+            if (! $supplierId || ! \Illuminate\Support\Facades\Schema::hasTable('warehouse_suppliers')) {
+                return null;
+            }
+
+            $supplier = \Illuminate\Support\Facades\DB::table('warehouse_suppliers')->where('id', $supplierId)->first();
+            return $supplier->supplier_name ?? $supplier->name ?? null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private static function wmcNotificationUsersByModules(array $modules): \Illuminate\Support\Collection
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('user_module_accesses')) {
+                return collect();
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table('user_module_accesses as uma')
+                ->join('users as u', 'u.id', '=', 'uma.user_id')
+                ->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(uma.module)'), array_map('strtolower', $modules));
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'status')) {
+                $query->where(function ($q) {
+                    $q->where('u.status', 'active')->orWhere('u.status', 1)->orWhereNull('u.status');
+                });
+            }
+
+            return $query->pluck('u.id');
+        } catch (\Throwable $e) {
+            return collect();
+        }
+    }
+
+    private static function wmcNotificationUsersByDepartmentKeywords(array $keywords): \Illuminate\Support\Collection
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('departments') || ! \Illuminate\Support\Facades\Schema::hasColumn('users', 'department_id')) {
+                return collect();
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table('users as u')
+                ->join('departments as d', 'd.id', '=', 'u.department_id')
+                ->where(function ($q) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $q->orWhere('d.name', 'ilike', '%' . $keyword . '%');
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('departments', 'department_name')) {
+                            $q->orWhere('d.department_name', 'ilike', '%' . $keyword . '%');
+                        }
+                    }
+                });
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'status')) {
+                $query->where(function ($q) {
+                    $q->where('u.status', 'active')->orWhere('u.status', 1)->orWhereNull('u.status');
+                });
+            }
+
+            return $query->pluck('u.id');
+        } catch (\Throwable $e) {
+            return collect();
+        }
+    }
+
+    private static function wmcNotificationAdminUsers(): \Illuminate\Support\Collection
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('roles') || ! \Illuminate\Support\Facades\Schema::hasTable('model_has_roles')) {
+                return collect();
+            }
+
+            return \Illuminate\Support\Facades\DB::table('model_has_roles as mhr')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->where('mhr.model_type', 'like', '%User%')
+                ->where(function ($q) {
+                    $q->where('r.name', 'ilike', '%admin%')
+                      ->orWhere('r.name', 'ilike', '%bod%')
+                      ->orWhere('r.name', 'ilike', '%super%');
+                })
+                ->pluck('mhr.model_id');
+        } catch (\Throwable $e) {
+            return collect();
+        }
+    }
+
+    private static function wmcCreateNotifications($userIds, string $module, string $type, string $title, string $message, string $actionUrl, string $relatedType, int $relatedId, ?int $actorId = null): void
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('system_notifications')) {
+                return;
+            }
+
+            $columns = \Illuminate\Support\Facades\Schema::getColumnListing('system_notifications');
+            $now = now();
+
+            foreach (collect($userIds)->filter()->unique()->values() as $userId) {
+                $userId = (int) $userId;
+                if ($userId <= 0) {
+                    continue;
+                }
+
+                $exists = \Illuminate\Support\Facades\DB::table('system_notifications')
+                    ->where('user_id', $userId)
+                    ->where('type', $type)
+                    ->where('related_type', $relatedType)
+                    ->where('related_id', $relatedId)
+                    ->exists();
+
+                if ($exists) {
+                    continue;
+                }
+
+                $row = [
+                    'user_id' => $userId,
+                    'module' => $module,
+                    'type' => $type,
+                    'title' => $title,
+                    'message' => $message,
+                    'action_url' => $actionUrl,
+                    'related_type' => $relatedType,
+                    'related_id' => $relatedId,
+                    'is_read' => false,
+                    'created_by' => $actorId,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                $row = array_intersect_key($row, array_flip($columns));
+                \Illuminate\Support\Facades\DB::table('system_notifications')->insert($row);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private static function wmcRouteUrl(string $routeName, array $params, string $fallback): string
+    {
+        try {
+            return \Illuminate\Support\Facades\Route::has($routeName) ? route($routeName, $params) : url($fallback);
+        } catch (\Throwable $e) {
+            return url($fallback);
+        }
+    }
+    public static function notifyPurchaseOrderSupplierArrived($purchaseOrder, ?int $actorId = null): void
+    {
+        if (! $purchaseOrder) {
+            return;
+        }
+
+        $poNo = $purchaseOrder->po_no ?? ('PO #' . ($purchaseOrder->id ?? ''));
+        $supplierName = '-';
+
+        try {
+            if (method_exists($purchaseOrder, 'supplier') && $purchaseOrder->relationLoaded('supplier') && $purchaseOrder->supplier) {
+                $supplierName = $purchaseOrder->supplier->name ?? $purchaseOrder->supplier->supplier_name ?? '-';
+            } elseif (! empty($purchaseOrder->supplier_id)) {
+                $supplierName = \DB::table('suppliers')->where('id', $purchaseOrder->supplier_id)->value('name')
+                    ?? \DB::table('suppliers')->where('id', $purchaseOrder->supplier_id)->value('supplier_name')
+                    ?? '-';
+            }
+        } catch (\Throwable $e) {
+            $supplierName = '-';
+        }
+
+        $url = route('purchasing.receiving.create', ['purchase_order_id' => $purchaseOrder->id], false);
+        $title = 'PO Stocks Arrived';
+        $message = $poNo . ' from ' . $supplierName . ' has physically arrived and is ready for warehouse receiving.';
+
+        $userIds = collect();
+
+        try {
+            if (\Schema::hasTable('user_module_accesses')) {
+                $userIds = $userIds->merge(
+                    \DB::table('users as u')
+                        ->join('user_module_accesses as uma', 'uma.user_id', '=', 'u.id')
+                        ->whereIn(\DB::raw('LOWER(uma.module)'), ['warehouse', 'inventory'])
+                        ->where(function ($q) {
+                            $q->whereNull('u.status')
+                                ->orWhere('u.status', 'active')
+                                ->orWhere('u.status', true)
+                                ->orWhere('u.status', '1');
+                        })
+                        ->pluck('u.id')
+                );
+            }
+
+            if (\Schema::hasTable('departments')) {
+                $userIds = $userIds->merge(
+                    \DB::table('users as u')
+                        ->join('departments as d', 'd.id', '=', 'u.department_id')
+                        ->whereRaw('LOWER(d.name) LIKE ?', ['%warehouse%'])
+                        ->where(function ($q) {
+                            $q->whereNull('u.status')
+                                ->orWhere('u.status', 'active')
+                                ->orWhere('u.status', true)
+                                ->orWhere('u.status', '1');
+                        })
+                        ->pluck('u.id')
+                );
+            }
+
+            if (\Schema::hasTable('model_has_roles') && \Schema::hasTable('roles')) {
+                $userIds = $userIds->merge(
+                    \DB::table('users as u')
+                        ->join('model_has_roles as mhr', function ($join) {
+                            $join->on('mhr.model_id', '=', 'u.id')
+                                ->where('mhr.model_type', 'like', '%User%');
+                        })
+                        ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                        ->whereIn(\DB::raw('LOWER(r.name)'), ['admin', 'super-admin', 'bod'])
+                        ->pluck('u.id')
+                );
+            }
+        } catch (\Throwable $e) {
+            // Do not break PO workflow because of notification recipient lookup.
+        }
+
+        $userIds = $userIds->filter()->unique()->values();
+
+        foreach ($userIds as $userId) {
+            if ($actorId && (int) $userId === (int) $actorId) {
+                continue;
+            }
+
+            self::createForUser(
+                userId: (int) $userId,
+                module: 'purchasing',
+                type: 'purchase_order_supplier_arrived',
+                title: $title,
+                message: $message,
+                actionUrl: $url,
+                relatedType: 'purchase_order',
+                relatedId: (int) $purchaseOrder->id,
+                createdBy: $actorId
+            );
+        }
+    }
+
+}

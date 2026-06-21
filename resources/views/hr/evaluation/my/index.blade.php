@@ -5,6 +5,13 @@
                 border: 0;
                 border-radius: 18px;
                 box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+                width: 100%;
+                max-width: none;
+            }
+
+            .my-evaluation-card .card-body {
+                padding-left: 18px;
+                padding-right: 18px;
             }
 
             .my-evaluation-header-icon {
@@ -14,31 +21,38 @@
                 flex-shrink: 0;
             }
 
+            .my-evaluation-table-wrap {
+                width: 100%;
+                overflow-x: visible;
+            }
+
             .my-evaluation-table {
                 table-layout: fixed;
                 width: 100%;
+                min-width: 0;
             }
 
             .my-evaluation-table th {
                 text-transform: uppercase;
-                font-size: 12px;
-                letter-spacing: 0.03em;
+                font-size: 11px;
+                letter-spacing: 0.02em;
                 color: #8a94a6;
                 background: #f4f6fa;
                 white-space: nowrap;
-                padding: 12px 9px;
+                padding: 11px 8px;
                 vertical-align: middle;
+                text-align: left;
             }
 
             .my-evaluation-table td {
                 vertical-align: middle;
                 color: #334155;
-                padding: 13px 9px;
-                font-size: 14px;
+                padding: 12px 8px;
+                font-size: 13.5px;
             }
 
             .my-evaluation-table tbody tr {
-                height: 70px;
+                height: 68px;
             }
 
             .my-evaluation-table tbody tr:hover {
@@ -46,9 +60,11 @@
             }
 
             .my-evaluation-cell-wrap {
+                display: block;
                 white-space: normal;
                 line-height: 1.35;
                 word-break: normal;
+                overflow-wrap: anywhere;
             }
 
             .my-evaluation-cell-nowrap {
@@ -57,7 +73,8 @@
 
             .my-evaluation-table th:nth-child(1),
             .my-evaluation-table td:nth-child(1) {
-                width: 5%;
+                width: 4%;
+                text-align: center;
             }
 
             .my-evaluation-table th:nth-child(2),
@@ -72,72 +89,36 @@
 
             .my-evaluation-table th:nth-child(4),
             .my-evaluation-table td:nth-child(4) {
-                width: 16%;
+                width: 15%;
             }
 
             .my-evaluation-table th:nth-child(5),
             .my-evaluation-table td:nth-child(5) {
-                width: 15%;
+                width: 14%;
             }
 
             .my-evaluation-table th:nth-child(6),
             .my-evaluation-table td:nth-child(6) {
                 width: 11%;
+                text-align: center;
             }
 
             .my-evaluation-table th:nth-child(7),
             .my-evaluation-table td:nth-child(7) {
                 width: 9%;
+                text-align: center;
             }
 
             .my-evaluation-table th:nth-child(8),
             .my-evaluation-table td:nth-child(8) {
                 width: 10%;
+                text-align: center;
             }
 
             .my-evaluation-table th:nth-child(9),
             .my-evaluation-table td:nth-child(9) {
-                width: 6%;
-            }
-
-            .my-evaluation-badge {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 5px 9px;
-                border-radius: 999px;
-                font-size: 11px;
-                font-weight: 700;
-                line-height: 1;
-            }
-
-            .my-evaluation-badge-pending {
-                background: #fff7ed;
-                color: #f97316;
-            }
-
-            .my-evaluation-badge-in-progress {
-                background: #eff6ff;
-                color: #2563eb;
-            }
-
-            .my-evaluation-badge-completed {
-                background: #f0fdf4;
-                color: #16a34a;
-            }
-
-            .my-evaluation-badge-overdue {
-                background: #fef2f2;
-                color: #dc2626;
-            }
-
-            .my-evaluation-empty {
-                border: 1px dashed #cbd5e1;
-                border-radius: 16px;
-                padding: 50px 20px;
+                width: 9%;
                 text-align: center;
-                background: #f8fafc;
-                color: #64748b;
             }
 
             .my-evaluation-status-pill {
@@ -145,8 +126,8 @@
                 align-items: center;
                 justify-content: center;
                 border-radius: 5px;
-                padding: 4px 8px;
-                font-size: 11px;
+                padding: 4px 7px;
+                font-size: 10.5px;
                 font-weight: 700;
                 line-height: 1;
                 text-transform: uppercase;
@@ -180,7 +161,7 @@
                 align-items: center;
                 justify-content: center;
                 border-radius: 999px;
-                padding: 6px 10px;
+                padding: 6px 9px;
                 background: #eef2ff;
                 color: #3b5bdb;
                 font-size: 12px;
@@ -189,8 +170,10 @@
                 white-space: nowrap;
             }
 
-            .my-evaluation-view-btn {
-                min-width: 54px;
+            .my-evaluation-view-btn,
+            .my-evaluation-evaluate-btn {
+                min-width: 64px;
+                max-width: 76px;
                 height: 30px;
                 font-size: 12px;
                 font-weight: 600;
@@ -204,20 +187,9 @@
             }
 
             .my-evaluation-evaluate-btn {
-                min-width: 66px;
-                height: 30px;
-                font-size: 12px;
-                font-weight: 600;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding-left: 10px !important;
-                padding-right: 10px !important;
-                border-radius: 999px !important;
                 background: #3b5bdb !important;
                 border-color: #3b5bdb !important;
                 color: #ffffff !important;
-                white-space: nowrap;
             }
 
             .my-evaluation-evaluate-btn:hover {
@@ -226,9 +198,29 @@
                 color: #ffffff !important;
             }
 
+            .my-evaluation-empty {
+                border: 1px dashed #cbd5e1;
+                border-radius: 16px;
+                padding: 50px 20px;
+                text-align: center;
+                background: #f8fafc;
+                color: #64748b;
+            }
+
+            @media (min-width: 1200px) {
+                .content-inner:has(.my-evaluation-card) {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                }
+            }
+
             @media (max-width: 1199.98px) {
+                .my-evaluation-table-wrap {
+                    overflow-x: auto;
+                }
+
                 .my-evaluation-table {
-                    min-width: 1050px;
+                    min-width: 1040px;
                 }
             }
         </style>
@@ -262,16 +254,16 @@
 
             <div class="card-body">
                 @if($tasks->count())
-                    <div class="table-responsive">
+                    <div class="table-responsive my-evaluation-table-wrap">
                         <table class="table table-bordered table-hover align-middle mb-0 my-evaluation-table">
                             <thead>
                                 <tr>
                                     <th class="text-center">#</th>
-                                    <th>Task</th>
-                                    <th>Employee to Evaluate</th>
-                                    <th>Branch</th>
-                                    <th>Department</th>
-                                    <th>Due Date</th>
+                                    <th class="text-center">Task</th>
+                                    <th class="text-center">Employee to Evaluate</th>
+                                    <th class="text-center">Branch</th>
+                                    <th class="text-center">Department</th>
+                                    <th class="text-center">Due Date</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-center">Performance</th>
                                     <th class="text-center">Action</th>

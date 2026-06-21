@@ -19,7 +19,7 @@
             $locations = $locations ?? collect();
 
             $canStockIn = $canStockIn ?? $canAccess('warehouse.stock_in.create');
-            $canStockOut = $canStockOut ?? $canAccess('warehouse.stock_out.create');
+            $canStockOut = $canStockOut ?? ($user && ((method_exists($user, 'canUseStockOut') && $user->canUseStockOut()) || $user->hasAnyRole(['super-admin', 'super admin', 'Super Admin', 'Super Administrator', 'admin', 'Admin', 'bod', 'BOD', 'Bod', 'Board of Directors', 'Board Of Directors'])));
             $canViewLedger = $canViewLedger ?? $canAccess('warehouse.ledger.view');
         @endphp
 
@@ -104,7 +104,7 @@
                     </div>
                 </div>
 
-                <div class="table-responsive warehouse-table-wrap">
+                <div class="warehouse-table-holder">
                     <table id="warehouse-inventory-table" class="table table-hover align-middle mb-0 warehouse-table w-100">
                         <thead>
                             <tr>
@@ -134,6 +134,8 @@
                     processing: false,
                     serverSide: true,
                     responsive: false,
+                    scrollX: true,
+                    scrollCollapse: true,
                     autoWidth: false,
                     pageLength: 10,
                     lengthMenu: [10, 25, 50, 100],
@@ -215,7 +217,7 @@
                     },
                     dom:
                         "<'row g-3 align-items-center mb-3 warehouse-table-top'<'col-lg-6 col-md-6'l><'col-lg-6 col-md-6'f>>" +
-                        "<'row'<'col-12'tr>>" +
+                        "<'row'<'col-12 warehouse-dt-table-area'tr>>" +
                         "<'row g-3 align-items-center warehouse-table-footer'<'col-lg-6 col-md-6'i><'col-lg-6 col-md-6'p>>",
                     columnDefs: [
                         {
@@ -298,17 +300,83 @@
                 box-shadow: 0 0 0 0.12rem rgba(58, 87, 232, 0.12) !important;
             }
 
-            .warehouse-table-wrap {
-                border: 0 !important;
-                border-radius: 0 !important;
-                overflow: hidden;
+            .warehouse-table-holder {
                 width: 100%;
+                max-width: 100%;
                 background: #ffffff;
+                overflow: visible !important;
+            }
+
+            .warehouse-dt-table-area {
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+
+            .warehouse-dt-table-area > .col-12 {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
             }
 
             .warehouse-table {
                 width: 100% !important;
+                min-width: 1320px !important;
                 border-collapse: collapse !important;
+            }
+
+            #warehouse-inventory-table_wrapper {
+                width: 100%;
+                max-width: 100%;
+                overflow: visible !important;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scroll {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                background: #ffffff;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollHead,
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollHead {
+                overflow: hidden !important;
+                background: #f4f6fb;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody {
+                overflow-x: auto !important;
+                overflow-y: hidden !important;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: thin;
+                scrollbar-color: #cbd5e1 #f8fafc;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody::-webkit-scrollbar {
+                height: 10px;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody::-webkit-scrollbar-track {
+                background: #f8fafc;
+                border-radius: 999px;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 999px;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody::-webkit-scrollbar-thumb:hover {
+                background: #94a3b8;
+            }
+
+            #warehouse-inventory-table_wrapper .dataTables_scrollHeadInner,
+            #warehouse-inventory-table_wrapper .dataTables_scrollHeadInner table,
+            #warehouse-inventory-table_wrapper .dataTables_scrollBody table {
+                min-width: 1320px !important;
             }
 
             .warehouse-table thead th {
@@ -327,6 +395,7 @@
                 padding: 16px;
                 border-bottom: 0 !important;
                 vertical-align: middle;
+                white-space: nowrap;
             }
 
             .warehouse-table tbody tr {
@@ -478,10 +547,6 @@
             }
 
             @media (max-width: 991px) {
-                .warehouse-table-wrap {
-                    overflow-x: auto;
-                }
-
                 div.dataTables_wrapper div.dataTables_filter {
                     text-align: left;
                 }

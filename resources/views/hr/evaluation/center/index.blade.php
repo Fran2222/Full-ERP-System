@@ -277,6 +277,149 @@
                 }
             }
 
+
+
+            /* 125% scale fit fix: keep all columns, especially Action, visible without dragging */
+            .evaluation-center-card .card-body {
+                padding-left: 18px;
+                padding-right: 18px;
+            }
+
+            .evaluation-center-card .table-responsive {
+                overflow-x: visible;
+            }
+
+            .evaluation-center-table {
+                min-width: 0 !important;
+                width: 100% !important;
+                table-layout: fixed !important;
+            }
+
+            .evaluation-center-table th,
+            .evaluation-center-table td {
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .evaluation-center-table th {
+                font-size: 11px !important;
+                line-height: 1.2;
+            }
+
+            .evaluation-center-table td {
+                font-size: 13px !important;
+            }
+
+            /* Fine-tuned column balance for 125% Windows scaling */
+            .evaluation-center-table th:nth-child(1),
+            .evaluation-center-table td:nth-child(1) { width: 8.5% !important; }
+
+            .evaluation-center-table th:nth-child(2),
+            .evaluation-center-table td:nth-child(2) { width: 11.5% !important; }
+
+            .evaluation-center-table th:nth-child(3),
+            .evaluation-center-table td:nth-child(3) { width: 13% !important; }
+
+            /* Department moved slightly left/compact so Performance can show fully */
+            .evaluation-center-table th:nth-child(4),
+            .evaluation-center-table td:nth-child(4) { width: 17% !important; }
+
+            .evaluation-center-table th:nth-child(5),
+            .evaluation-center-table td:nth-child(5) { width: 10% !important; }
+
+            .evaluation-center-table th:nth-child(6),
+            .evaluation-center-table td:nth-child(6) { width: 9.5% !important; }
+
+            .evaluation-center-table th:nth-child(7),
+            .evaluation-center-table td:nth-child(7) {
+                width: 8.5% !important;
+                text-align: center !important;
+            }
+
+            /* Give Performance enough room so it will not become PERFORMA... */
+            .evaluation-center-table th:nth-child(8),
+            .evaluation-center-table td:nth-child(8) {
+                width: 11% !important;
+                text-align: center !important;
+                overflow: visible !important;
+                white-space: nowrap !important;
+            }
+
+            /* Keep Action visible and a little farther to the right */
+            .evaluation-center-table th:nth-child(9),
+            .evaluation-center-table td:nth-child(9) {
+                width: 11% !important;
+                overflow: visible !important;
+                white-space: nowrap !important;
+            }
+
+            .evaluation-center-table th:nth-child(9),
+            .evaluation-center-table td:nth-child(9) {
+                text-align: center !important;
+                padding-left: 8px !important;
+                padding-right: 8px !important;
+            }
+
+            .evaluation-center-table td:nth-child(9) .evaluation-view-form-btn {
+                margin-left: auto;
+                margin-right: auto;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .evaluation-cell-wrap {
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                overflow-wrap: anywhere;
+            }
+
+            .evaluation-cell-nowrap {
+                white-space: normal !important;
+                line-height: 1.25;
+            }
+
+            .evaluation-anonymous-badge,
+            .evaluation-center-performance-pill {
+                max-width: 100%;
+                padding-left: 8px;
+                padding-right: 8px;
+                white-space: nowrap;
+            }
+
+            .evaluation-center-status-pill {
+                max-width: 100%;
+                padding-left: 7px;
+                padding-right: 7px;
+                white-space: nowrap;
+            }
+
+            .evaluation-view-form-btn {
+                min-width: 56px !important;
+                height: 30px;
+                padding-left: 10px !important;
+                padding-right: 10px !important;
+            }
+
+            @media (max-width: 1199.98px) {
+                .evaluation-center-table {
+                    min-width: 0 !important;
+                }
+            }
+
+            @media (max-width: 991.98px) {
+                .evaluation-center-card .table-responsive {
+                    overflow-x: auto;
+                }
+
+                .evaluation-center-table {
+                    min-width: 980px !important;
+                }
+            }
+
             @media (max-width: 767.98px) {
                 .evaluation-center-search {
                     width: 100%;
@@ -338,15 +481,15 @@
                     <table class="table table-bordered table-hover align-middle mb-0 evaluation-center-table">
                         <thead>
                             <tr>
-                                <th style="width: 10%;">Task</th>
-                                <th style="width: 13%;">Name</th>
+                                <th style="width: 8.5%;">Task</th>
+                                <th style="width: 11.5%;">Name</th>
                                 <th style="width: 14%;">Branch</th>
-                                <th style="width: 19%;">Department</th>
+                                <th style="width: 17%;">Department</th>
                                 <th class="text-center" style="width: 12%;">Evaluator</th>
                                 <th class="text-center" style="width: 9%;">Due Date</th>
-                                <th class="text-center" style="width: 8%;">Status</th>
-                                <th class="text-center" style="width: 9%;">Performance</th>
-                                <th class="text-center" style="width: 6%;">Action</th>
+                                <th class="text-center" style="width: 8.5%;">Status</th>
+                                <th class="text-center" style="width: 11%;">Performance</th>
+                                <th class="text-center" style="width: 11%;">Action</th>
                             </tr>
                         </thead>
 

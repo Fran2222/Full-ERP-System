@@ -1,0 +1,2274 @@
+<?php
+
+use App\Http\Controllers\Warehouse\WarehouseItemPickerController;
+use App\Http\Controllers\Service\ServiceJobOrderReportController;
+use App\Http\Controllers\Vehicle\VehicleDocumentController;
+use App\Http\Controllers\Vehicle\VehicleReportController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Security\RolePermission;
+use App\Http\Controllers\Security\RoleController;
+use App\Http\Controllers\Security\PermissionController;
+use App\Http\Controllers\BranchController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\AnnouncementController;
+
+use App\Http\Controllers\HR\DashboardController as HRDashboardController;
+use App\Http\Controllers\HR\EmployeeController;
+use App\Http\Controllers\HR\EvaluationController;
+use App\Http\Controllers\HR\EvaluationFormController;
+use App\Http\Controllers\HR\EvaluationCenterController;
+use App\Http\Controllers\HR\EvaluationPerformanceSummaryController;
+use App\Http\Controllers\HR\LeaveController;
+use App\Http\Controllers\HR\LeaveTypeController;
+use App\Http\Controllers\HR\DesignationController;
+use App\Http\Controllers\HR\AttendanceController;
+use App\Http\Controllers\HR\AttendanceBatchController;
+use App\Http\Controllers\HR\PayrollController;
+use App\Http\Controllers\HR\TravelOrderController;
+use App\Http\Controllers\HR\OvertimeRequestController;
+
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+use App\Http\Controllers\Warehouse\ItemController;
+use App\Http\Controllers\Warehouse\LocationController;
+use App\Http\Controllers\Warehouse\SupplierController;
+use App\Http\Controllers\Warehouse\UnitController;
+use App\Http\Controllers\Warehouse\CategoryController;
+use App\Http\Controllers\Warehouse\InventoryController;
+use App\Http\Controllers\Warehouse\WarehouseController;
+use App\Http\Controllers\Warehouse\ServiceUnitController;
+use App\Http\Controllers\Warehouse\WarehouseTransferController;
+
+use App\Http\Controllers\Vehicle\VehicleDashboardController;
+use App\Http\Controllers\Vehicle\VehicleSetupController;
+use App\Http\Controllers\Vehicle\VehiclePlaceholderController;
+use App\Http\Controllers\Vehicle\VehicleController;
+use App\Http\Controllers\Vehicle\VehicleAssignmentController;
+use App\Http\Controllers\Vehicle\VehicleMaintenanceController;
+use App\Http\Controllers\Sales\SalesDashboardController;
+use App\Http\Controllers\Purchasing\PurchaseOrderController;
+use App\Http\Controllers\Purchasing\PurchaseBillController;
+use App\Http\Controllers\Accounting\AccountingDashboardController;
+use App\Http\Controllers\Accounting\ChartOfAccountController;
+use App\Http\Controllers\Accounting\JournalEntryController;
+use App\Http\Controllers\Accounting\GeneralLedgerController;
+use App\Http\Controllers\Accounting\AccountingReportController;
+use App\Http\Controllers\Accounting\BankAccountController;
+use App\Http\Controllers\Accounting\ExpenseController;
+use App\Http\Controllers\Accounting\CollectionController;
+use App\Http\Controllers\ProjectMgmt\DashboardController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectsController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ClientController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectTypeController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectPriorityController; //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectStatusController;  //PROJECTMGMT CONTROLLERS
+use App\Http\Controllers\CRM\CRMController; //PROJECTCRM CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\TeamController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectMilestoneController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectTaskController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectFileController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\StoreNameController; //PROJECT CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\RfpTypeController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectRfpController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectExpenseController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectVehicleController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\ProjectGasSlipController; //PROJECT FINANCES CONTROLLERS
+use App\Http\Controllers\ProjectMgmt\DocumentControlController; //PROJECT SETUP CONTROLLERS
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
+
+require __DIR__ . '/auth.php';
+
+Route::get('/storage', function () {
+    Artisan::call('storage:link');
+});
+
+// Root
+Route::get('/', function () {
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
+})->name('uisheet');
+
+// Public / standalone routes
+Route::get('/users/list', [UserController::class, 'getUsers'])
+    ->middleware(['auth', 'permission:users.view'])
+    ->name('users.list');
+
+// Authenticated routes
+Route::middleware(['auth'])->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | POS Module
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('pos')->name('pos.')->group(function () {
+        Route::get('/', [POSController::class, 'index'])->name('index');
+        Route::get('/access', [POSController::class, 'access'])->name('access');
+        Route::post('/access', [POSController::class, 'authenticate'])->name('authenticate');
+        Route::post('/logout', [POSController::class, 'logout'])->name('logout');
+        Route::get('/terminal', [POSController::class, 'terminal'])->name('terminal');
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Announcements
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/announcements', [AnnouncementController::class, 'index'])
+        ->middleware('permission:announcements.view')
+        ->name('announcements.index');
+
+    Route::get('/announcements/create', [AnnouncementController::class, 'create'])
+        ->middleware('permission:announcements.create')
+        ->name('announcements.create');
+
+    Route::post('/announcements', [AnnouncementController::class, 'store'])
+        ->middleware('permission:announcements.create')
+        ->name('announcements.store');
+
+    Route::get('/announcements/{announcement}/edit', [AnnouncementController::class, 'edit'])
+        ->middleware('permission:announcements.edit')
+        ->name('announcements.edit');
+
+    Route::match(['put', 'patch'], '/announcements/{announcement}', [AnnouncementController::class, 'update'])
+        ->middleware('permission:announcements.edit')
+        ->name('announcements.update');
+
+    Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])
+        ->middleware('permission:announcements.delete')
+        ->name('announcements.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/dashboard', function (\Illuminate\Http\Request $request) {
+        $user = auth()->user();
+
+        if (
+            $user
+            && ($user->can('hr.dashboard.view') || $user->can('hr.view'))
+            && ! $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'super admin', 'super-admin', 'superadmin', 'admin'])
+        ) {
+            return redirect()->route('hr.dashboard');
+        }
+
+        return app(HomeController::class)->index($request);
+    })
+        ->middleware('permission:dashboard.view|hr.dashboard.view|hr.view')
+        ->name('dashboard');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Role & Permission Matrix
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/role-permission', [RolePermission::class, 'index'])
+        ->middleware('permission:role.permission.view')
+        ->name('role.permission.index');
+
+    Route::post('/role-permission', [RolePermission::class, 'store'])
+        ->middleware('permission:role.permission.edit')
+        ->name('role.permission.store');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sales Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('sales')->name('sales.')->group(function () {
+        Route::get('/', [SalesDashboardController::class, 'index'])->name('dashboard');
+
+        Route::resource('customers', \App\Http\Controllers\Sales\CustomerController::class)
+            ->except(['show']);
+
+        Route::resource('invoices', \App\Http\Controllers\Sales\InvoiceController::class);
+
+        Route::get('/sales-receipts/available-serials', [\App\Http\Controllers\Sales\SalesReceiptController::class, 'availableSerials'])
+            ->name('sales-receipts.available-serials');
+
+        Route::resource('sales-receipts', \App\Http\Controllers\Sales\SalesReceiptController::class);
+
+        Route::patch('/sales-receipts/{salesReceipt}/void', [\App\Http\Controllers\Sales\SalesReceiptController::class, 'void'])
+            ->name('sales-receipts.void');
+
+        Route::get('/receive-payments', [\App\Http\Controllers\Sales\ReceivePaymentController::class, 'index'])
+            ->name('receive-payments.index');
+
+        Route::get('/receive-payments/create', [\App\Http\Controllers\Sales\ReceivePaymentController::class, 'create'])
+            ->name('receive-payments.create');
+
+        Route::post('/receive-payments', [\App\Http\Controllers\Sales\ReceivePaymentController::class, 'store'])
+            ->name('receive-payments.store');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Purchasing Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('purchasing')->name('purchasing.')->group(function () {
+        Route::get('/', [PurchaseOrderController::class, 'dashboard'])->name('dashboard');
+
+        Route::get('/receiving', [\App\Http\Controllers\Purchasing\ReceivingController::class, 'index'])
+            ->name('receiving.index');
+
+        Route::get('/receiving/create', [\App\Http\Controllers\Purchasing\ReceivingController::class, 'create'])
+            ->name('receiving.create');
+
+        Route::post('/receiving', [\App\Http\Controllers\Purchasing\ReceivingController::class, 'store'])
+            ->name('receiving.store');
+
+        Route::get('/receiving/{receiving}/print', [\App\Http\Controllers\Purchasing\ReceivingController::class, 'print'])
+            ->name('receiving.print');
+
+        Route::get('/receiving/{receiving}', [\App\Http\Controllers\Purchasing\ReceivingController::class, 'show'])
+            ->name('receiving.show');
+
+        Route::get('/bills', [PurchaseBillController::class, 'index'])
+            ->name('bills.index');
+
+        Route::get('/bills/create', [PurchaseBillController::class, 'create'])
+            ->name('bills.create');
+
+        Route::post('/bills', [PurchaseBillController::class, 'store'])
+            ->name('bills.store');
+
+        Route::get('/bills/{bill}', [PurchaseBillController::class, 'show'])
+            ->name('bills.show');
+
+        Route::patch('/bills/{bill}/void', [PurchaseBillController::class, 'void'])
+            ->name('bills.void');
+
+        Route::get('/payments', [\App\Http\Controllers\Purchasing\PurchasePaymentController::class, 'index'])
+            ->name('payments.index');
+
+        Route::get('/payments/create', [\App\Http\Controllers\Purchasing\PurchasePaymentController::class, 'create'])
+            ->name('payments.create');
+
+        Route::post('/payments', [\App\Http\Controllers\Purchasing\PurchasePaymentController::class, 'store'])
+            ->name('payments.store');
+
+        Route::get('/payments/{payment}', [\App\Http\Controllers\Purchasing\PurchasePaymentController::class, 'show'])
+            ->name('payments.show');
+
+        Route::patch('/payments/{payment}/void', [\App\Http\Controllers\Purchasing\PurchasePaymentController::class, 'void'])
+            ->name('payments.void');
+
+        Route::get('/purchase-orders/{purchaseOrder}/print', [\App\Http\Controllers\Purchasing\PurchasePrintController::class, 'purchaseOrder'])
+            ->name('purchase-orders.print');
+
+        Route::get('/bills/{bill}/print', [\App\Http\Controllers\Purchasing\PurchasePrintController::class, 'bill'])
+            ->name('bills.print');
+
+        Route::get('/payments/{payment}/print', [\App\Http\Controllers\Purchasing\PurchasePrintController::class, 'payment'])
+            ->name('payments.print');
+
+        Route::patch('/purchase-orders/{purchase_order}/mark-ordered', [PurchaseOrderController::class, 'markOrdered'])
+            ->name('purchase-orders.mark-ordered');
+        Route::patch('/purchase-orders/{purchase_order}/mark-supplier-arrived', [PurchaseOrderController::class, 'markSupplierArrived'])
+            ->name('purchase-orders.mark-supplier-arrived');
+
+        Route::resource('purchase-orders', PurchaseOrderController::class);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Permission CRUD
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/permission', [PermissionController::class, 'index'])
+        ->middleware('permission:permissions.view')
+        ->name('permission.index');
+
+    Route::get('/permission/create', [PermissionController::class, 'create'])
+        ->middleware('permission:permissions.create')
+        ->name('permission.create');
+
+    Route::post('/permission', [PermissionController::class, 'store'])
+        ->middleware('permission:permissions.create')
+        ->name('permission.store');
+
+    Route::get('/permission/{permission}', [PermissionController::class, 'show'])
+        ->middleware('permission:permissions.view')
+        ->name('permission.show');
+
+    Route::get('/permission/{permission}/edit', [PermissionController::class, 'edit'])
+        ->middleware('permission:permissions.edit')
+        ->name('permission.edit');
+
+    Route::match(['put', 'patch'], '/permission/{permission}', [PermissionController::class, 'update'])
+        ->middleware('permission:permissions.edit')
+        ->name('permission.update');
+
+    Route::delete('/permission/{permission}', [PermissionController::class, 'destroy'])
+        ->middleware('permission:permissions.delete')
+        ->name('permission.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Role CRUD
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/role', [RoleController::class, 'index'])
+        ->middleware('permission:roles.view')
+        ->name('role.index');
+
+    Route::get('/role/create', [RoleController::class, 'create'])
+        ->middleware('permission:roles.create')
+        ->name('role.create');
+
+    Route::post('/role', [RoleController::class, 'store'])
+        ->middleware('permission:roles.create')
+        ->name('role.store');
+
+    Route::get('/role/{role}', [RoleController::class, 'show'])
+        ->middleware('permission:roles.view')
+        ->name('role.show');
+
+    Route::get('/role/{role}/edit', [RoleController::class, 'edit'])
+        ->middleware('permission:roles.edit')
+        ->name('role.edit');
+
+    Route::match(['put', 'patch'], '/role/{role}', [RoleController::class, 'update'])
+        ->middleware('permission:roles.edit')
+        ->name('role.update');
+
+    Route::delete('/role/{role}', [RoleController::class, 'destroy'])
+        ->middleware('permission:roles.delete')
+        ->name('role.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Branches
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/branches', [BranchController::class, 'index'])
+        ->middleware('permission:branches.view|hr.branches.view')
+        ->name('branches.index');
+
+    Route::get('/branches/create', [BranchController::class, 'create'])
+        ->middleware('permission:branches.create|hr.branches.create')
+        ->name('branches.create');
+
+    Route::post('/branches', [BranchController::class, 'store'])
+        ->middleware('permission:branches.create|hr.branches.create')
+        ->name('branches.store');
+
+    Route::get('/branches/{branch}/edit', [BranchController::class, 'edit'])
+        ->middleware('permission:branches.edit|hr.branches.edit')
+        ->name('branches.edit');
+
+    Route::match(['put', 'patch'], '/branches/{branch}', [BranchController::class, 'update'])
+        ->middleware('permission:branches.edit|hr.branches.edit')
+        ->name('branches.update');
+
+    Route::delete('/branches/{branch}', [BranchController::class, 'destroy'])
+        ->middleware('permission:branches.delete|hr.branches.delete')
+        ->name('branches.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Users
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/users', [UserController::class, 'index'])
+        ->middleware('permission:users.view')
+        ->name('users.index');
+
+    Route::get('/users/create', [UserController::class, 'create'])
+        ->middleware('permission:users.create')
+        ->name('users.create');
+
+    Route::post('/users', [UserController::class, 'store'])
+        ->middleware('permission:users.create')
+        ->name('users.store');
+
+    Route::get('/users/{user}', [UserController::class, 'show'])
+        ->name('users.show');
+
+    Route::get('/users/{user}/edit', [UserController::class, 'edit'])
+        ->middleware('permission:users.edit')
+        ->name('users.edit');
+
+    Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])
+        ->middleware('permission:users.edit')
+        ->name('users.update');
+
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])
+        ->middleware('permission:users.delete')
+        ->name('users.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Departments
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/departments', [DepartmentController::class, 'index'])
+        ->middleware('permission:departments.view|hr.departments.view')
+        ->name('departments.index');
+
+    Route::get('/departments/create', [DepartmentController::class, 'create'])
+        ->middleware('permission:departments.create|hr.departments.create')
+        ->name('departments.create');
+
+    Route::post('/departments', [DepartmentController::class, 'store'])
+        ->middleware('permission:departments.create|hr.departments.create')
+        ->name('departments.store');
+
+    Route::get('/departments/{department}/edit', [DepartmentController::class, 'edit'])
+        ->middleware('permission:departments.edit|hr.departments.edit')
+        ->name('departments.edit');
+
+    Route::match(['put', 'patch'], '/departments/{department}', [DepartmentController::class, 'update'])
+        ->middleware('permission:departments.edit|hr.departments.edit')
+        ->name('departments.update');
+
+    Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
+        ->middleware('permission:departments.delete|hr.departments.delete')
+        ->name('departments.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | HR Designations
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('designations')->name('designations.')->group(function () {
+        Route::get('/', [DesignationController::class, 'index'])
+            ->middleware('permission:hr.designations.view')
+            ->name('index');
+
+        Route::get('/create', [DesignationController::class, 'create'])
+            ->middleware('permission:hr.designations.create')
+            ->name('create');
+
+        Route::post('/', [DesignationController::class, 'store'])
+            ->middleware('permission:hr.designations.create')
+            ->name('store');
+
+        Route::get('/{designation}/edit', [DesignationController::class, 'edit'])
+            ->middleware('permission:hr.designations.edit')
+            ->name('edit');
+
+        Route::match(['put', 'patch'], '/{designation}', [DesignationController::class, 'update'])
+            ->middleware('permission:hr.designations.edit')
+            ->name('update');
+
+        Route::delete('/{designation}', [DesignationController::class, 'destroy'])
+            ->middleware('permission:hr.designations.delete')
+            ->name('destroy');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | HR Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('hr')->name('hr.')->middleware(['permission:hr.view|hr.dashboard.view|accounting.view'])->group(function () {
+        /*
+        |--------------------------------------------------------------------------
+        | HR Dashboard
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/', [HRDashboardController::class, 'index'])
+            ->middleware('permission:hr.dashboard.view|hr.view')
+            ->name('overview');
+
+        Route::get('/dashboard', [HRDashboardController::class, 'index'])
+            ->middleware('permission:hr.dashboard.view|hr.view')
+            ->name('dashboard');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Leave System
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/leave', [LeaveController::class, 'index'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view')
+            ->name('leave.index');
+
+        Route::get('/leave/file', [LeaveController::class, 'index'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view|hr.leave.apply')
+            ->name('leave.file');
+
+        Route::get('/leave/history', [LeaveController::class, 'index'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view')
+            ->name('leave.history');
+
+        Route::get('/leave/credits', [LeaveController::class, 'index'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view|hr.leave.credits.view')
+            ->name('leave.credits');
+
+        Route::get('/leave/credit-management', [LeaveController::class, 'creditManagement'])
+            ->middleware('permission:hr.leave.requests.view')
+            ->name('leave.credit-management');
+
+        Route::get('/leave/credit-management/{employee}', [LeaveController::class, 'creditManagementShow'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view|hr.leave.credits.view')
+            ->name('leave.credit-management.show');
+        
+        Route::patch('/leave/credit-management/{employee}/leave-types/{leaveType}', [LeaveController::class, 'updateCreditAllocation'])
+            ->middleware('permission:hr.leave.requests.view')
+            ->name('leave.credit-management.update');
+
+        Route::post('/leave', [LeaveController::class, 'store'])
+            ->middleware('permission:hr.leave.apply')
+            ->name('leave.store');
+
+        Route::patch('/leave/{leaveRequest}', [LeaveController::class, 'updateOwnRequest'])
+            ->middleware('permission:hr.leave.apply')
+            ->name('leave.update');
+
+        Route::patch('/leave/{leaveRequest}/cancel', [LeaveController::class, 'cancelOwnRequest'])
+            ->middleware('permission:hr.leave.view|hr.leave.own.view')
+            ->name('leave.cancel');
+
+        Route::get('/leave/requests', [LeaveController::class, 'requests'])
+            ->name('leave.requests');
+
+        Route::patch('/leave/requests/{leaveRequest}/status', [LeaveController::class, 'updateStatus'])
+            ->name('leave.requests.update-status');
+
+        Route::get('/leave-types', [LeaveTypeController::class, 'index'])
+            ->middleware('permission:hr.leave-types.view')
+            ->name('leave-types.index');
+
+        Route::get('/leave-types/create', [LeaveTypeController::class, 'create'])
+            ->middleware('permission:hr.leave-types.create')
+            ->name('leave-types.create');
+
+        Route::post('/leave-types', [LeaveTypeController::class, 'store'])
+            ->middleware('permission:hr.leave-types.create')
+            ->name('leave-types.store');
+
+        Route::get('/leave-types/{leave_type}/edit', [LeaveTypeController::class, 'edit'])
+            ->middleware('permission:hr.leave-types.edit')
+            ->name('leave-types.edit');
+
+        Route::match(['put', 'patch'], '/leave-types/{leave_type}', [LeaveTypeController::class, 'update'])
+            ->middleware('permission:hr.leave-types.edit')
+            ->name('leave-types.update');
+
+        Route::delete('/leave-types/{leave_type}', [LeaveTypeController::class, 'destroy'])
+            ->middleware('permission:hr.leave-types.delete')
+            ->name('leave-types.destroy');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Attendance
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/attendance', [AttendanceController::class, 'index'])
+            ->middleware('permission:hr.attendance.view|hr.attendance.own.view')
+            ->name('attendance.index');
+
+        Route::post('/attendance', [AttendanceController::class, 'store'])
+            ->middleware('permission:hr.attendance.create')
+            ->name('attendance.store');
+
+        Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])
+            ->middleware('permission:hr.attendance.delete')
+            ->name('attendance.destroy');
+        
+        Route::get('/attendance-batches', [AttendanceBatchController::class, 'index'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.index');
+
+        Route::get('/attendance-batches/create', [AttendanceBatchController::class, 'create'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.create');
+
+        Route::post('/attendance-batches', [AttendanceBatchController::class, 'store'])
+            ->middleware('permission:hr.attendance.view|hr.view')
+            ->name('attendance-batches.store');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Payroll / Payslip
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/payroll', [PayrollController::class, 'index'])
+            ->middleware('permission:hr.payroll.view|hr.payroll.own.payslip.view')
+            ->name('payroll.index');
+
+        Route::post('/payroll', [PayrollController::class, 'store'])
+            ->middleware('permission:hr.payroll.create')
+            ->name('payroll.store');
+
+        Route::get('/payroll/{payroll}', [PayrollController::class, 'show'])
+            ->middleware('permission:hr.payroll.view|hr.payroll.own.payslip.view')
+            ->name('payroll.show');
+
+        Route::get('/payroll/{payroll}/payslip/{item}', [PayrollController::class, 'payslip'])
+            ->middleware('permission:hr.payroll.payslip.view|hr.payroll.own.payslip.view')
+            ->name('payroll.payslip');
+
+        Route::get('/payroll/{payroll}/payslip/{item}/download', [PayrollController::class, 'downloadPayslip'])
+            ->middleware('permission:hr.payroll.payslip.view|hr.payroll.own.payslip.view')
+            ->name('payroll.payslip.download');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Travel Orders
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/travel-orders', [TravelOrderController::class, 'index'])
+            ->middleware('permission:hr.view|accounting.view')
+            ->name('travel-orders.index');
+
+        Route::get('/travel-orders/create', [TravelOrderController::class, 'create'])
+            ->middleware('permission:hr.view')
+            ->name('travel-orders.create');
+
+        Route::post('/travel-orders', [TravelOrderController::class, 'store'])
+            ->middleware('permission:hr.view')
+            ->name('travel-orders.store');
+
+        Route::get('/travel-orders/{travelOrder}', [TravelOrderController::class, 'show'])
+            ->middleware('permission:hr.view|accounting.view')
+            ->name('travel-orders.show');
+
+        Route::get('/travel-orders/{travelOrder}/print', [TravelOrderController::class, 'print'])
+            ->middleware('permission:hr.view|accounting.view')
+            ->name('travel-orders.print');
+
+        Route::patch('/travel-orders/{travelOrder}/approve', [TravelOrderController::class, 'approve'])
+            ->middleware('permission:hr.leave.requests.view|accounting.view')
+            ->name('travel-orders.approve');
+
+        Route::patch('/travel-orders/{travelOrder}/reject', [TravelOrderController::class, 'reject'])
+            ->middleware('permission:hr.leave.requests.view|accounting.view')
+            ->name('travel-orders.reject');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Overtime Requests
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/overtime-requests', [OvertimeRequestController::class, 'index'])
+            ->name('overtime-requests.index');
+
+        Route::get('/overtime-requests/create', [OvertimeRequestController::class, 'create'])
+            ->name('overtime-requests.create');
+
+        Route::post('/overtime-requests', [OvertimeRequestController::class, 'store'])
+            ->name('overtime-requests.store');
+
+        Route::get('/overtime-requests/{overtimeRequest}', [OvertimeRequestController::class, 'show'])
+            ->name('overtime-requests.show');
+
+        Route::get('/overtime-requests/{overtimeRequest}/print', [OvertimeRequestController::class, 'print'])
+            ->name('overtime-requests.print');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/department-head/approve', [OvertimeRequestController::class, 'departmentHeadApprove'])
+            ->name('overtime-requests.department-head.approve');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/department-head/reject', [OvertimeRequestController::class, 'departmentHeadReject'])
+            ->name('overtime-requests.department-head.reject');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/hr/approve', [OvertimeRequestController::class, 'hrApprove'])
+            ->name('overtime-requests.hr.approve');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/hr/reject', [OvertimeRequestController::class, 'hrReject'])
+            ->name('overtime-requests.hr.reject');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/admin/approve', [OvertimeRequestController::class, 'adminApprove'])
+            ->name('overtime-requests.admin.approve');
+
+        Route::patch('/overtime-requests/{overtimeRequest}/admin/reject', [OvertimeRequestController::class, 'adminReject'])
+            ->name('overtime-requests.admin.reject');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Evaluation
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/evaluation', [EvaluationCenterController::class, 'myEvaluations'])
+            ->middleware('permission:hr.evaluation.view|hr.evaluation.own.result.view')
+            ->name('evaluation.index');
+
+        Route::get('/evaluation/forms', [EvaluationFormController::class, 'index'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.forms.index');
+
+        Route::get('/evaluation/forms/create', [EvaluationFormController::class, 'create'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.forms.create');
+
+        Route::post('/evaluation/forms', [EvaluationFormController::class, 'store'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.forms.store');
+
+        Route::get('/evaluation/forms/{form}', [EvaluationFormController::class, 'show'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.forms.show');
+
+        Route::get('/evaluation/forms/{form}/edit', [EvaluationFormController::class, 'edit'])
+            ->middleware('permission:hr.evaluation.edit')
+            ->name('evaluation.forms.edit');
+
+        Route::match(['put', 'patch'], '/evaluation/forms/{form}', [EvaluationFormController::class, 'update'])
+            ->middleware('permission:hr.evaluation.edit')
+            ->name('evaluation.forms.update');
+
+        Route::post('/evaluation/forms/{form}/duplicate', [EvaluationFormController::class, 'duplicate'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.forms.duplicate');
+
+        Route::get('/evaluation/forms/{form}/assign', [EvaluationFormController::class, 'assign'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.forms.assign');
+
+        Route::post('/evaluation/forms/{form}/assign', [EvaluationFormController::class, 'storeAssignment'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.forms.assign.store');
+
+        Route::delete('/evaluation/forms/{form}', [EvaluationFormController::class, 'destroy'])
+            ->middleware('permission:hr.evaluation.delete')
+            ->name('evaluation.forms.destroy');
+
+        Route::get('/evaluation/center', [EvaluationCenterController::class, 'index'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.center.index');
+
+        Route::get('/evaluation/performance-summary', [EvaluationPerformanceSummaryController::class, 'index'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.performance-summary.index');
+
+        Route::get('/evaluation/performance-summary/{employeeProfile}/pdf', [EvaluationPerformanceSummaryController::class, 'downloadPdf'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.performance-summary.pdf');
+
+        Route::get('/evaluation/performance-summary/{employeeProfile}', [EvaluationPerformanceSummaryController::class, 'show'])
+            ->middleware('permission:hr.evaluation.view')
+            ->name('evaluation.performance-summary.show');
+
+        Route::get('/evaluation/my/{task}/evaluate', [EvaluationCenterController::class, 'evaluate'])
+        ->middleware('permission:hr.evaluation.view|hr.evaluation.own.result.view')
+        ->name('evaluation.my.evaluate');
+
+        Route::post('/evaluation/my/{task}/evaluate', [EvaluationCenterController::class, 'submitEvaluation'])
+            ->middleware('permission:hr.evaluation.view|hr.evaluation.own.result.view')
+            ->name('evaluation.my.submit');
+
+        Route::post('/evaluation/results', [EvaluationController::class, 'store'])
+            ->middleware('permission:hr.evaluation.create')
+            ->name('evaluation.store');
+
+        Route::get('/evaluation/results/{evaluation}', [EvaluationController::class, 'show'])
+            ->middleware('permission:hr.evaluation.view|hr.evaluation.result.view|hr.evaluation.own.result.view')
+            ->name('evaluation.show');
+
+        Route::get('/evaluation/results/{evaluation}/pdf', [EvaluationController::class, 'downloadPdf'])
+            ->middleware('permission:hr.evaluation.pdf|hr.evaluation.own.result.view')
+            ->name('evaluation.pdf');
+        Route::get('/evaluation/results', [EvaluationCenterController::class, 'myResults'])
+            ->middleware('permission:hr.evaluation.own.result.view')
+            ->name('evaluation.my.results');
+
+        Route::get('/evaluation/results/{task}', [EvaluationCenterController::class, 'showMyResult'])
+            ->middleware('permission:hr.evaluation.own.result.view')
+            ->name('evaluation.my.results.show');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Location AJAX
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/employees/location/cities', [EmployeeController::class, 'getCities'])
+            ->middleware('permission:hr.employees.view|hr.employees.create|hr.employees.edit')
+            ->name('employees.location.cities');
+
+        Route::get('/employees/location/barangays', [EmployeeController::class, 'getBarangays'])
+            ->middleware('permission:hr.employees.view|hr.employees.create|hr.employees.edit')
+            ->name('employees.location.barangays');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee / 201 File
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/employees', [EmployeeController::class, 'index'])
+            ->middleware('permission:hr.employees.view')
+            ->name('employees.index');
+
+        Route::get('/employees/create', [EmployeeController::class, 'create'])
+            ->middleware('permission:hr.employees.create')
+            ->name('employees.create');
+
+        Route::post('/employees', [EmployeeController::class, 'store'])
+            ->middleware('permission:hr.employees.create')
+            ->name('employees.store');
+
+        Route::get('/employees/{employee}', [EmployeeController::class, 'show'])
+            ->middleware('permission:hr.employees.view')
+            ->name('employees.show');
+
+        Route::get('/employees/{employee}/edit', [EmployeeController::class, 'edit'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.edit');
+
+        Route::match(['put', 'patch'], '/employees/{employee}', [EmployeeController::class, 'update'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.update');
+
+        Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
+            ->middleware('permission:hr.employees.delete')
+            ->name('employees.destroy');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Documents
+        |--------------------------------------------------------------------------
+        */
+        Route::post('/employees/{employee}/documents', [EmployeeController::class, 'uploadDocument'])
+            ->middleware('permission:hr.employees.documents.upload')
+            ->name('employees.documents.upload');
+
+        Route::get('/documents/{document}/download', [EmployeeController::class, 'downloadDocument'])
+            ->middleware('permission:hr.employees.documents.view')
+            ->name('documents.download');
+
+        Route::delete('/documents/{document}', [EmployeeController::class, 'deleteDocument'])
+            ->middleware('permission:hr.employees.documents.delete')
+            ->name('documents.delete');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Trainings
+        |--------------------------------------------------------------------------
+        */
+        Route::post('/employees/{employee}/trainings', [EmployeeController::class, 'storeTraining'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.trainings.store');
+
+        Route::get('/trainings/{training}/download', [EmployeeController::class, 'downloadTrainingCertificate'])
+            ->middleware('permission:hr.employees.view')
+            ->name('trainings.download');
+
+        Route::delete('/trainings/{training}', [EmployeeController::class, 'deleteTraining'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('trainings.delete');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Movements
+        |--------------------------------------------------------------------------
+        */
+        Route::post('/employees/{employee}/movements', [EmployeeController::class, 'storeMovement'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.movements.store');
+
+        Route::delete('/movements/{movement}', [EmployeeController::class, 'deleteMovement'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('movements.delete');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Memos
+        |--------------------------------------------------------------------------
+        */
+        Route::post('/employees/{employee}/memos', [EmployeeController::class, 'storeMemo'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.memos.store');
+
+        Route::get('/memos/{memo}/download', [EmployeeController::class, 'downloadMemoAttachment'])
+            ->middleware('permission:hr.employees.view')
+            ->name('memos.download');
+
+        Route::delete('/memos/{memo}', [EmployeeController::class, 'deleteMemo'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('memos.delete');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Exit Records
+        |--------------------------------------------------------------------------
+        */
+        Route::post('/employees/{employee}/exit-records', [EmployeeController::class, 'storeExitRecord'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('employees.exit-records.store');
+
+        Route::get('/exit-records/{exitRecord}/download', [EmployeeController::class, 'downloadExitRecordAttachment'])
+            ->middleware('permission:hr.employees.view')
+            ->name('exit-records.download');
+
+        Route::delete('/exit-records/{exitRecord}', [EmployeeController::class, 'deleteExitRecord'])
+            ->middleware('permission:hr.employees.edit')
+            ->name('exit-records.delete');
+        
+        /*
+        |--------------------------------------------------------------------------
+        | Employee Exit Records
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/employees/{employee}/print-201', [EmployeeController::class, 'print201File'])
+        ->middleware('permission:hr.employees.view')
+        ->name('employees.print-201');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Accounting Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('accounting')
+        ->name('accounting.')
+        ->middleware(['permission:hr.view|hr.dashboard.view|accounting.view'])
+        ->group(function () {
+            Route::get('/', [AccountingDashboardController::class, 'index'])
+                ->name('dashboard');
+
+            Route::resource('accounts', ChartOfAccountController::class);
+
+            Route::resource('journal-entries', JournalEntryController::class);
+            Route::patch('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'post'])
+                ->name('journal-entries.post');
+            Route::patch('journal-entries/{journalEntry}/void', [JournalEntryController::class, 'void'])
+                ->name('journal-entries.void');
+
+            Route::get('general-ledger', [GeneralLedgerController::class, 'index'])
+                ->name('general-ledger.index');
+
+            Route::resource('bank-accounts', BankAccountController::class);
+
+            Route::resource('expenses', ExpenseController::class)->only([
+                'index',
+                'create',
+                'store',
+                'show',
+            ]);
+
+            Route::patch('expenses/{expense}/void', [ExpenseController::class, 'void'])
+                ->name('expenses.void');
+            
+            Route::resource('collections', CollectionController::class)->only([
+                'index',
+                'create',
+                'store',
+                'show',
+            ]);
+
+            Route::patch('collections/{collection}/void', [CollectionController::class, 'void'])
+                ->name('collections.void');
+
+            Route::get('reports', [AccountingReportController::class, 'index'])
+                ->name('reports.index');
+            Route::get('reports/trial-balance', [AccountingReportController::class, 'trialBalance'])
+                ->name('reports.trial-balance');
+            Route::get('reports/income-statement', [AccountingReportController::class, 'incomeStatement'])
+                ->name('reports.income-statement');
+            Route::get('reports/balance-sheet', [AccountingReportController::class, 'balanceSheet'])
+                ->name('reports.balance-sheet');
+        });
+
+});
+
+    /*
+    |--------------------------------------------------------------------------
+    | Protected ERP Module Routes
+    |--------------------------------------------------------------------------
+    | Module pages are now controlled by user_module_assignments.access_level.
+    | Roles remain as general system roles only.
+    */
+    Route::prefix('module')->name('module.')->group(function () {
+        Route::get('/hr', function () {
+            $user = auth()->user();
+
+            abort_unless(
+                $user && (
+                    $user->can('hr.dashboard.view')
+                    || $user->can('hr.view')
+                    || $user->hasModuleAccess('hr', 'viewer')
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                ),
+                403
+            );
+
+            return redirect()->route('hr.dashboard');
+        })->name('hr');
+
+        Route::get('/hr/overview', function () {
+            return redirect()->route('hr.dashboard');
+        })->name('hr.overview');
+
+        Route::get('/inventory', function () {
+            abort_unless(
+                auth()->user()?->can('warehouse.inventory.view')
+                || auth()->user()?->can('warehouse.ledger.view')
+                || auth()->user()?->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin']),
+                403
+            );
+
+            return redirect()->route('warehouse.inventory');
+        })->name('inventory');
+
+        Route::get('/warehouse', function () {
+            abort_unless(
+                auth()->user()?->can('warehouse.dashboard.view')
+                || auth()->user()?->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin']),
+                403
+            );
+
+            return redirect()->route('warehouse.dashboard');
+        })->name('warehouse');
+
+        Route::get('/purchasing', function () {
+            abort_unless(
+                auth()->user()?->can('purchasing.dashboard.view')
+                || auth()->user()?->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin']),
+                403
+            );
+
+            return redirect()->route('purchasing.dashboard');
+        })->name('purchasing');
+
+        Route::get('/sales', function () {
+            abort_unless(auth()->user()->hasModuleAccess('sales', 'viewer'), 403);
+            return view('modules.sales');
+        })->name('sales');
+
+        Route::get('/accounting', function () {
+            $user = auth()->user();
+
+            abort_unless(
+                $user && (
+                    $user->can('accounting.view')
+                    || $user->hasModuleAccess('accounting', 'viewer')
+                    || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+                ),
+                403
+            );
+
+            return redirect()->route('accounting.dashboard');
+        })->name('accounting');
+
+        Route::get('/payroll', function () {
+            abort_unless(auth()->user()->hasModuleAccess('payroll', 'viewer'), 403);
+            return view('modules.payroll');
+        })->name('payroll');
+
+        
+        // WMC_RESTORE_ACCOUNTING_PAY_BILLS_ROUTES
+        Route::get('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'index'])
+            ->name('pay-bills.index');
+        Route::get('/pay-bills/create', [\App\Http\Controllers\Accounting\PayBillController::class, 'create'])
+            ->name('pay-bills.create');
+        Route::post('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'store'])
+            ->name('pay-bills.store');
+        Route::get('/pay-bills/{payment}', [\App\Http\Controllers\Accounting\PayBillController::class, 'show'])
+            ->name('pay-bills.show');
+Route::get('/reports', function () {
+            abort_unless(auth()->user()->hasModuleAccess('reports', 'viewer'), 403);
+            return view('modules.reports');
+        })->name('reports');
+
+        Route::get('/project-management', function () {
+            abort_unless(auth()->user()->hasModuleAccess('project_management', 'viewer'), 403);
+            return view('modules.project-management');
+        })->name('project-management');
+    });
+
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vehicle Management Route Guards
+    |--------------------------------------------------------------------------
+    | Vehicle Admin:
+    | - Full access.
+    |
+    | Vehicle Manager:
+    | - Dashboard, vehicles view, assignments, maintenance, documents, reports.
+    |
+    | Vehicle Staff / Driver:
+    | - Reserved for own assigned vehicle workflow in later package.
+    */
+    $getVehicleAccessLevel = function ($user): ?string {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin', 'super admin', 'super-admin', 'superadmin', 'admin'])) {
+            return 'system_admin';
+        }
+
+        $primary = strtolower(str_replace(['_', '-'], ' ', (string) ($user->primary_module ?? '')));
+        if (str_contains($primary, 'vehicle')) {
+            return 'manager';
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_module_accesses',
+            'module_accesses',
+            'user_modules',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+                continue;
+            }
+
+            $query = DB::table($table)->where('user_id', $user->id);
+
+            if (Schema::hasColumn($table, 'enabled')) {
+                $query->where('enabled', true);
+            } elseif (Schema::hasColumn($table, 'is_enabled')) {
+                $query->where('is_enabled', true);
+            } elseif (Schema::hasColumn($table, 'status')) {
+                $query->whereIn('status', ['active', 1, true]);
+            }
+
+            $vehicleAccessLevel = null;
+
+            foreach ($query->get() as $assignment) {
+                $haystack = strtolower(collect((array) $assignment)
+                    ->filter(fn ($value) => is_scalar($value) && $value !== null)
+                    ->implode(' '));
+
+                if (! str_contains($haystack, 'vehicle')) {
+                    continue;
+                }
+
+                if (str_contains($haystack, 'admin')) {
+                    return 'admin';
+                }
+
+                if (str_contains($haystack, 'manager')) {
+                    $vehicleAccessLevel = 'manager';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'staff') && ! in_array($vehicleAccessLevel, ['manager', 'admin'], true)) {
+                    $vehicleAccessLevel = 'staff';
+                    continue;
+                }
+
+                if (! $vehicleAccessLevel) {
+                    $vehicleAccessLevel = 'viewer';
+                }
+            }
+
+            if ($vehicleAccessLevel) {
+                return $vehicleAccessLevel;
+            }
+        }
+
+        return null;
+    };
+
+    $vehicleViewOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin', 'manager', 'staff', 'viewer'], true),
+            403,
+            'Vehicle Management access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $vehicleManagerOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin', 'manager'], true),
+            403,
+            'Vehicle Manager/Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $vehicleAdminOnly = function ($request, $next) use ($getVehicleAccessLevel) {
+        $level = $getVehicleAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin'], true),
+            403,
+            'Vehicle Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    app('router')->aliasMiddleware('vehicle.view', $vehicleViewOnly);
+    app('router')->aliasMiddleware('vehicle.manager', $vehicleManagerOnly);
+    app('router')->aliasMiddleware('vehicle.admin', $vehicleAdminOnly);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vehicle Management Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('vehicle-management')->name('vehicle.')->middleware('vehicle.view')->group(function () {
+        Route::get('/', [VehicleDashboardController::class, 'index'])
+                    ->middleware('vehicle.manager')
+                    ->name('dashboard');
+        Route::get('/vehicles', [VehicleController::class, 'index'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.index');
+        Route::get('/vehicles/create', [VehicleController::class, 'create'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.create');
+        Route::post('/vehicles', [VehicleController::class, 'store'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.store');
+        Route::get('/vehicles/{vehicle}', [VehicleController::class, 'show'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.show');
+        Route::get('/vehicles/{vehicle}/edit', [VehicleController::class, 'edit'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.edit');
+        Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.update');
+        Route::patch('/vehicles/{vehicle}', [VehicleController::class, 'update'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.patch');
+        Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])
+            ->middleware('vehicle.manager')
+            ->name('vehicles.destroy');
+
+        Route::resource('assignments', VehicleAssignmentController::class)
+            ->middleware('vehicle.manager')
+            ->names('assignments');
+
+        Route::resource('maintenance', VehicleMaintenanceController::class)
+                    ->middleware('vehicle.manager')
+                    ->names('maintenance');
+
+        Route::resource('documents', VehicleDocumentController::class)
+                    ->middleware('vehicle.manager')
+                    ->names('documents');
+
+        Route::get('/reports', [VehicleReportController::class, 'index'])
+                    ->middleware('vehicle.manager')
+                    ->name('reports.index');
+
+                Route::get('/setup', [VehicleSetupController::class, 'index'])
+            ->middleware('vehicle.manager')
+            ->name('setup.index');
+
+        Route::post('/setup/{group}', [VehicleSetupController::class, 'store'])
+            ->middleware('vehicle.admin')
+            ->name('setup.store');
+
+        Route::put('/setup/{group}/{id}', [VehicleSetupController::class, 'update'])
+            ->middleware('vehicle.admin')
+            ->name('setup.update');
+
+        Route::patch('/setup/{group}/{id}', [VehicleSetupController::class, 'update'])
+            ->middleware('vehicle.admin')
+            ->name('setup.patch');
+
+        Route::delete('/setup/{group}/{id}', [VehicleSetupController::class, 'destroy'])
+            ->middleware('vehicle.admin')
+            ->name('setup.destroy');
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Warehouse Role Route Guards
+    |--------------------------------------------------------------------------
+    | Warehouse Staff:
+    | - Dashboard, Inventory, Service Units, Transfer, Ledger
+    |
+    | Warehouse Manager:
+    | - Staff pages + Stock In, Stock Out, Adjustment
+    |
+    | Warehouse Admin / System Admin:
+    | - Full Warehouse access
+    */
+    $getWarehouseAccessLevel = function ($user): ?string {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])) {
+            return 'system_admin';
+        }
+
+        $possibleTables = [
+            'user_module_assignments',
+            'module_assignments',
+            'user_modules',
+        ];
+
+        foreach ($possibleTables as $table) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'user_id')) {
+                continue;
+            }
+
+            $query = DB::table($table)->where('user_id', $user->id);
+
+            if (Schema::hasColumn($table, 'enabled')) {
+                $query->where('enabled', true);
+            } elseif (Schema::hasColumn($table, 'is_enabled')) {
+                $query->where('is_enabled', true);
+            } elseif (Schema::hasColumn($table, 'status')) {
+                $query->whereIn('status', ['active', 1, true]);
+            }
+
+            $assignments = $query->get();
+
+            $warehouseAccessLevel = null;
+
+            foreach ($assignments as $assignment) {
+                $haystack = strtolower(collect((array) $assignment)
+                    ->filter(fn ($value) => is_scalar($value) && $value !== null)
+                    ->implode(' '));
+
+                if (! str_contains($haystack, 'warehouse') && ! str_contains($haystack, 'inventory')) {
+                    continue;
+                }
+
+                /*
+                 * Important:
+                 * A user may have multiple module access rows, example:
+                 * - Inventory - Staff (Primary)
+                 * - Warehouse - Manager
+                 * Do not stop at the first Staff row. Keep scanning and keep the highest
+                 * warehouse-related access level found.
+                 */
+                if (str_contains($haystack, 'admin')) {
+                    return 'admin';
+                }
+
+                if (str_contains($haystack, 'manager')) {
+                    $warehouseAccessLevel = 'manager';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'staff') && ! in_array($warehouseAccessLevel, ['manager', 'admin'], true)) {
+                    $warehouseAccessLevel = 'staff';
+                    continue;
+                }
+
+                if (str_contains($haystack, 'viewer') && ! $warehouseAccessLevel) {
+                    $warehouseAccessLevel = 'viewer';
+                }
+            }
+
+            if ($warehouseAccessLevel) {
+                return $warehouseAccessLevel;
+            }
+        }
+
+        return null;
+    };
+
+    $warehouseManagerOnly = function ($request, $next) use ($getWarehouseAccessLevel) {
+        $level = $getWarehouseAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'manager', 'admin'], true),
+            403,
+            'Warehouse Manager/Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    $warehouseAdminOnly = function ($request, $next) use ($getWarehouseAccessLevel) {
+        $level = $getWarehouseAccessLevel($request->user());
+
+        abort_unless(
+            in_array($level, ['system_admin', 'admin'], true),
+            403,
+            'Warehouse Admin access is required.'
+        );
+
+        return $next($request);
+    };
+
+    app('router')->aliasMiddleware('warehouse.manager.only', $warehouseManagerOnly);
+    app('router')->aliasMiddleware('warehouse.admin.only', $warehouseAdminOnly);
+
+    /*
+    |--------------------------------------------------------------------------
+    | Warehouse Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('warehouse')->name('warehouse.')->group(function () {
+        Route::get('/', [WarehouseController::class, 'dashboard'])->name('dashboard');
+
+        Route::resource('categories', CategoryController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('units', UnitController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('suppliers', SupplierController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        Route::resource('locations', LocationController::class)
+            ->except(['show'])
+            ->middleware('warehouse.admin.only');
+
+        /*
+         * Item master maintenance is Warehouse Admin only.
+         * Item details/show is kept read-only for Warehouse/Inventory users so managers
+         * can open item information from Inventory without being able to add/edit/delete.
+         */
+        Route::get('/items', [ItemController::class, 'index'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.index');
+
+        Route::get('/items/create', [ItemController::class, 'create'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.create');
+
+        Route::post('/items', [ItemController::class, 'store'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.store');
+
+        Route::get('/items/{item}', [ItemController::class, 'show'])
+            ->name('items.show');
+
+        Route::get('/items/{item}/edit', [ItemController::class, 'edit'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.edit');
+
+        Route::match(['put', 'patch'], '/items/{item}', [ItemController::class, 'update'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.update');
+
+        Route::delete('/items/{item}', [ItemController::class, 'destroy'])
+            ->middleware('warehouse.admin.only')
+            ->name('items.destroy');
+
+
+
+        Route::get('/service-units/serials/available', [ServiceUnitController::class, 'availableSerials'])
+            ->name('service-units.serials.available');
+        Route::get('/service-units/{serviceUnit}/return', [ServiceUnitController::class, 'returnForm'])
+            ->name('service-units.return');
+        Route::patch('/service-units/{serviceUnit}/return', [ServiceUnitController::class, 'processReturn'])
+            ->name('service-units.return.store');
+        Route::resource('service-units', ServiceUnitController::class)
+            ->parameters(['service-units' => 'serviceUnit'])
+            ->only(['index', 'create', 'store', 'show']);
+
+        Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory');
+        Route::get('/ledger', [WarehouseController::class, 'ledger'])->name('ledger');
+
+        Route::get('/stock-in', [WarehouseController::class, 'stockIn'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-in');
+
+        Route::post('/stock-in', [InventoryController::class, 'stockIn'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-in.store');
+
+        Route::get('/stock-out', [WarehouseController::class, 'stockOut'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-out');
+
+        Route::post('/stock-out', [InventoryController::class, 'stockOut'])
+            ->middleware('warehouse.manager.only')
+            ->name('stock-out.store');
+
+        Route::get('/serials/available', [InventoryController::class, 'availableSerials'])
+            ->middleware('warehouse.manager.only')
+            ->name('serials.available');
+
+        Route::get('/transfer', [WarehouseTransferController::class, 'index'])->name('transfer');
+        Route::get('/transfer/create', [WarehouseTransferController::class, 'create'])->name('transfer.create');
+        Route::post('/transfer', [WarehouseTransferController::class, 'store'])->name('transfer.store');
+        Route::get('/transfer/serials/available', [WarehouseTransferController::class, 'availableSerials'])->name('transfer.serials.available');
+        Route::get('/transfer/{transfer}', [WarehouseTransferController::class, 'show'])->name('transfer.show');
+        Route::patch('/transfer/{transfer}/dispatch', [WarehouseTransferController::class, 'dispatchTransfer'])->name('transfer.dispatch');
+        Route::patch('/transfer/{transfer}/receive', [WarehouseTransferController::class, 'receive'])->name('transfer.receive');
+        Route::patch('/transfer/{transfer}/cancel', [WarehouseTransferController::class, 'cancel'])->name('transfer.cancel');
+
+        Route::get('/adjustment', [WarehouseController::class, 'adjustment'])
+            ->middleware('warehouse.manager.only')
+            ->name('adjustment');
+
+        Route::post('/adjustment', [InventoryController::class, 'adjustment'])
+            ->middleware('warehouse.manager.only')
+            ->name('adjustment.store');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Hope UI demo/template routes
+|--------------------------------------------------------------------------
+*/
+
+Route::group(['prefix' => 'menu-style'], function () {
+    Route::get('horizontal', [HomeController::class, 'horizontal'])->name('menu-style.horizontal');
+    Route::get('dual-horizontal', [HomeController::class, 'dualhorizontal'])->name('menu-style.dualhorizontal');
+    Route::get('dual-compact', [HomeController::class, 'dualcompact'])->name('menu-style.dualcompact');
+    Route::get('boxed', [HomeController::class, 'boxed'])->name('menu-style.boxed');
+    Route::get('boxed-fancy', [HomeController::class, 'boxedfancy'])->name('menu-style.boxedfancy');
+});
+
+// Special Pages
+Route::group(['prefix' => 'special-pages'], function () {
+    Route::get('billing', [HomeController::class, 'billing'])->name('special-pages.billing');
+    Route::get('calender', [HomeController::class, 'calender'])->name('special-pages.calender');
+    Route::get('kanban', [HomeController::class, 'kanban'])->name('special-pages.kanban');
+    Route::get('pricing', [HomeController::class, 'pricing'])->name('special-pages.pricing');
+    Route::get('rtl-support', [HomeController::class, 'rtlsupport'])->name('special-pages.rtlsupport');
+    Route::get('timeline', [HomeController::class, 'timeline'])->name('special-pages.timeline');
+});
+
+// Widget Routes
+Route::group(['prefix' => 'widget'], function () {
+    Route::get('widget-basic', [HomeController::class, 'widgetbasic'])->name('widget.widgetbasic');
+    Route::get('widget-chart', [HomeController::class, 'widgetchart'])->name('widget.widgetchart');
+    Route::get('widget-card', [HomeController::class, 'widgetcard'])->name('widget.widgetcard');
+});
+
+// Maps Routes
+Route::group(['prefix' => 'maps'], function () {
+    Route::get('google', [HomeController::class, 'google'])->name('maps.google');
+    Route::get('vector', [HomeController::class, 'vector'])->name('maps.vector');
+});
+
+// Auth pages Routes
+Route::group(['prefix' => 'auth'], function () {
+    Route::get('signin', [HomeController::class, 'signin'])->name('auth.signin');
+    Route::get('signup', [HomeController::class, 'signup'])->name('auth.signup');
+    Route::get('confirmmail', [HomeController::class, 'confirmmail'])->name('auth.confirmmail');
+    Route::get('lockscreen', [HomeController::class, 'lockscreen'])->name('auth.lockscreen');
+    Route::get('recoverpw', [HomeController::class, 'recoverpw'])->name('auth.recoverpw');
+    Route::get('userprivacysetting', [HomeController::class, 'userprivacysetting'])->name('auth.userprivacysetting');
+
+    Route::resource('announcements', AnnouncementController::class)
+        ->middleware('permission:announcements.view');
+});
+
+Route::group(['prefix' => 'errors'], function () {
+    Route::get('error404', [HomeController::class, 'error404'])->name('errors.error404');
+    Route::get('error500', [HomeController::class, 'error500'])->name('errors.error500');
+    Route::get('maintenance', [HomeController::class, 'maintenance'])->name('errors.maintenance');
+});
+
+Route::group(['prefix' => 'forms'], function () {
+    Route::get('element', [HomeController::class, 'element'])->name('forms.element');
+    Route::get('wizard', [HomeController::class, 'wizard'])->name('forms.wizard');
+    Route::get('validation', [HomeController::class, 'validation'])->name('forms.validation');
+});
+
+Route::group(['prefix' => 'table'], function () {
+    Route::get('bootstraptable', [HomeController::class, 'bootstraptable'])->name('table.bootstraptable');
+    Route::get('datatable', [HomeController::class, 'datatable'])->name('table.datatable');
+});
+
+Route::group(['prefix' => 'icons'], function () {
+    Route::get('solid', [HomeController::class, 'solid'])->name('icons.solid');
+    Route::get('outline', [HomeController::class, 'outline'])->name('icons.outline');
+    Route::get('dualtone', [HomeController::class, 'dualtone'])->name('icons.dualtone');
+    Route::get('colored', [HomeController::class, 'colored'])->name('icons.colored');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Extra Page Routes
+|--------------------------------------------------------------------------
+*/
+Route::get('/privacy-policy', [HomeController::class, 'privacypolicy'])->name('pages.privacy-policy');
+Route::get('/terms-of-use', [HomeController::class, 'termsofuse'])->name('pages.term-of-use');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Service Operations / Job Order Module Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('service-operations')->name('service.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Service\ServiceDashboardController::class, 'index'])->name('dashboard');
+        Route::resource('job-orders', \App\Http\Controllers\Service\ServiceJobOrderController::class);
+        Route::get('/setup', [\App\Http\Controllers\Service\ServiceSetupController::class, 'index'])->name('setup.index');
+        Route::post('/setup/types', [\App\Http\Controllers\Service\ServiceSetupController::class, 'storeType'])->name('setup.types.store');
+        Route::post('/setup/statuses', [\App\Http\Controllers\Service\ServiceSetupController::class, 'storeStatus'])->name('setup.statuses.store');
+    });
+
+// Service Operations Phase 2 - Technician Reports
+Route::middleware(['web'])->group(function () {
+    Route::get('service-operations/job-orders/{job_order}/reports/create', [ServiceJobOrderReportController::class, 'create'])
+        ->name('service.job-orders.reports.create');
+
+    Route::post('service-operations/job-orders/{job_order}/reports', [ServiceJobOrderReportController::class, 'store'])
+        ->name('service.job-orders.reports.store');
+});
+
+
+
+// Global Warehouse Item Picker API
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/warehouse/item-picker/search', [WarehouseItemPickerController::class, 'search'])->name('warehouse.item-picker.search');
+    Route::get('/warehouse/item-picker/serials', [WarehouseItemPickerController::class, 'serials'])->name('warehouse.item-picker.serials');
+});
+// POS MODULE ROUTES - FORCE RESTORED
+Route::middleware(['auth'])->prefix('pos')->name('pos.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\POS\POSController::class, 'index'])->name('index');
+    Route::get('/access', [\App\Http\Controllers\POS\POSController::class, 'access'])->name('access');
+    Route::post('/access', [\App\Http\Controllers\POS\POSController::class, 'authenticate'])->name('authenticate');
+    Route::post('/logout', [\App\Http\Controllers\POS\POSController::class, 'logout'])->name('logout');
+    Route::get('/terminal', [\App\Http\Controllers\POS\POSController::class, 'terminal'])->name('terminal');
+});
+// END POS MODULE ROUTES
+// POS store route - added by POS Phase 2A patch.
+Route::post('/pos/sales', [\App\Http\Controllers\POS\POSController::class, 'store'])->name('pos.store')->middleware('auth');
+/*
+|--------------------------------------------------------------------------
+| Global System Notifications
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->prefix('notifications')->name('system-notifications.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\SystemNotificationController::class, 'index'])->name('index');
+    Route::get('/{notification}/open', [\App\Http\Controllers\SystemNotificationController::class, 'open'])->name('open');
+    Route::patch('/{notification}/read', [\App\Http\Controllers\SystemNotificationController::class, 'markRead'])->name('read');
+    Route::post('/mark-all-read', [\App\Http\Controllers\SystemNotificationController::class, 'markAllRead'])->name('mark-all-read');
+});
+
+Route::get('/notifications/poll', [\App\Http\Controllers\SystemNotificationController::class, 'poll'])->name('notifications.poll');
+
+
+// WMC_CORRECT_ACCOUNTING_PAY_BILLS_ROUTES
+Route::middleware(['auth'])
+    ->prefix('accounting')
+    ->name('accounting.')
+    ->group(function () {
+        Route::get('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'index'])
+            ->name('pay-bills.index');
+
+        Route::get('/pay-bills/create', [\App\Http\Controllers\Accounting\PayBillController::class, 'create'])
+            ->name('pay-bills.create');
+
+        Route::post('/pay-bills', [\App\Http\Controllers\Accounting\PayBillController::class, 'store'])
+            ->name('pay-bills.store');
+
+        Route::get('/pay-bills/{payment}', [\App\Http\Controllers\Accounting\PayBillController::class, 'show'])
+            ->name('pay-bills.show');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| CRM + Project Management Module Routes (Merged from DES package)
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->group(function () {
+    /*
+    |--------------------------------------------------------------------------
+    | CRM MODULE ROUTES START
+    |--------------------------------------------------------------------------
+    */
+    Route::middleware(['permission:crm_dashboard.view'])->group(function () {
+        Route::get('/crm', [CRMController::class, 'dashboard'])
+            ->name('crm.dashboard');
+    });
+
+        Route::middleware(['permission:crm_pipeline.view'])->group(function () {
+
+        Route::get('/crm/pipeline', [CRMController::class, 'pipeline'])
+            ->name('crm.pipeline');
+
+        Route::post('/crm/leads', [CRMController::class, 'storeLead'])
+            ->name('crm.leads.store');
+
+        Route::get('/crm/leads/{lead}', [CRMController::class, 'showLead'])
+            ->name('crm.leads.show');
+
+        Route::get('/crm/leads/{lead}/edit', [CRMController::class, 'editLead'])
+            ->name('crm.leads.edit');
+
+        Route::put('/crm/leads/{lead}', [CRMController::class, 'updateLead'])
+            ->name('crm.leads.update');
+
+        Route::post('/crm/leads/{lead}/follow-ups', [CRMController::class, 'storeLeadFollowUp'])
+            ->name('crm.leads.follow-ups.store');
+
+        Route::patch('/crm/follow-ups/{followUp}/status', [CRMController::class, 'updateFollowUpStatus'])
+            ->name('crm.follow-ups.update-status');
+
+        Route::post('/crm/leads/{lead}/notes', [CRMController::class, 'storeLeadNote'])
+            ->name('crm.leads.notes.store');
+
+        Route::patch('/crm/leads/{lead}/stage', [CRMController::class, 'updateLeadStage'])
+            ->name('crm.leads.update-stage');
+
+        Route::post('/crm/pipeline/stages/{stage}/duplicate', [CRMController::class, 'duplicateStage'])
+            ->name('crm.pipeline.stages.duplicate');
+
+        Route::put('/crm/pipeline/stages/{stage}/rename', [CRMController::class, 'renameStage'])
+            ->name('crm.pipeline.stages.rename');
+
+        Route::delete('/crm/pipeline/stages/{stage}/archive', [CRMController::class, 'archiveStage'])
+            ->name('crm.pipeline.stages.archive');
+
+        Route::put('/crm/pipeline/stages/{stage}/color', [CRMController::class, 'updateStageColor'])
+            ->name('crm.pipeline.stages.color');
+
+        Route::patch('/crm/pipeline/stages/reorder', [CRMController::class, 'reorderStages'])
+            ->name('crm.pipeline.stages.reorder');
+
+        Route::post('/crm/leads/{lead}/convert-client', [CRMController::class, 'convertLeadToClient'])
+            ->name('crm.leads.convert-client');
+
+        Route::get('/crm/leads/{lead}/create-project', [CRMController::class, 'createProjectFromLead'])
+            ->name('crm.leads.create-project');
+
+        Route::delete('/crm/leads/{lead}/archive', [CRMController::class, 'archiveLead'])
+            ->name('crm.leads.archive');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRM MODULE ROUTES END
+    |--------------------------------------------------------------------------
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROJECTS MANAGEMENT MODULE ROUTES START
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('project-management')->group(function () {
+        /*
+        |--------------------------------------------------------------------------
+        | Project Dashboard
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware(['permission:project_management.view|project_dashboard.view|projects_mgmt.view'])->group(function () {
+            Route::get('/dashboard', [DashboardController::class, 'dashboard'])
+                ->name('pm_dashboard');
+
+            Route::get('/projects', [ProjectsController::class, 'index'])
+                ->name('projects.index');
+
+            Route::get('/projects/list', [ProjectsController::class, 'list'])
+                ->name('projects.list');
+
+            Route::get('/projects/{project}', [ProjectsController::class, 'show'])
+                ->whereNumber('project')
+                ->name('projects.show');
+
+            Route::get('/clients', [ClientController::class, 'index'])
+                ->name('clients.index');
+
+            Route::get('/clients/list', [ClientController::class, 'list'])
+                ->name('clients.list');
+
+            Route::get('/clients/{client}', [ClientController::class, 'show'])
+                ->whereNumber('client')
+                ->name('clients.show');
+
+            Route::get('/files', [ProjectFileController::class, 'index'])
+                ->name('project-files.index');
+
+            Route::get('/files/project/{project}', [ProjectFileController::class, 'show'])
+                ->whereNumber('project')
+                ->name('project-files.folder');
+
+            Route::get('/files/{projectFile}/preview', [ProjectFileController::class, 'preview'])
+                ->whereNumber('projectFile')
+                ->name('project-files.preview');
+
+            Route::get('/files/{projectFile}/download', [ProjectFileController::class, 'download'])
+                ->whereNumber('projectFile')
+                ->name('project-files.download');
+
+            Route::get('/milestones', [ProjectMilestoneController::class, 'index'])
+                ->name('project-milestones.index');
+
+            Route::get('/milestones/list', [ProjectMilestoneController::class, 'list'])
+                ->name('project-milestones.list');
+
+            Route::get('/milestones/{milestone}', [ProjectMilestoneController::class, 'show'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.show');
+
+            Route::get('/tasks', [ProjectTaskController::class, 'index'])
+                ->name('project-tasks.index');
+
+            Route::get('/tasks/events', [ProjectTaskController::class, 'events'])
+                ->name('project-tasks.events');
+
+            Route::post('/tasks/{projectTask}/reports', [ProjectTaskController::class, 'storeReport'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.reports.store');
+
+            Route::redirect('/setup', '/project-management/project-types')
+                ->name('project_setup.index');
+
+
+            Route::get('/document-controls', [DocumentControlController::class, 'index'])
+                ->name('document-controls.index');
+
+            Route::get('/document-controls/list', [DocumentControlController::class, 'list'])
+                ->name('document-controls.list');
+
+            Route::get('/document-controls/create', [DocumentControlController::class, 'create'])
+                ->name('document-controls.create');
+
+            Route::post('/document-controls', [DocumentControlController::class, 'store'])
+                ->name('document-controls.store');
+
+            Route::post('/document-controls/{documentControl}/new-revision', [DocumentControlController::class, 'newRevision'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.new-revision');
+
+            Route::post('/document-controls/{documentControl}/publish', [DocumentControlController::class, 'publish'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.publish');
+
+            Route::get('/document-controls/{documentControl}', [DocumentControlController::class, 'show'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.show');
+
+            Route::get('/document-controls/{documentControl}/edit', [DocumentControlController::class, 'edit'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.edit');
+
+            Route::put('/document-controls/{documentControl}', [DocumentControlController::class, 'update'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.update');
+
+            Route::delete('/document-controls/{documentControl}', [DocumentControlController::class, 'destroy'])
+                ->whereNumber('documentControl')
+                ->name('document-controls.destroy');
+
+            Route::get('/project-types', [ProjectTypeController::class, 'index'])
+                ->name('project-types.index');
+
+            Route::get('/project-types/list', [ProjectTypeController::class, 'list'])
+                ->name('project-types.list');
+
+            Route::get('/project-types/{projectType}', [ProjectTypeController::class, 'show'])
+                ->whereNumber('projectType')
+                ->name('project-types.show');
+
+            Route::get('/project-priorities', [ProjectPriorityController::class, 'index'])
+                ->name('project-priorities.index');
+
+            Route::get('/project-priorities/list', [ProjectPriorityController::class, 'list'])
+                ->name('project-priorities.list');
+
+            Route::get('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'show'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.show');
+
+            Route::get('/project-statuses', [ProjectStatusController::class, 'index'])
+                ->name('project-statuses.index');
+
+            Route::get('/project-statuses/list', [ProjectStatusController::class, 'list'])
+                ->name('project-statuses.list');
+
+            Route::get('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'show'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.show');
+
+            Route::get('/project-teams', [TeamController::class, 'index'])
+                ->name('project-teams.index');
+
+            Route::get('/project-teams/list', [TeamController::class, 'list'])
+                ->name('project-teams.list');
+
+            Route::get('/project-teams/{team}', [TeamController::class, 'show'])
+                ->whereNumber('team')
+                ->name('project-teams.show');
+
+            Route::get('/rfp-types', [RfpTypeController::class, 'index'])
+                ->name('rfp-types.index');
+
+            Route::get('/rfp-types/list', [RfpTypeController::class, 'list'])
+                ->name('rfp-types.list');
+
+            Route::get('/rfp-types/{rfpType}', [RfpTypeController::class, 'show'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.show');
+
+            Route::get('/store-names', [StoreNameController::class, 'index'])
+                ->name('store-names.index');
+
+            Route::get('/store-names/list', [StoreNameController::class, 'list'])
+                ->name('store-names.list');
+
+            Route::get('/store-names/{storeName}', [StoreNameController::class, 'show'])
+                ->whereNumber('storeName')
+                ->name('store-names.show');
+
+            Route::get('/vehicles', [ProjectVehicleController::class, 'index'])
+                ->name('project-vehicles.index');
+
+            Route::get('/vehicles/list', [ProjectVehicleController::class, 'list'])
+                ->name('project-vehicles.list');
+
+            Route::get('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'show'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.show');
+
+            Route::get('/project-finances/rfps', [ProjectRfpController::class, 'index'])
+                ->name('project-rfps.index');
+
+            Route::get('/project-finances/rfps/list', [ProjectRfpController::class, 'list'])
+                ->name('project-rfps.list');
+
+            Route::get('/project-finances/rfps/project-details/{project}', [ProjectRfpController::class, 'projectDetails'])
+                ->whereNumber('project')
+                ->name('project-rfps.project-details');
+
+            Route::get('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'show'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.show');
+
+            Route::get('/project-finances/expenses', [ProjectExpenseController::class, 'index'])
+                ->name('project-expenses.index');
+
+            Route::get('/project-finances/expenses/list', [ProjectExpenseController::class, 'list'])
+                ->name('project-expenses.list');
+
+            Route::get('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'show'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.show');
+
+            Route::get('/project-finances/gas-slips', [ProjectGasSlipController::class, 'index'])
+                ->name('project-gas-slips.index');
+
+            Route::get('/project-finances/gas-slips/list', [ProjectGasSlipController::class, 'list'])
+                ->name('project-gas-slips.list');
+
+            Route::get('/project-finances/gas-slips/vehicle-drivers/{vehicle}', [ProjectGasSlipController::class, 'vehicleDrivers'])
+                ->whereNumber('vehicle')
+                ->name('project-gas-slips.vehicle-drivers');
+
+            Route::get('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'show'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.show');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Projects Create / Edit / Delete
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware(['permission:project_management.create|projects_mgmt.create'])->group(function () {
+            Route::get('/projects/create', [ProjectsController::class, 'create'])
+                ->name('projects.create');
+
+            Route::post('/projects', [ProjectsController::class, 'store'])
+                ->name('projects.store');
+
+            Route::get('/clients/create', [ClientController::class, 'create'])
+                ->name('clients.create');
+
+            Route::post('/clients', [ClientController::class, 'store'])
+                ->name('clients.store');
+
+            Route::get('/milestones/create', [ProjectMilestoneController::class, 'create'])
+                ->name('project-milestones.create');
+
+            Route::post('/milestones', [ProjectMilestoneController::class, 'store'])
+                ->name('project-milestones.store');
+
+            Route::get('/tasks/create', [ProjectTaskController::class, 'create'])
+                ->name('project-tasks.create');
+
+            Route::post('/tasks', [ProjectTaskController::class, 'store'])
+                ->name('project-tasks.store');
+
+            Route::get('/files/create', [ProjectFileController::class, 'create'])
+                ->name('project-files.create');
+
+            Route::post('/files', [ProjectFileController::class, 'store'])
+                ->name('project-files.store');
+
+            Route::get('/project-types/create', [ProjectTypeController::class, 'create'])
+                ->name('project-types.create');
+
+            Route::post('/project-types', [ProjectTypeController::class, 'store'])
+                ->name('project-types.store');
+
+            Route::get('/project-priorities/create', [ProjectPriorityController::class, 'create'])
+                ->name('project-priorities.create');
+
+            Route::post('/project-priorities', [ProjectPriorityController::class, 'store'])
+                ->name('project-priorities.store');
+
+            Route::get('/project-statuses/create', [ProjectStatusController::class, 'create'])
+                ->name('project-statuses.create');
+
+            Route::post('/project-statuses', [ProjectStatusController::class, 'store'])
+                ->name('project-statuses.store');
+
+            Route::get('/project-teams/create', [TeamController::class, 'create'])
+                ->name('project-teams.create');
+
+            Route::post('/project-teams', [TeamController::class, 'store'])
+                ->name('project-teams.store');
+
+            Route::get('/rfp-types/create', [RfpTypeController::class, 'create'])
+                ->name('rfp-types.create');
+
+            Route::post('/rfp-types', [RfpTypeController::class, 'store'])
+                ->name('rfp-types.store');
+
+            Route::get('/store-names/create', [StoreNameController::class, 'create'])
+                ->name('store-names.create');
+
+            Route::post('/store-names', [StoreNameController::class, 'store'])
+                ->name('store-names.store');
+
+            Route::get('/vehicles/create', [ProjectVehicleController::class, 'create'])
+                ->name('project-vehicles.create');
+
+            Route::post('/vehicles', [ProjectVehicleController::class, 'store'])
+                ->name('project-vehicles.store');
+
+            Route::get('/project-finances/rfps/create', [ProjectRfpController::class, 'create'])
+                ->name('project-rfps.create');
+
+            Route::post('/project-finances/rfps', [ProjectRfpController::class, 'store'])
+                ->name('project-rfps.store');
+
+            Route::get('/project-finances/expenses/create', [ProjectExpenseController::class, 'create'])
+                ->name('project-expenses.create');
+
+            Route::post('/project-finances/expenses', [ProjectExpenseController::class, 'store'])
+                ->name('project-expenses.store');
+
+            Route::get('/project-finances/gas-slips/create', [ProjectGasSlipController::class, 'create'])
+                ->name('project-gas-slips.create');
+
+            Route::post('/project-finances/gas-slips', [ProjectGasSlipController::class, 'store'])
+                ->name('project-gas-slips.store');
+        });
+
+        Route::middleware(['permission:project_management.edit|projects_mgmt.edit'])->group(function () {
+            Route::get('/projects/{project}/edit', [ProjectsController::class, 'edit'])
+                ->whereNumber('project')
+                ->name('projects.edit');
+
+            Route::put('/projects/{project}', [ProjectsController::class, 'update'])
+                ->whereNumber('project')
+                ->name('projects.update');
+
+            Route::get('/clients/{client}/edit', [ClientController::class, 'edit'])
+                ->whereNumber('client')
+                ->name('clients.edit');
+
+            Route::put('/clients/{client}', [ClientController::class, 'update'])
+                ->whereNumber('client')
+                ->name('clients.update');
+
+            Route::get('/milestones/{milestone}/edit', [ProjectMilestoneController::class, 'edit'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.edit');
+
+            Route::put('/milestones/{milestone}', [ProjectMilestoneController::class, 'update'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.update');
+
+            Route::post('/milestones/{milestone}/toggle-complete', [ProjectMilestoneController::class, 'toggleComplete'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.toggle-complete');
+
+            Route::get('/tasks/{projectTask}/edit', [ProjectTaskController::class, 'edit'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.edit');
+
+            Route::put('/tasks/{projectTask}', [ProjectTaskController::class, 'update'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.update');
+
+            Route::put('/files/{projectFile}/rename', [ProjectFileController::class, 'rename'])
+                ->whereNumber('projectFile')
+                ->name('project-files.rename');
+
+            Route::put('/files/{projectFile}/move', [ProjectFileController::class, 'move'])
+                ->whereNumber('projectFile')
+                ->name('project-files.move');
+
+            Route::put('/files/project/{project}/folder-color', [ProjectFileController::class, 'folderColor'])
+                ->whereNumber('project')
+                ->name('project-files.folder-color');
+
+            Route::get('/project-types/{projectType}/edit', [ProjectTypeController::class, 'edit'])
+                ->whereNumber('projectType')
+                ->name('project-types.edit');
+
+            Route::put('/project-types/{projectType}', [ProjectTypeController::class, 'update'])
+                ->whereNumber('projectType')
+                ->name('project-types.update');
+
+            Route::get('/project-priorities/{projectPriority}/edit', [ProjectPriorityController::class, 'edit'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.edit');
+
+            Route::put('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'update'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.update');
+
+            Route::get('/project-statuses/{projectStatus}/edit', [ProjectStatusController::class, 'edit'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.edit');
+
+            Route::put('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'update'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.update');
+
+            Route::get('/project-teams/{team}/edit', [TeamController::class, 'edit'])
+                ->whereNumber('team')
+                ->name('project-teams.edit');
+
+            Route::put('/project-teams/{team}', [TeamController::class, 'update'])
+                ->whereNumber('team')
+                ->name('project-teams.update');
+
+            Route::get('/rfp-types/{rfpType}/edit', [RfpTypeController::class, 'edit'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.edit');
+
+            Route::put('/rfp-types/{rfpType}', [RfpTypeController::class, 'update'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.update');
+
+            Route::get('/store-names/{storeName}/edit', [StoreNameController::class, 'edit'])
+                ->whereNumber('storeName')
+                ->name('store-names.edit');
+
+            Route::put('/store-names/{storeName}', [StoreNameController::class, 'update'])
+                ->whereNumber('storeName')
+                ->name('store-names.update');
+
+            Route::get('/vehicles/{projectVehicle}/edit', [ProjectVehicleController::class, 'edit'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.edit');
+
+            Route::put('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'update'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.update');
+
+            Route::get('/project-finances/rfps/{projectRfp}/edit', [ProjectRfpController::class, 'edit'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.edit');
+
+            Route::put('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'update'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.update');
+
+            Route::post('/project-finances/rfps/{projectRfp}/approve', [ProjectRfpController::class, 'approve'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.approve');
+
+            Route::post('/project-finances/rfps/{projectRfp}/reject', [ProjectRfpController::class, 'reject'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.reject');
+
+            Route::post('/project-finances/rfps/{projectRfp}/release', [ProjectRfpController::class, 'release'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.release');
+
+            Route::get('/project-finances/expenses/{projectExpense}/edit', [ProjectExpenseController::class, 'edit'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.edit');
+
+            Route::put('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'update'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.update');
+
+            Route::get('/project-finances/gas-slips/{projectGasSlip}/edit', [ProjectGasSlipController::class, 'edit'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.edit');
+
+            Route::put('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'update'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.update');
+
+            Route::post('/project-finances/gas-slips/{projectGasSlip}/toggle-done', [ProjectGasSlipController::class, 'toggleDone'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.toggle-done');
+        });
+
+        Route::middleware(['permission:project_management.delete|projects_mgmt.delete'])->group(function () {
+            Route::delete('/projects/{project}', [ProjectsController::class, 'destroy'])
+                ->whereNumber('project')
+                ->name('projects.destroy');
+
+            Route::delete('/clients/{client}', [ClientController::class, 'destroy'])
+                ->whereNumber('client')
+                ->name('clients.destroy');
+
+            Route::delete('/milestones/{milestone}', [ProjectMilestoneController::class, 'destroy'])
+                ->whereNumber('milestone')
+                ->name('project-milestones.destroy');
+
+            Route::delete('/tasks/{projectTask}', [ProjectTaskController::class, 'destroy'])
+                ->whereNumber('projectTask')
+                ->name('project-tasks.destroy');
+
+            Route::delete('/files/{projectFile}', [ProjectFileController::class, 'destroy'])
+                ->whereNumber('projectFile')
+                ->name('project-files.destroy');
+
+            Route::delete('/project-types/{projectType}', [ProjectTypeController::class, 'destroy'])
+                ->whereNumber('projectType')
+                ->name('project-types.destroy');
+
+            Route::delete('/project-priorities/{projectPriority}', [ProjectPriorityController::class, 'destroy'])
+                ->whereNumber('projectPriority')
+                ->name('project-priorities.destroy');
+
+            Route::delete('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'destroy'])
+                ->whereNumber('projectStatus')
+                ->name('project-statuses.destroy');
+
+            Route::delete('/project-teams/{team}', [TeamController::class, 'destroy'])
+                ->whereNumber('team')
+                ->name('project-teams.destroy');
+
+            Route::delete('/rfp-types/{rfpType}', [RfpTypeController::class, 'destroy'])
+                ->whereNumber('rfpType')
+                ->name('rfp-types.destroy');
+
+            Route::delete('/store-names/{storeName}', [StoreNameController::class, 'destroy'])
+                ->whereNumber('storeName')
+                ->name('store-names.destroy');
+
+            Route::delete('/vehicles/{projectVehicle}', [ProjectVehicleController::class, 'destroy'])
+                ->whereNumber('projectVehicle')
+                ->name('project-vehicles.destroy');
+
+            Route::delete('/project-finances/rfps/{projectRfp}', [ProjectRfpController::class, 'destroy'])
+                ->whereNumber('projectRfp')
+                ->name('project-rfps.destroy');
+
+            Route::delete('/project-finances/expenses/{projectExpense}', [ProjectExpenseController::class, 'destroy'])
+                ->whereNumber('projectExpense')
+                ->name('project-expenses.destroy');
+
+            Route::delete('/project-finances/gas-slips/{projectGasSlip}', [ProjectGasSlipController::class, 'destroy'])
+                ->whereNumber('projectGasSlip')
+                ->name('project-gas-slips.destroy');
+        });
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROJECTS MANAGEMENT MODULE ROUTES END
+    |--------------------------------------------------------------------------
+    */
+});

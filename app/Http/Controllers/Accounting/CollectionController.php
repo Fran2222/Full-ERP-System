@@ -115,7 +115,9 @@ class CollectionController extends Controller
             'description' => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $collection = null;
+
+        DB::transaction(function () use (&$collection, $validated) {
             $bankAccount = AccountingBankAccount::with('accountingAccount')
                 ->lockForUpdate()
                 ->findOrFail($validated['accounting_bank_account_id']);
@@ -157,7 +159,7 @@ class CollectionController extends Controller
                 'credit' => $validated['amount'],
             ]);
 
-            AccountingCollection::create([
+            $collection = AccountingCollection::create([
                 'collection_no' => $collectionNo,
                 'collection_date' => $validated['collection_date'],
                 'accounting_bank_account_id' => $bankAccount->id,
@@ -174,6 +176,12 @@ class CollectionController extends Controller
             $bankAccount->increment('current_balance', $validated['amount']);
         });
 
+        if (isset($collection)
+            && $collection
+            && class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingCollectionActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingCollectionActivity($collection->fresh(), 'created', auth()->id());
+        }
         return redirect()
             ->route('accounting.collections.index')
             ->with('success', 'Collection recorded and journal entry posted successfully.');
@@ -247,6 +255,10 @@ class CollectionController extends Controller
             ]);
         });
 
+        if (class_exists(\App\Services\SystemNotificationService::class)
+            && method_exists(\App\Services\SystemNotificationService::class, 'notifyAccountingCollectionActivity')) {
+            \App\Services\SystemNotificationService::notifyAccountingCollectionActivity($collection->fresh(), 'voided', auth()->id());
+        }
         return redirect()
             ->route('accounting.collections.show', $collection)
             ->with('success', 'Collection voided successfully. Reversal journal entry posted and cash/bank balance restored.');

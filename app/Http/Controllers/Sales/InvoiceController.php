@@ -137,6 +137,8 @@ class InvoiceController extends Controller
             app(SalesAccountingService::class)->postInvoice($invoice->fresh(['customer']));
         });
 
+        \App\Services\SystemNotificationService::notifySalesInvoiceCreated($invoice->fresh(['customer']), auth()->id());
+
         return redirect()
             ->route('sales.invoices.show', $invoice)
             ->with('success', 'Invoice created successfully.');

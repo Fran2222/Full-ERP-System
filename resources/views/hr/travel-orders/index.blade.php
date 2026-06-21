@@ -1,52 +1,143 @@
 <x-app-layout>
     <style>
+        .travel-orders-table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
         .travel-orders-table th,
         .travel-orders-table td {
             vertical-align: middle;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }
+
+        .travel-orders-table th {
+            font-size: 0.84rem;
             white-space: nowrap;
         }
 
-        .travel-orders-table th:nth-child(1),
-        .travel-orders-table td:nth-child(1),
-        .travel-orders-table th:nth-child(4),
-        .travel-orders-table td:nth-child(4),
-        .travel-orders-table th:nth-child(5),
-        .travel-orders-table td:nth-child(5),
-        .travel-orders-table th:nth-child(6),
-        .travel-orders-table td:nth-child(6),
-        .travel-orders-table th:nth-child(7),
-        .travel-orders-table td:nth-child(7) {
-            text-align: center;
+        .travel-orders-table td {
+            font-size: 0.92rem;
         }
 
-        .travel-orders-table th:last-child,
-        .travel-orders-table td:last-child {
-            padding-right: 28px;
-            width: 120px;
+        .travel-orders-table th:nth-child(1),
+        .travel-orders-table td:nth-child(1) {
+            width: 6%;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        @if($canManageTravelOrders)
+            .travel-orders-table th:nth-child(2),
+            .travel-orders-table td:nth-child(2) {
+                width: 20%;
+                white-space: normal;
+            }
+
+            .travel-orders-table th:nth-child(3),
+            .travel-orders-table td:nth-child(3) {
+                width: 19%;
+                white-space: normal;
+            }
+
+            .travel-orders-table th:nth-child(4),
+            .travel-orders-table td:nth-child(4) {
+                width: 22%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(5),
+            .travel-orders-table td:nth-child(5) {
+                width: 10%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(6),
+            .travel-orders-table td:nth-child(6) {
+                width: 13%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(7),
+            .travel-orders-table td:nth-child(7) {
+                width: 10%;
+                text-align: center;
+                white-space: nowrap;
+            }
+        @else
+            .travel-orders-table th:nth-child(2),
+            .travel-orders-table td:nth-child(2) {
+                width: 28%;
+                white-space: normal;
+            }
+
+            .travel-orders-table th:nth-child(3),
+            .travel-orders-table td:nth-child(3) {
+                width: 25%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(4),
+            .travel-orders-table td:nth-child(4) {
+                width: 13%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(5),
+            .travel-orders-table td:nth-child(5) {
+                width: 18%;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .travel-orders-table th:nth-child(6),
+            .travel-orders-table td:nth-child(6) {
+                width: 10%;
+                text-align: center;
+                white-space: nowrap;
+            }
+        @endif
+
+        .travel-orders-table td div,
+        .travel-orders-table td small {
+            max-width: 100%;
+        }
+
+        .travel-orders-table td small {
+            display: block;
+            overflow-wrap: anywhere;
+            line-height: 1.25;
         }
 
         .travel-order-action {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
         }
 
         .travel-order-icon-btn {
-            width: 34px !important;
-            height: 34px !important;
-            min-width: 34px !important;
+            width: 32px !important;
+            height: 32px !important;
+            min-width: 32px !important;
             padding: 0 !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             border-radius: 12px !important;
             line-height: 1 !important;
+            flex: 0 0 32px;
         }
 
         .travel-order-icon-btn svg {
-            width: 17px !important;
-            height: 17px !important;
+            width: 16px !important;
+            height: 16px !important;
             display: block !important;
             flex-shrink: 0 !important;
         }
@@ -58,15 +149,10 @@
             fill: none !important;
         }
 
-        .travel-order-icon-btn svg {
-            width: 17px;
-            height: 17px;
-            stroke-width: 2;
-            display: block;
-        }
-
-        .travel-order-icon-btn:hover svg {
-            stroke: currentColor;
+        @media (max-width: 1199.98px) {
+            .travel-orders-table {
+                min-width: 900px;
+            }
         }
     </style>
     

@@ -6,8 +6,10 @@
     <title>Overtime Request Form</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 24px; font-size: 13px; }
-        .page { max-width: 850px; margin: 0 auto; }
+        body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 42px 24px 24px; font-size: 13px; background: #f3f4f6; }
+        .screen-print-action { position: fixed; top: 14px; right: 18px; z-index: 999; }
+        .print-btn { border: 1px solid #111827; background: #fff; color: #111827; padding: 4px 12px; border-radius: 2px; cursor: pointer; }
+        .page { position: relative; max-width: 850px; min-height: 11in; margin: 0 auto; padding: 52px 64px 42px; background: #fff; border: 1px solid #d1d5db; box-shadow: 0 12px 35px rgba(15, 23, 42, .12); }
         .header { text-align: center; margin-bottom: 22px; }
         .company { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
         .title { font-size: 22px; font-weight: 800; margin-top: 14px; text-transform: uppercase; }
@@ -23,12 +25,23 @@
         .signature-area { margin-top: 28px; display: flex; gap: 40px; }
         .signature { flex: 1; text-align: center; }
         .line { border-bottom: 1px solid #111827; height: 36px; margin-bottom: 6px; }
-        .print-btn { margin-bottom: 16px; }
         .pre-line { white-space: pre-line; }
-        @media print { .print-btn { display: none; } body { padding: 0; } }
+        .ot-record-info { margin-top: 32px; width: 260px; font-size: 9px; line-height: 1.15; color: #111827; }
+        .ot-record-row { display: flex; align-items: flex-start; gap: 8px; }
+        .ot-record-label { width: 88px; font-weight: 700; }
+        .ot-record-value { flex: 1; font-weight: 700; text-align: right; }
+        @media print {
+            @page { size: letter portrait; margin: 12mm; }
+            body { padding: 0; background: #fff; }
+            .screen-print-action { display: none; }
+            .page { max-width: none; min-height: auto; margin: 0; padding: 0; border: 0; box-shadow: none; }
+        }
     </style>
 </head>
 <body>
+    <div class="screen-print-action">
+        <button onclick="window.print()" class="print-btn">Print</button>
+    </div>
 @php
     $formatExactDecimal = function ($value, $maxDecimals = 4, $minDecimals = 2) {
         $formatted = number_format((float) $value, $maxDecimals, '.', ',');
@@ -48,8 +61,6 @@
     };
 @endphp
     <div class="page">
-        <button onclick="window.print()" class="print-btn">Print</button>
-
         <div class="header">
             <div class="company">WIZMASTER COMPUTER SALES AND SERVICES CORPORATION</div>
             <div class="title">Overtime Request-and-Approval Form</div>
@@ -153,6 +164,25 @@
         <div class="note">
             <strong>Note:</strong> This form must be submitted to the HR Department within five (5) working days after the overtime has been rendered.
             Please be advised that overtime requests with incomplete documentation, non-compliance with prescribed procedures, or late submissions will be considered invalid and may not be processed.
+        </div>
+
+        <div class="ot-record-info">
+            <div class="ot-record-row">
+                <span class="ot-record-label">Document No.:</span>
+                <span class="ot-record-value">WMC-HR-OT-001</span>
+            </div>
+            <div class="ot-record-row">
+                <span class="ot-record-label">Revision No.:</span>
+                <span class="ot-record-value">00</span>
+            </div>
+            <div class="ot-record-row">
+                <span class="ot-record-label">Effective Date:</span>
+                <span class="ot-record-value">{{ now()->format('F d, Y') }}</span>
+            </div>
+            <div class="ot-record-row">
+                <span class="ot-record-label">Overtime Request No.:</span>
+                <span class="ot-record-value">{{ $overtimeRequest->overtime_request_no }}</span>
+            </div>
         </div>
     </div>
 </body>

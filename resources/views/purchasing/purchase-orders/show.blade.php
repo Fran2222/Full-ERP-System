@@ -25,6 +25,27 @@
                 default => 'badge bg-secondary',
             };
 
+            $displayUserName = function ($user) {
+                if (!$user) {
+                    return '-';
+                }
+
+                $name = trim((string) ($user->name ?? ''));
+                if ($name !== '') {
+                    return $name;
+                }
+
+                $fullName = trim((string) ($user->first_name ?? '') . ' ' . (string) ($user->last_name ?? ''));
+                return $fullName !== '' ? $fullName : ($user->email ?? '-');
+            };
+
+            $approvedByName = $displayUserName($purchaseOrder->approver ?? null);
+            $approvedAtText = $purchaseOrder->approved_at ? optional($purchaseOrder->approved_at)->format('M d, Y h:i A') : '-';
+            $receivedByName = $receivingTracker['name'] ?? $displayUserName($purchaseOrder->receiver ?? null);
+            $receivedAtText = !empty($receivingTracker['date'])
+                ? \Carbon\Carbon::parse($receivingTracker['date'])->format('M d, Y h:i A')
+                : ($purchaseOrder->received_at ? optional($purchaseOrder->received_at)->format('M d, Y h:i A') : '-');
+
             $receivingStatusClass = match ($purchaseOrder->status) {
                 'draft' => 'badge bg-warning text-dark',
                 'ordered' => 'badge bg-info',
@@ -66,7 +87,19 @@
                                 @method('PATCH')
 
                                 <button type="submit" class="btn btn-success purchasing-soft-btn">
-                                    Mark as Ordered
+                                    Approve / Mark as Ordered
+                                </button>
+                            </form>
+                        @endif
+                        @if(in_array($purchaseOrder->status, ['ordered', 'partially_received'], true))
+                            <form method="POST"
+                                  action="{{ route('purchasing.purchase-orders.mark-supplier-arrived', $purchaseOrder->id) }}"
+                                  class="d-inline mark-po-arrived-form">
+                                @csrf
+                                @method('PATCH')
+                                <input type="hidden" name="supplier_arrival_notes" value="Supplier delivery physically arrived and ready for receiving.">
+                                <button type="submit" class="btn btn-success">
+                                    Notify Warehouse: Stocks Arrived
                                 </button>
                             </form>
                         @endif
@@ -134,6 +167,36 @@
                         <div class="border rounded-3 p-3 h-100">
                             <small class="text-muted d-block">Expected Date</small>
                             <strong>{{ optional($purchaseOrder->expected_date)->format('M d, Y') ?: '-' }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Created By</small>
+                            <strong>{{ $displayUserName($purchaseOrder->creator ?? null) }}</strong>
+                            <div class="small text-secondary">{{ optional($purchaseOrder->created_at)->format('M d, Y h:i A') ?: '-' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Approved By</small>
+                            <strong>{{ $approvedByName }}</strong>
+                            <div class="small text-secondary">{{ $approvedAtText }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Received By</small>
+                            <strong>{{ $receivedByName }}</strong>
+                            <div class="small text-secondary">{{ $receivedAtText }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded-3 p-3 h-100">
+                            <small class="text-muted d-block">Current Status</small>
+                            <span class="{{ $receivingStatusClass }}">{{ ucwords(str_replace('_', ' ', $purchaseOrder->status)) }}</span>
                         </div>
                     </div>
                 </div>
@@ -342,7 +405,52 @@
                 </div>
 
                 <h5 class="fw-bold mb-3">Related Journal Entries</h5>
-                <div class="table-responsive">
+                
+                    {{-- Supplier Arrival Display --}}
+                    @if(\Illuminate\Support\Facades\Schema::hasColumn('purchase_orders', 'supplier_arrived_at'))
+                        @php
+                            $supplierArrivedByName = '-';
+                            if (!empty($purchaseOrder->supplier_arrived_by)) {
+                                $supplierArrivalUser = \App\Models\User::find($purchaseOrder->supplier_arrived_by);
+                                if ($supplierArrivalUser) {
+                                    $supplierArrivedByName = trim(($supplierArrivalUser->first_name ?? '') . ' ' . ($supplierArrivalUser->last_name ?? ''));
+                                    if ($supplierArrivedByName === '') {
+                                        $supplierArrivedByName = $supplierArrivalUser->name ?? $supplierArrivalUser->username ?? $supplierArrivalUser->email ?? '-';
+                                    }
+                                }
+                            }
+                            $supplierArrivedAtText = !empty($purchaseOrder->supplier_arrived_at)
+                                ? \Carbon\Carbon::parse($purchaseOrder->supplier_arrived_at)->format('M d, Y h:i A')
+                                : '-';
+                        @endphp
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100 bg-light">
+                                    <small class="text-muted d-block">Supplier Arrival Status</small>
+                                    @if(!empty($purchaseOrder->supplier_arrived_at))
+                                        <span class="badge bg-success mt-1">Arrived / Warehouse Notified</span>
+                                    @else
+                                        <span class="badge bg-secondary mt-1">Not Yet Arrived</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100 bg-light">
+                                    <small class="text-muted d-block">Arrived By</small>
+                                    <strong>{{ $supplierArrivedByName }}</strong>
+                                    <div class="small text-secondary">{{ $supplierArrivedAtText }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded-3 p-3 h-100 bg-light">
+                                    <small class="text-muted d-block">Arrival Notes</small>
+                                    <div class="fw-semibold">{{ $purchaseOrder->supplier_arrival_notes ?: '-' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+<div class="table-responsive">
                     <table class="table align-middle mb-0">
                         <thead class="table-light">
                             <tr>
@@ -382,7 +490,29 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.mark-po-ordered-form').forEach(function (form) {
+    document.querySelectorAll('.mark-po-arrived-form').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (typeof Swal === 'undefined') {
+                return;
+            }
+
+            event.preventDefault();
+            Swal.fire({
+                title: 'Notify Warehouse?',
+                text: 'This will notify warehouse users that the supplier delivery physically arrived and is ready for receiving.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, notify warehouse',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3b5bdb'
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+    document.querySelectorAll('.mark-po-ordered-form').forEach(function (form) {    document.querySelectorAll('.mark-po-ordered-form').forEach(function (form) {
         form.addEventListener('submit', function (event) {
             event.preventDefault();
 
@@ -392,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             Swal.fire({
-                title: 'Mark as Ordered?',
+                title: 'Approve / Mark as Ordered?',
                 text: 'This purchase order will become available for receiving.',
                 icon: 'question',
                 showCancelButton: true,

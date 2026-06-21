@@ -28,7 +28,7 @@
                         </div>
 
                         <div class="card-body">
-                            <form action="{{ route('hr.payroll.store') }}" method="POST">
+                            <form id="wmcGeneratePayrollForm" action="{{ route('hr.payroll.store') }}" method="POST">
                                 @csrf
 
                                 <div class="mb-3">
@@ -50,8 +50,7 @@
                                 </div>
 
                                 <button type="submit"
-                                        class="btn btn-primary w-100"
-                                        onclick="return confirm('Generate payroll for this period?')">
+                                        class="btn btn-primary w-100">
                                     Generate Payroll
                                 </button>
                             </form>
@@ -166,4 +165,61 @@
             </div>
         </div>
     </div>
+
+    <script src="{{ asset('vendor/sweetalert2/sweetalert2.all.min.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('wmcGeneratePayrollForm');
+
+            if (!form) {
+                return;
+            }
+
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                var fromInput = form.querySelector('input[name="period_from"]');
+                var toInput = form.querySelector('input[name="period_to"]');
+                var periodFrom = fromInput && fromInput.value ? fromInput.value : '-';
+                var periodTo = toInput && toInput.value ? toInput.value : '-';
+
+                if (typeof Swal === 'undefined') {
+                    if (confirm('Generate payroll for this period?')) {
+                        form.submit();
+                    }
+                    return;
+                }
+
+                Swal.fire({
+                    title: 'Generate payroll?',
+                    html: '<div style="font-size:14px;line-height:1.7;">This will create payroll records for:<br><strong>' + periodFrom + ' to ' + periodTo + '</strong></div>',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, generate',
+                    cancelButtonText: 'Cancel',
+                    reverseButtons: true,
+                    customClass: {
+                        confirmButton: 'btn btn-primary mx-1',
+                        cancelButton: 'btn btn-light mx-1'
+                    },
+                    buttonsStyling: false
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Generating payroll...',
+                            text: 'Please wait while the payroll records are being prepared.',
+                            allowOutsideClick: false,
+                            allowEscapeKey: false,
+                            didOpen: function () {
+                                Swal.showLoading();
+                            }
+                        });
+
+                        form.submit();
+                    }
+                });
+            });
+        });
+    </script>
+
 </x-app-layout>

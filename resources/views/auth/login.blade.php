@@ -19,40 +19,64 @@
             max-width: 760px;
             min-height: 100vh;
             min-height: 100dvh;
-            padding: 32px 24px 18px;
+            padding: clamp(18px, 3vh, 32px) 24px clamp(14px, 2vh, 18px);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: center;
             position: relative;
         }
 
         .wiz-login-brand {
+            width: 100%;
             color: inherit;
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 14px !important;
         }
 
         .wiz-login-logo-static {
-            width: 210px;
-            height: 210px;
+            display: block;
+            width: 190px;
+            height: 190px;
             object-fit: contain;
-            margin-bottom: 18px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 14px;
         }
 
         .wiz-login-title {
+            display: block;
+            width: 100%;
             font-size: 38px;
             font-weight: 700;
             color: #061a44;
             letter-spacing: 1.5px;
             line-height: 1.1;
-            margin-bottom: 30px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 22px;
+            text-align: center;
             text-transform: uppercase;
             white-space: nowrap;
         }
 
         .auth-card {
             width: 100%;
-            margin-top: auto;
-            margin-bottom: auto;
+            max-width: 760px;
+            margin: 0 auto;
+        }
+
+        .auth-card form {
+            width: 100%;
+            max-width: 560px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .auth-card h2 {
@@ -124,57 +148,86 @@
         .wiz-login-footer {
             position: static;
             width: 100%;
+            max-width: 560px;
+            margin-left: auto;
+            margin-right: auto;
             flex-shrink: 0;
             text-align: center;
-            font-size: 14px;
+            font-size: 13px;
             color: #64748b;
-            line-height: 1.5;
-            padding-top: 12px;
+            line-height: 1.4;
+            padding-top: 10px;
         }
 
         @media (max-width: 1199.98px) {
             .wiz-login-form-wrap {
-                max-width: 620px;
+                max-width: 660px;
+            }
+
+            .auth-card {
+                max-width: 700px;
+            }
+
+            .auth-card form,
+            .wiz-login-footer {
+                max-width: 540px;
             }
 
             .wiz-login-title {
-                font-size: 38px;
+                font-size: 36px;
             }
 
             .wiz-login-logo-static {
-                width: 175px;
-                height: 175px;
+                width: 180px;
+                height: 180px;
             }
         }
 
-
-        @media (max-height: 760px) and (min-width: 768px) {
+        /* 125% display scale / shorter browser height safe layout */
+        @media (max-height: 820px) and (min-width: 768px) {
             .wiz-login-form-wrap {
+                justify-content: center;
                 padding-top: 18px;
-                padding-bottom: 12px;
+                padding-bottom: 14px;
             }
 
             .wiz-login-logo-static {
-                width: 135px;
-                height: 135px;
+                width: 165px;
+                height: 165px;
                 margin-bottom: 10px;
             }
 
             .wiz-login-title {
-                font-size: 30px;
+                font-size: 34px;
                 margin-bottom: 18px;
             }
 
+            .wiz-login-brand {
+                margin-bottom: 10px !important;
+            }
+
             .auth-card h2 {
-                font-size: 26px;
+                font-size: 30px;
             }
 
             .auth-card .text-muted.mb-4 {
                 margin-bottom: 1rem !important;
             }
 
+            .auth-card .form-group.mb-3 {
+                margin-bottom: .85rem !important;
+            }
+
+            .auth-card form > .d-flex.mb-4 {
+                margin-bottom: 1rem !important;
+            }
+
             .auth-card .form-control {
-                min-height: 42px;
+                min-height: 44px;
+            }
+
+            .auth-card .btn-primary {
+                min-height: 44px;
             }
 
             .wiz-login-footer {
@@ -190,18 +243,26 @@
 
             .wiz-login-form-wrap {
                 max-width: 100%;
-                padding: 36px 26px 18px;
+                padding: 34px 26px 18px;
+                justify-content: center;
+            }
+
+            .auth-card,
+            .auth-card form,
+            .wiz-login-footer {
+                max-width: 100%;
             }
 
             .wiz-login-title {
                 font-size: 24px;
                 white-space: normal;
+                margin-bottom: 18px;
             }
 
             .wiz-login-logo-static {
                 width: 135px;
                 height: 135px;
-                margin-bottom: 14px;
+                margin-bottom: 12px;
             }
 
             .auth-card h2 {
@@ -209,8 +270,8 @@
             }
 
             .wiz-login-footer {
-                bottom: 14px;
                 font-size: 12px;
+                padding-top: 10px;
             }
         }
     </style>
@@ -221,8 +282,7 @@
                 <div class="wiz-login-form-wrap">
                     <div class="card card-transparent shadow-none border-0 mb-0 auth-card">
                         <div class="card-body text-center p-0">
-                            <a href="{{ url('/') }}"
-                               class="text-decoration-none d-inline-flex flex-column align-items-center justify-content-center mb-3 wiz-login-brand">
+                            <div class="text-decoration-none wiz-login-brand" aria-label="Wizmaster Corporation">
                                 <img src="{{ asset('images/wizmaster-logo.png') }}"
                                      alt="Wizmaster Corporation"
                                      class="wiz-login-logo-static">
@@ -230,7 +290,7 @@
                                 <h1 class="wiz-login-title">
                                     WIZMASTER CORPORATION
                                 </h1>
-                            </a>
+                            </div>
 
                             <h2 class="mb-2">Sign In</h2>
                             <p class="text-muted mb-4">Login to stay connected.</p>

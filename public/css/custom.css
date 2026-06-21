@@ -1579,3 +1579,157 @@ aside.sidebar .sidebar-body::-webkit-scrollbar {
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0115.916 21H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0'/%3E%3C/svg%3E") center / contain no-repeat !important;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='black' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0115.916 21H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0'/%3E%3C/svg%3E") center / contain no-repeat !important;
 }
+
+/* =========================================================
+   WIZMASTER SIDEBAR BRAND TWO-LINE TEXT - BIGGER VERSION
+   ========================================================= */
+.sidebar .sidebar-header,
+.sidebar-default .sidebar-header,
+.iq-sidebar .sidebar-header,
+aside.sidebar .sidebar-header {
+    min-height: 82px !important;
+}
+
+.sidebar .navbar-brand,
+.sidebar-default .navbar-brand,
+.iq-sidebar .navbar-brand,
+aside.sidebar .navbar-brand {
+    min-height: 78px !important;
+    padding: 13px 16px !important;
+    gap: 11px !important;
+}
+
+.sidebar .wiz-logo-container,
+.sidebar-default .wiz-logo-container,
+.iq-sidebar .wiz-logo-container,
+aside.sidebar .wiz-logo-container {
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.sidebar .wiz-logo,
+.sidebar-default .wiz-logo,
+.iq-sidebar .wiz-logo,
+aside.sidebar .wiz-logo,
+.sidebar .navbar-brand img,
+.sidebar-default .navbar-brand img,
+.iq-sidebar .navbar-brand img,
+aside.sidebar .navbar-brand img {
+    width: 46px !important;
+    height: 46px !important;
+    max-width: 46px !important;
+    object-fit: contain !important;
+}
+
+.sidebar .wiz-sidebar-brand-stack,
+.sidebar-default .wiz-sidebar-brand-stack,
+.iq-sidebar .wiz-sidebar-brand-stack,
+aside.sidebar .wiz-sidebar-brand-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+    line-height: 1 !important;
+}
+
+.sidebar .wiz-sidebar-brand-stack .wiz-sidebar-shadow-text,
+.sidebar-default .wiz-sidebar-brand-stack .wiz-sidebar-shadow-text,
+.iq-sidebar .wiz-sidebar-brand-stack .wiz-sidebar-shadow-text,
+aside.sidebar .wiz-sidebar-brand-stack .wiz-sidebar-shadow-text {
+    display: block !important;
+    color: #315cf6 !important;
+    -webkit-text-fill-color: #315cf6 !important;
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    letter-spacing: .75px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    max-width: 172px !important;
+}
+
+.sidebar .wiz-sidebar-corporation-text,
+.sidebar-default .wiz-sidebar-corporation-text,
+.iq-sidebar .wiz-sidebar-corporation-text,
+aside.sidebar .wiz-sidebar-corporation-text {
+    display: block !important;
+    color: #6b7280 !important;
+    -webkit-text-fill-color: #6b7280 !important;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    letter-spacing: 2.1px !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    max-width: 172px !important;
+}
+
+.sidebar.sidebar-mini .wiz-sidebar-corporation-text,
+.sidebar-mini .wiz-sidebar-corporation-text,
+.sidebar.collapsed .wiz-sidebar-corporation-text,
+.sidebar-default.sidebar-mini .wiz-sidebar-corporation-text,
+.iq-sidebar.sidebar-mini .wiz-sidebar-corporation-text {
+    display: none !important;
+}
+/* WMC_BRAND_LOGO_TEXT_FIX */
+.sidebar .navbar-brand,
+.iq-sidebar .navbar-brand {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+}
+
+.sidebar .navbar-brand img,
+.iq-sidebar .navbar-brand img {
+    flex: 0 0 auto !important;
+}
+
+.sidebar .navbar-brand .logo-title,
+.iq-sidebar .navbar-brand .logo-title,
+.sidebar .navbar-brand .wiz-sidebar-shadow-text,
+.iq-sidebar .navbar-brand .wiz-sidebar-shadow-text {
+    display: block !important;
+    font-size: 16px !important;
+    line-height: 1.05 !important;
+    letter-spacing: .08em !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    margin: 0 !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-corporation-text,
+.iq-sidebar .navbar-brand .wiz-sidebar-corporation-text {
+    display: block !important;
+    font-size: 10px !important;
+    line-height: 1.05 !important;
+    letter-spacing: .32em !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    margin-top: 2px !important;
+}
+
+.sidebar.sidebar-mini .navbar-brand .logo-title,
+.sidebar.sidebar-mini .navbar-brand .wiz-sidebar-shadow-text,
+.sidebar.sidebar-mini .navbar-brand .wiz-sidebar-corporation-text,
+.iq-sidebar.sidebar-mini .navbar-brand .logo-title,
+.iq-sidebar.sidebar-mini .navbar-brand .wiz-sidebar-shadow-text,
+.iq-sidebar.sidebar-mini .navbar-brand .wiz-sidebar-corporation-text,
+body.sidebar-main .sidebar .navbar-brand .logo-title,
+body.sidebar-main .sidebar .navbar-brand .wiz-sidebar-shadow-text,
+body.sidebar-main .sidebar .navbar-brand .wiz-sidebar-corporation-text {
+    display: none !important;
+}
+

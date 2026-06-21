@@ -63,6 +63,8 @@
                                 <th class="text-end">Balance</th>
                                 <th>Receiving Status</th>
                                 <th>Payment Status</th>
+                                <th>Approved By</th>
+                                <th>Received By</th>
 
                                 @if($canManagePOActions)
                                     <th class="text-end" style="width: 130px;">Actions</th>
@@ -148,6 +150,18 @@
                             name: 'payment_status_display',
                             orderable: false,
                             searchable: false
+                        },
+                        {
+                            data: 'approved_by_display',
+                            name: 'approved_by_display',
+                            orderable: false,
+                            searchable: false
+                        },
+                        {
+                            data: 'received_by_display',
+                            name: 'received_by_display',
+                            orderable: false,
+                            searchable: false
                         }
                         @if($canManagePOActions)
                         ,
@@ -172,7 +186,7 @@
                         "<'row g-3 align-items-center mt-3'<'col-lg-6 col-md-6'i><'col-lg-6 col-md-6'p>>",
                     columnDefs: [
                         {
-                            targets: [0, 3, 4, 6, 7, 8, 9, 10],
+                            targets: [0, 3, 4, 6, 7, 8, 9, 10, 11, 12],
                             className: 'text-nowrap'
                         },
                         {
@@ -182,7 +196,7 @@
                         @if($canManagePOActions)
                         ,
                         {
-                            targets: 11,
+                            targets: 13,
                             className: 'text-end text-nowrap'
                         }
                         @endif

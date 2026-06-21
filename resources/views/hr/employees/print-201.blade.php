@@ -7,7 +7,7 @@
     $fullName = $employee->full_name
         ?: trim(($employee->first_name ?? '') . ' ' . ($employee->middle_name ?? '') . ' ' . ($employee->last_name ?? '') . ' ' . ($employee->suffix ?? ''));
 
-    $employeeNo = $profile->employee_id ?? 'N/A';
+    $employeeNo = $profile?->display_employee_code ?? $profile?->employee_id ?? 'N/A';
     $position = optional($profile?->position)->name ?: optional($employee->position ?? null)->name ?: 'No Designation';
     $department = optional($employee->department)->name ?: 'No Department';
     $branch = optional($employee->branch)->name ?: 'No Branch / Office';
@@ -354,6 +354,16 @@
                         <td><div class="label">Email Address</div><div class="value">{{ $formatValue($employee->email ?? null) }}</div></td>
                         <td><div class="label">Contact Number</div><div class="value">{{ $formatValue($employee->phone_number ?? null) }}</div></td>
                     </tr>
+                    <tr>
+                        <td><div class="label">Name of Spouse</div><div class="value">{{ $formatValue($profile->spouse_name ?? null) }}</div></td>
+                        <td><div class="label">Name of Father</div><div class="value">{{ $formatValue($profile->father_name ?? null) }}</div></td>
+                        <td><div class="label">Name of Mother</div><div class="value">{{ $formatValue($profile->mother_name ?? null) }}</div></td>
+                    </tr>
+                    <tr>
+                        <td><div class="label">Highest Education Attainment</div><div class="value">{{ $formatValue($profile->highest_education_attainment ?? null) }}</div></td>
+                        <td><div class="label">Course</div><div class="value">{{ $formatValue($profile->course ?? null) }}</div></td>
+                        <td><div class="label">School / Year Graduated</div><div class="value">{{ $formatValue(trim(($profile->school ?? '') . (($profile->year_graduated ?? null) ? ' / ' . $profile->year_graduated : '')) ?: null) }}</div></td>
+                    </tr>
                 </table>
             </div>
 
@@ -389,16 +399,19 @@
                     <tr>
                         <td><div class="label">Branch / Office</div><div class="value">{{ $branch }}</div></td>
                         <td><div class="label">Date Hired</div><div class="value">{{ $dateHired }}</div></td>
-                        <td><div class="label">Supervisor</div><div class="value">{{ $supervisor }}</div></td>
+                        <td><div class="label">Date of Regularization</div><div class="value">{{ $formatDate($profile->regularization_date ?? null) }}</div></td>
                     </tr>
                     <tr>
+                        <td><div class="label">Supervisor</div><div class="value">{{ $supervisor }}</div></td>
                         <td><div class="label">Employment Status</div><div class="value">{{ ucfirst((string) $status) }}</div></td>
                         <td><div class="label">Employment Type</div><div class="value">{{ ucfirst((string) $employmentType) }}</div></td>
-                        <td><div class="label">Payroll Type</div><div class="value">Semi-Monthly</div></td>
                     </tr>
                     <tr>
+                        <td><div class="label">Payroll Type</div><div class="value">Semi-Monthly</div></td>
                         <td><div class="label">Work Schedule</div><div class="value">Mon - Fri (8:00 AM - 5:00 PM)</div></td>
                         <td><div class="label">Probation End</div><div class="value">N/A</div></td>
+                    </tr>
+                    <tr>
                         <td><div class="label">Rate per Day</div><div class="value">
                             @if(!empty($profile->employee_rate))
                                 {{ number_format((float) $profile->employee_rate, 2) }}

@@ -34,6 +34,44 @@ class TravelOrder extends Model
         'reviewed_at' => 'datetime',
     ];
 
+
+    public function getTravelOrderNumberAttribute(): string
+    {
+        $sourceDate = $this->order_date ?? $this->created_at ?? now();
+        $year = $sourceDate->format('Y');
+        $dateValue = $sourceDate->toDateString();
+
+        if (! $this->exists || ! $this->id) {
+            $nextSequence = static::query()
+                ->whereYear('order_date', $year)
+                ->count() + 1;
+
+            return 'TO-' . $year . '-' . str_pad((string) $nextSequence, 4, '0', STR_PAD_LEFT);
+        }
+
+        $sequence = static::query()
+            ->whereYear('order_date', $year)
+            ->where(function ($query) use ($dateValue) {
+                $query->whereDate('order_date', '<', $dateValue)
+                    ->orWhere(function ($sameDateQuery) use ($dateValue) {
+                        $sameDateQuery->whereDate('order_date', $dateValue)
+                            ->where('id', '<=', $this->id);
+                    });
+            })
+            ->count();
+
+        if ($sequence < 1) {
+            $sequence = 1;
+        }
+
+        return 'TO-' . $year . '-' . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+    }
+
+    public function getDocumentEffectiveDateAttribute(): string
+    {
+        return now()->format('F d, Y');
+    }
+
     public function requester()
     {
         return $this->belongsTo(User::class, 'user_id');

@@ -1,0 +1,70 @@
+<?php
+
+namespace App\Models\Chat;
+
+use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class ChatConversation extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'type',
+        'title',
+        'created_by',
+    ];
+
+    public function participants()
+    {
+        return $this->hasMany(ChatParticipant::class, 'chat_conversation_id');
+    }
+
+    public function participantUsers()
+    {
+        return $this->belongsToMany(User::class, 'chat_participants', 'chat_conversation_id', 'user_id')
+            ->withPivot('last_read_at')
+            ->withTimestamps();
+    }
+
+    public function messages()
+    {
+        return $this->hasMany(ChatMessage::class, 'chat_conversation_id');
+    }
+
+    public function latestMessage()
+    {
+        return $this->hasOne(ChatMessage::class, 'chat_conversation_id')->latestOfMany();
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function otherParticipantFor(?int $userId): ?User
+    {
+        if (! $userId) {
+            return null;
+        }
+
+        return $this->participantUsers
+            ->first(fn ($user) => (int) $user->id !== (int) $userId);
+    }
+
+    public function displayTitleFor(?int $userId): string
+    {
+        if ($this->title) {
+            return $this->title;
+        }
+
+        $other = $this->otherParticipantFor($userId);
+
+        if ($other) {
+            return $other->full_name ?: $other->email ?: 'User';
+        }
+
+        return 'Chat';
+    }
+}

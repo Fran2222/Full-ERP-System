@@ -1,3 +1,19 @@
+
+{{-- WMC_SIDEBAR_NO_FLICKER_V7 --}}
+<script>
+(function () {
+    try {
+        if (localStorage.getItem('wmc_sidebar_visual_state_v6') === 'collapsed') {
+            document.documentElement.classList.add('wmc-sidebar-restoring');
+        }
+    } catch (e) {}
+})();
+</script>
+<style>
+    html.wmc-sidebar-restoring body {
+        opacity: 0 !important;
+    }
+</style>
 <!-- Favicon -->
 <link rel="shortcut icon" href="{{ asset('images/wizmaster-favicon.ico') }}" />
 <link rel="icon" type="image/x-icon" href="{{ asset('images/wizmaster-favicon.ico') }}" />

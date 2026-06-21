@@ -1,0 +1,242 @@
+<x-app-layout :assets="$assets ?? []">
+<div class="container-fluid py-4">
+    @include('service.partials.nav', ['active' => 'job-orders'])
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h4 class="mb-1">Add Technician Report</h4>
+            <p class="text-muted mb-0">
+                {{ $jobOrder->job_order_no ?? ('JO-' . str_pad($jobOrder->id, 5, '0', STR_PAD_LEFT)) }}
+                @if(!empty($jobOrder->subject))
+                    - {{ $jobOrder->subject }}
+                @endif
+            </p>
+        </div>
+        <a href="{{ route('service.job-orders.show', $jobOrder->id) }}" class="btn btn-light">Back</a>
+    </div>
+
+    @if($errors->any())
+        <div class="alert alert-danger">
+            <strong>Please check the report form.</strong>
+            <ul class="mb-0 mt-2">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    <form method="POST"
+          action="{{ route('service.job-orders.reports.store', $jobOrder->id) }}"
+          enctype="multipart/form-data">
+        @csrf
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                    <div class="card-body">
+                        <h5 class="mb-4">Report Details</h5>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Start Time</label>
+                                <input type="datetime-local" name="started_at" class="form-control" value="{{ old('started_at') }}">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label">Completion Time</label>
+                                <input type="datetime-local" name="completed_at" class="form-control" value="{{ old('completed_at') }}">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">Findings</label>
+                                <textarea name="findings" class="form-control" rows="4" placeholder="What did the technician find?">{{ old('findings') }}</textarea>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">Work Done</label>
+                                <textarea name="work_done" class="form-control" rows="4" placeholder="Describe the work performed.">{{ old('work_done') }}</textarea>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">Recommendations</label>
+                                <textarea name="recommendations" class="form-control" rows="3" placeholder="Recommended next steps, replacement, monitoring, etc.">{{ old('recommendations') }}</textarea>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label">Remarks</label>
+                                <textarea name="remarks" class="form-control" rows="3" placeholder="Additional notes.">{{ old('remarks') }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                            <div>
+                                <h5 class="mb-1">Materials / Parts Used</h5>
+                                <p class="text-muted mb-0">Select warehouse inventory used for this service. Serialized items should use quantity 1.</p>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addMaterialBtn">Add Material</button>
+                        </div>
+
+                        <div id="materialsWrap" class="d-flex flex-column gap-3"></div>
+
+                        <template id="materialRowTemplate">
+                            <div class="border rounded p-3 material-row">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label">Warehouse Item</label>
+                                        <select class="form-select material-inventory" name="materials[__INDEX__][warehouse_inventory_id]">
+                                            <option value="">No material</option>
+                                            @foreach($inventoryOptions ?? [] as $inv)
+                                                <option value="{{ $inv->inventory_id }}"
+                                                        data-item-id="{{ $inv->warehouse_item_id }}"
+                                                        data-unit="{{ $inv->unit_name }}"
+                                                        data-serialized="{{ $inv->is_serialized ? 1 : 0 }}"
+                                                        data-available="{{ $inv->available ?? $inv->on_hand }}">
+                                                    {{ $inv->item_code }} - {{ $inv->item_name }}
+                                                    | {{ $inv->branch_name }} {{ $inv->location_name ? ' / ' . $inv->location_name : '' }}
+                                                    | Available: {{ $inv->available ?? $inv->on_hand }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-3">
+                                        <label class="form-label">Serial No. if serialized</label>
+                                        <select class="form-select material-serial" name="materials[__INDEX__][warehouse_item_serial_id]">
+                                            <option value="">No serial</option>
+                                            @foreach($serialOptions ?? [] as $serial)
+                                                <option value="{{ $serial->id }}" data-item-id="{{ $serial->warehouse_item_id }}">
+                                                    {{ $serial->serial_number }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-2">
+                                        <label class="form-label">Qty</label>
+                                        <input type="number" min="0" step="0.01" class="form-control material-qty" name="materials[__INDEX__][quantity]" value="1">
+                                        <input type="hidden" class="material-unit" name="materials[__INDEX__][unit]">
+                                    </div>
+
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-outline-danger w-100 remove-material">Remove</button>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <label class="form-label">Material Remarks</label>
+                                        <input type="text" class="form-control" name="materials[__INDEX__][remarks]" placeholder="Optional material remarks">
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                    <div class="card-body">
+                        <h5 class="mb-4">Status Update</h5>
+
+                        <label class="form-label">Update Job Order Status</label>
+                        <select name="status_update_id" class="form-select">
+                            <option value="">Keep current status</option>
+                            @foreach($statuses as $status)
+                                <option value="{{ $status->id }}" {{ (string) old('status_update_id') === (string) $status->id ? 'selected' : '' }}>
+                                    {{ $status->name ?? ('Status #' . $status->id) }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                    <div class="card-body">
+                        <h5 class="mb-3">Photo Documentation</h5>
+
+                        <input type="file"
+                               name="photos[]"
+                               class="form-control"
+                               accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                               multiple>
+
+                        <small class="text-muted d-block mt-2">
+                            Upload up to 5 photos. Accepted: JPG, PNG, WEBP. Max 4MB each.
+                        </small>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <a href="{{ route('service.job-orders.show', $jobOrder->id) }}" class="btn btn-light">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Save Report</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const wrap = document.getElementById('materialsWrap');
+    const template = document.getElementById('materialRowTemplate');
+    const addBtn = document.getElementById('addMaterialBtn');
+    let index = 0;
+
+    function refreshSerials(row) {
+        const inv = row.querySelector('.material-inventory');
+        const serial = row.querySelector('.material-serial');
+        const qty = row.querySelector('.material-qty');
+        const unit = row.querySelector('.material-unit');
+
+        const selected = inv.options[inv.selectedIndex];
+        const itemId = selected ? selected.getAttribute('data-item-id') : '';
+        const isSerialized = selected ? selected.getAttribute('data-serialized') === '1' : false;
+        const unitName = selected ? (selected.getAttribute('data-unit') || '') : '';
+
+        unit.value = unitName;
+
+        Array.from(serial.options).forEach(opt => {
+            if (!opt.value) {
+                opt.hidden = false;
+                return;
+            }
+            opt.hidden = opt.getAttribute('data-item-id') !== itemId;
+        });
+
+        serial.value = '';
+
+        if (isSerialized) {
+            qty.value = 1;
+            qty.readOnly = true;
+        } else {
+            qty.readOnly = false;
+        }
+    }
+
+    function addRow() {
+        const html = template.innerHTML.replaceAll('__INDEX__', index);
+        const holder = document.createElement('div');
+        holder.innerHTML = html.trim();
+        const row = holder.firstElementChild;
+        wrap.appendChild(row);
+
+        row.querySelector('.material-inventory').addEventListener('change', function () {
+            refreshSerials(row);
+        });
+
+        row.querySelector('.remove-material').addEventListener('click', function () {
+            row.remove();
+        });
+
+        refreshSerials(row);
+        index++;
+    }
+
+    addBtn.addEventListener('click', addRow);
+})();
+</script>
+</x-app-layout>

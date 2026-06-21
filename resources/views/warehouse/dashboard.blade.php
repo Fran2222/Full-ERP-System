@@ -109,10 +109,10 @@
             @endforeach
         </div>
 
-        <div class="row g-4">
+        <div class="row g-4 warehouse-dashboard-recent-row">
             @if($canAccess('warehouse.ledger.view'))
-                <div class="col-xl-8">
-                    <div class="card rounded-4 border-0 shadow-sm h-100">
+                <div class="col-12 d-flex">
+                    <div class="card rounded-4 border-0 shadow-sm h-100 w-100 warehouse-recent-movements-card">
                         <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
                             <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
                                 <div class="d-flex align-items-center gap-3">
@@ -130,228 +130,211 @@
                                     </div>
                                 </div>
 
-                                <a href="{{ route('warehouse.ledger') }}" class="btn btn-outline-primary">
-                                    View Ledger
-                                </a>
+                                <div class="warehouse-recent-actions">
+                                    <div class="warehouse-recent-search">
+                                        <span class="warehouse-recent-search-icon">
+                                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                                                <path d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                            </svg>
+                                        </span>
+                                        <input type="search"
+                                               class="form-control warehouse-recent-search-input"
+                                               placeholder="Search movements..."
+                                               value="{{ $recentSearch ?? request('recent_search') }}"
+                                               autocomplete="off"
+                                               data-recent-movement-search>
+                                    </div>
+
+                                    <a href="{{ route('warehouse.ledger') }}" class="btn btn-outline-primary warehouse-soft-btn warehouse-soft-btn-sm">
+                                        View Ledger
+                                    </a>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="card-body px-4 pb-4">
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0 warehouse-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Reference</th>
-                                            <th>Type</th>
-                                            <th>Item</th>
-                                            <th>Location</th>
-                                            <th class="text-end">Qty</th>
-                                            <th class="text-end">Balance</th>
-                                        </tr>
-                                    </thead>
-
-                                    <tbody>
-                                        @forelse($recentMovements as $movement)
-                                            @php
-                                                $itemCode = $movement->item?->code ?: $movement->item?->item_code;
-                                                $itemName = $movement->item?->name ?: $movement->item?->item_name;
-
-                                                $locationName = $movement->location?->location_name
-                                                    ?? $movement->location?->name
-                                                    ?? '-';
-
-                                                $branchName = $movement->location?->branch?->name ?? '-';
-
-                                                $qty = (float) $movement->quantity;
-                                                $typeLabel = ucwords(str_replace('_', ' ', $movement->movement_type));
-                                            @endphp
-
-                                            <tr>
-                                                <td class="text-secondary">
-                                                    {{ optional($movement->transaction_date ?? $movement->created_at)->format('M d, Y h:i A') }}
-                                                </td>
-
-                                                <td>
-                                                    <span class="fw-semibold text-primary">
-                                                        {{ $movement->reference_type ?: '-' }}
-                                                    </span>
-                                                </td>
-
-                                                <td>
-                                                    @if($qty >= 0)
-                                                        <span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">
-                                                            {{ $typeLabel }}
-                                                        </span>
-                                                    @else
-                                                        <span class="badge rounded-pill bg-danger-subtle text-danger px-3 py-2">
-                                                            {{ $typeLabel }}
-                                                        </span>
-                                                    @endif
-                                                </td>
-
-                                                <td>
-                                                    <div class="fw-semibold text-dark">{{ $itemName ?: '-' }}</div>
-                                                    <div class="small text-secondary">{{ $itemCode ?: '-' }}</div>
-                                                </td>
-
-                                                <td>
-                                                    <div class="fw-semibold text-dark">{{ $locationName }}</div>
-                                                    <div class="small text-secondary">{{ $branchName }}</div>
-                                                </td>
-
-                                                <td class="text-end">
-                                                    <span class="fw-bold {{ $qty >= 0 ? 'text-success' : 'text-danger' }}">
-                                                        {{ $qty >= 0 ? '+' : '' }}{{ number_format($qty, 2) }}
-                                                    </span>
-                                                </td>
-
-                                                <td class="text-end fw-semibold">
-                                                    {{ number_format((float) $movement->balance_after, 2) }}
-                                                </td>
-                                            </tr>
-                                        @empty
-                                            <tr>
-                                                <td colspan="7" class="warehouse-empty-td">
-                                                    <div class="warehouse-empty-state">
-                                                        <span class="warehouse-empty-icon">
-                                                            <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
-                                                                <path d="M5 5H19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                                                <path d="M5 12H19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                                                <path d="M5 19H13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                                                            </svg>
-                                                        </span>
-                                                        <div class="fw-semibold text-secondary">No stock movements yet.</div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        @endforelse
-                                    </tbody>
-                                </table>
+                        <div class="card-body px-4 pb-4 pt-3 d-flex flex-column">
+                            <div id="warehouseRecentMovementsBox" data-recent-movements-box data-recent-url="{{ request()->url() }}">
+                                @include('warehouse.partials.recent-movements-table', ['recentMovements' => $recentMovements])
                             </div>
                         </div>
                     </div>
                 </div>
             @endif
 
-            @if($canAccess('warehouse.inventory.view') || $canAccess('warehouse.items.view'))
-                <div class="{{ $canAccess('warehouse.ledger.view') ? 'col-xl-4' : 'col-xl-12' }}">
-                    @if($canAccess('warehouse.items.view') || $canAccess('warehouse.inventory.view'))
-                        <div class="card rounded-4 border-0 shadow-sm mb-4 warehouse-side-card">
-                            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
-                                <div class="d-flex align-items-center gap-3">
-                                    <span class="warehouse-section-icon warehouse-section-icon-red">
-                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        </div>
+
+        @if($canAccess('warehouse.inventory.view') || $canAccess('warehouse.items.view'))
+            <div class="row g-4 mb-4 warehouse-dashboard-alert-row">
+                @if($canAccess('warehouse.items.view') || $canAccess('warehouse.inventory.view'))
+                    <div class="col-xl-6 d-flex">
+                        <div class="card rounded-4 border-0 shadow-sm warehouse-dashboard-info-card warehouse-low-stock-card h-100 w-100">
+                        <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="warehouse-section-icon warehouse-section-icon-red">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                        <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                        <path d="M12 17H12.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                                        <path d="M10.29 3.86L2.82 16.34C2.41 17.03 2.2 17.37 2.23 17.66C2.25 17.92 2.39 18.15 2.6 18.3C2.84 18.47 3.24 18.47 4.04 18.47H19.96C20.76 18.47 21.16 18.47 21.4 18.3C21.61 18.15 21.75 17.92 21.77 17.66C21.8 17.37 21.59 17.03 21.18 16.34L13.71 3.86C13.31 3.2 13.12 2.87 12.86 2.76C12.63 2.66 12.37 2.66 12.14 2.76C11.88 2.87 11.69 3.2 11.29 3.86Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Low Stock Alerts</h4>
+                                    <p class="text-secondary mb-0">Items at or below reorder level.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card-body px-4 pb-4">
+                            @forelse($lowStockItems as $item)
+                                @php
+                                    $itemCode = $item->code ?: $item->item_code;
+                                    $itemName = $item->name ?: $item->item_name;
+                                    $reorderLevel = $item->reorder_level ?? $item->minimum_stock ?? 0;
+                                @endphp
+
+                                <div class="warehouse-stock-list-row border-bottom">
+                                    <div class="warehouse-stock-list-info">
+                                        <div class="fw-semibold text-dark warehouse-stock-title" title="{{ $itemName ?: '-' }}">{{ $itemName ?: '-' }}</div>
+                                        <div class="small text-secondary warehouse-stock-meta" title="{{ $itemCode ?: '-' }}">{{ $itemCode ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="text-end flex-shrink-0">
+                                        <div class="fw-bold text-danger warehouse-stock-qty">
+                                            {{ number_format((float) ($item->total_quantity ?? 0), 2) }}
+                                        </div>
+                                        <div class="small text-secondary warehouse-stock-meta">
+                                            Reorder: {{ number_format((float) $reorderLevel, 2) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="warehouse-side-empty">
+                                    <span class="warehouse-mini-empty-icon text-danger">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                                             <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                                             <path d="M12 17H12.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
                                             <path d="M10.29 3.86L2.82 16.34C2.41 17.03 2.2 17.37 2.23 17.66C2.25 17.92 2.39 18.15 2.6 18.3C2.84 18.47 3.24 18.47 4.04 18.47H19.96C20.76 18.47 21.16 18.47 21.4 18.3C21.61 18.15 21.75 17.92 21.77 17.66C21.8 17.37 21.59 17.03 21.18 16.34L13.71 3.86C13.31 3.2 13.12 2.87 12.86 2.76C12.63 2.66 12.37 2.66 12.14 2.76C11.88 2.87 11.69 3.2 11.29 3.86Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                                         </svg>
                                     </span>
-                                    <div>
-                                        <h4 class="card-title mb-1 fw-bold">Low Stock Alerts</h4>
-                                        <p class="text-secondary mb-0">Items at or below reorder level.</p>
-                                    </div>
+                                    <div class="text-secondary">No low stock item.</div>
+                                </div>
+                            @endforelse
+
+                            @if(method_exists($lowStockItems, 'hasPages') && $lowStockItems->hasPages())
+                                <nav class="warehouse-card-pagination mt-3" aria-label="Low stock alerts pagination">
+                                    <ul class="pagination pagination-sm mb-0 justify-content-end">
+                                        <li class="page-item {{ $lowStockItems->onFirstPage() ? 'disabled' : '' }}">
+                                            <a class="page-link" href="{{ $lowStockItems->previousPageUrl() ?: '#' }}">Previous</a>
+                                        </li>
+
+                                        @for($page = 1; $page <= $lowStockItems->lastPage(); $page++)
+                                            <li class="page-item {{ $lowStockItems->currentPage() === $page ? 'active' : '' }}" @if($lowStockItems->currentPage() === $page) aria-current="page" @endif>
+                                                <a class="page-link" href="{{ $lowStockItems->url($page) }}">{{ $page }}</a>
+                                            </li>
+                                        @endfor
+
+                                        <li class="page-item {{ $lowStockItems->hasMorePages() ? '' : 'disabled' }}">
+                                            <a class="page-link" href="{{ $lowStockItems->nextPageUrl() ?: '#' }}">Next</a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            @endif
+                        </div>
+                    </div>
+
+                    </div>
+                @endif
+
+                @if($canAccess('warehouse.inventory.view'))
+                    <div class="col-xl-6 d-flex">
+                        <div class="card rounded-4 border-0 shadow-sm warehouse-dashboard-info-card warehouse-top-stock-card h-100 w-100">
+                        <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="warehouse-section-icon warehouse-section-icon-green">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                        <path d="M12 3L14.78 8.63L21 9.54L16.5 13.92L17.56 20.11L12 17.19L6.44 20.11L7.5 13.92L3 9.54L9.22 8.63L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h4 class="card-title mb-1 fw-bold">Top Stock</h4>
+                                    <p class="text-secondary mb-0">Highest available quantities.</p>
                                 </div>
                             </div>
-
-                            <div class="card-body px-4 pb-4">
-                                @forelse($lowStockItems as $item)
-                                    @php
-                                        $itemCode = $item->code ?: $item->item_code;
-                                        $itemName = $item->name ?: $item->item_name;
-                                        $reorderLevel = $item->reorder_level ?? $item->minimum_stock ?? 0;
-                                    @endphp
-
-                                    <div class="d-flex justify-content-between align-items-center border-bottom py-3">
-                                        <div>
-                                            <div class="fw-semibold text-dark">{{ $itemName ?: '-' }}</div>
-                                            <div class="small text-secondary">{{ $itemCode ?: '-' }}</div>
-                                        </div>
-
-                                        <div class="text-end">
-                                            <div class="fw-bold text-danger">
-                                                {{ number_format((float) ($item->total_quantity ?? 0), 2) }}
-                                            </div>
-                                            <div class="small text-secondary">
-                                                Reorder: {{ number_format((float) $reorderLevel, 2) }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                @empty
-                                    <div class="warehouse-side-empty">
-                                        <span class="warehouse-mini-empty-icon text-danger">
-                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                                                <path d="M12 9V13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                                                <path d="M12 17H12.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-                                                <path d="M10.29 3.86L2.82 16.34C2.41 17.03 2.2 17.37 2.23 17.66C2.25 17.92 2.39 18.15 2.6 18.3C2.84 18.47 3.24 18.47 4.04 18.47H19.96C20.76 18.47 21.16 18.47 21.4 18.3C21.61 18.15 21.75 17.92 21.77 17.66C21.8 17.37 21.59 17.03 21.18 16.34L13.71 3.86C13.31 3.2 13.12 2.87 12.86 2.76C12.63 2.66 12.37 2.66 12.14 2.76C11.88 2.87 11.69 3.2 11.29 3.86Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                                            </svg>
-                                        </span>
-                                        <div class="text-secondary">No low stock item.</div>
-                                    </div>
-                                @endforelse
-                            </div>
                         </div>
-                    @endif
 
-                    @if($canAccess('warehouse.inventory.view'))
-                        <div class="card rounded-4 border-0 shadow-sm warehouse-side-card">
-                            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
-                                <div class="d-flex align-items-center gap-3">
-                                    <span class="warehouse-section-icon warehouse-section-icon-green">
-                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <div class="card-body px-4 pb-4">
+                            @forelse($topStocks as $stock)
+                                @php
+                                    $itemCode = $stock->item?->code ?: $stock->item?->item_code;
+                                    $itemName = $stock->item?->name ?: $stock->item?->item_name;
+
+                                    $locationName = $stock->location?->location_name
+                                        ?? $stock->location?->name
+                                        ?? '-';
+                                @endphp
+
+                                <div class="warehouse-stock-list-row border-bottom">
+                                    <div class="warehouse-stock-list-info">
+                                        <div class="fw-semibold text-dark warehouse-stock-title" title="{{ $itemName ?: '-' }}">{{ $itemName ?: '-' }}</div>
+                                        <div class="small text-secondary warehouse-stock-meta" title="{{ ($stock->branch?->name ?? '-') . ' / ' . $locationName }}">
+                                            {{ $stock->branch?->name ?? '-' }} / {{ $locationName }}
+                                        </div>
+                                        <div class="small text-secondary warehouse-stock-meta" title="{{ $itemCode ?: '-' }}">{{ $itemCode ?: '-' }}</div>
+                                    </div>
+
+                                    <div class="fw-bold text-success warehouse-stock-qty flex-shrink-0">
+                                        {{ number_format((float) ($stock->quantity ?? 0), 2) }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="warehouse-side-empty">
+                                    <span class="warehouse-mini-empty-icon text-success">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                                             <path d="M12 3L14.78 8.63L21 9.54L16.5 13.92L17.56 20.11L12 17.19L6.44 20.11L7.5 13.92L3 9.54L9.22 8.63L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                                         </svg>
                                     </span>
-                                    <div>
-                                        <h4 class="card-title mb-1 fw-bold">Top Stock</h4>
-                                        <p class="text-secondary mb-0">Highest available quantities.</p>
-                                    </div>
+                                    <div class="text-secondary">No stock yet.</div>
                                 </div>
-                            </div>
+                            @endforelse
 
-                            <div class="card-body px-4 pb-4">
-                                @forelse($topStocks as $stock)
-                                    @php
-                                        $itemCode = $stock->item?->code ?: $stock->item?->item_code;
-                                        $itemName = $stock->item?->name ?: $stock->item?->item_name;
+                            @if(method_exists($topStocks, 'hasPages') && $topStocks->hasPages())
+                                <nav class="warehouse-card-pagination mt-3" aria-label="Top stock pagination">
+                                    <ul class="pagination pagination-sm mb-0 justify-content-end">
+                                        <li class="page-item {{ $topStocks->onFirstPage() ? 'disabled' : '' }}">
+                                            <a class="page-link" href="{{ $topStocks->previousPageUrl() ?: '#' }}">Previous</a>
+                                        </li>
 
-                                        $locationName = $stock->location?->location_name
-                                            ?? $stock->location?->name
-                                            ?? '-';
-                                    @endphp
+                                        @for($page = 1; $page <= $topStocks->lastPage(); $page++)
+                                            <li class="page-item {{ $topStocks->currentPage() === $page ? 'active' : '' }}" @if($topStocks->currentPage() === $page) aria-current="page" @endif>
+                                                <a class="page-link" href="{{ $topStocks->url($page) }}">{{ $page }}</a>
+                                            </li>
+                                        @endfor
 
-                                    <div class="d-flex justify-content-between align-items-center border-bottom py-3">
-                                        <div>
-                                            <div class="fw-semibold text-dark">{{ $itemName ?: '-' }}</div>
-                                            <div class="small text-secondary">
-                                                {{ $stock->branch?->name ?? '-' }} / {{ $locationName }}
-                                            </div>
-                                            <div class="small text-secondary">{{ $itemCode ?: '-' }}</div>
-                                        </div>
-
-                                        <div class="fw-bold text-success">
-                                            {{ number_format((float) ($stock->quantity ?? 0), 2) }}
-                                        </div>
-                                    </div>
-                                @empty
-                                    <div class="warehouse-side-empty">
-                                        <span class="warehouse-mini-empty-icon text-success">
-                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                                                <path d="M12 3L14.78 8.63L21 9.54L16.5 13.92L17.56 20.11L12 17.19L6.44 20.11L7.5 13.92L3 9.54L9.22 8.63L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                                            </svg>
-                                        </span>
-                                        <div class="text-secondary">No stock yet.</div>
-                                    </div>
-                                @endforelse
-                            </div>
+                                        <li class="page-item {{ $topStocks->hasMorePages() ? '' : 'disabled' }}">
+                                            <a class="page-link" href="{{ $topStocks->nextPageUrl() ?: '#' }}">Next</a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            @endif
                         </div>
-                    @endif
-                </div>
-            @endif
-        </div>
+                    </div>
+
+                    </div>
+                @endif
+            </div>
+        @endif
+
     </div>
 
     <style>
+        .warehouse-dashboard-alert-row {
+            margin-bottom: 1.5rem;
+        }
+
+        .warehouse-dashboard-recent-row {
+            margin-bottom: 2rem;
+        }
+
         .warehouse-stat-card {
             transition: all 0.18s ease-in-out;
             overflow: hidden;
@@ -412,26 +395,186 @@
             background: #fef2f2;
         }
 
-        .warehouse-side-card {
-            min-height: 190px;
+        .warehouse-soft-btn-sm {
+            min-width: 112px;
+            height: 38px;
+            padding: 0.45rem 1rem !important;
+            border-radius: 0.65rem !important;
+            font-size: 0.92rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .warehouse-recent-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .warehouse-recent-search {
+            position: relative;
+            width: 260px;
+            max-width: 100%;
+        }
+
+        .warehouse-recent-search-icon {
+            position: absolute;
+            top: 50%;
+            left: 13px;
+            transform: translateY(-50%);
+            z-index: 2;
+            color: #8a94a6;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .warehouse-recent-search-input {
+            height: 38px;
+            border-radius: 0.65rem;
+            border: 1px solid #e4e8f1;
+            padding: 0.45rem 0.85rem 0.45rem 2.45rem;
+            font-size: 0.92rem;
+            font-weight: 600;
+            color: #26334d;
+            box-shadow: none !important;
+        }
+
+        .warehouse-recent-search-input:focus {
+            border-color: #3f5cff;
+        }
+
+
+        .warehouse-stock-list-row {
+            min-height: 62px;
+            padding: 0.55rem 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .warehouse-stock-list-info {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .warehouse-stock-title,
+        .warehouse-stock-meta {
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .warehouse-stock-title {
+            font-size: 0.95rem;
+            line-height: 1.2;
+        }
+
+        .warehouse-stock-meta {
+            line-height: 1.2;
+        }
+
+        .warehouse-stock-qty {
+            min-width: 72px;
+            text-align: right;
+            font-size: 0.95rem;
+        }
+
+        .warehouse-card-pagination {
+            padding-top: 0.75rem;
+            border-top: 1px solid #edf0f5;
+        }
+
+        .warehouse-card-pagination .page-link {
+            min-width: 34px;
+            height: 32px;
+            padding: 0 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-color: #e4e8f1;
+            color: #3f5cff;
+            font-size: 12px;
+            font-weight: 700;
+            box-shadow: none !important;
+        }
+
+        .warehouse-card-pagination .page-item.active .page-link {
+            background: #3f5cff;
+            border-color: #3f5cff;
+            color: #fff;
+        }
+
+        .warehouse-card-pagination .page-item.disabled .page-link {
+            color: #a0a8b8;
+            background: #f8fafc;
+            pointer-events: none;
+        }
+
+        .warehouse-dashboard-info-card {
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .warehouse-dashboard-info-card .card-body {
+            flex: 1 1 auto;
+            overflow: hidden;
+        }
+
+        .warehouse-dashboard-info-card .border-bottom:last-child {
+            border-bottom: 0 !important;
+        }
+
+        .warehouse-recent-movements-card {
+            min-height: auto;
+        }
+
+        .warehouse-recent-movements-card .card-header {
+            padding-bottom: 0.75rem !important;
+        }
+
+        .warehouse-recent-table-wrap {
+            width: 100%;
+            overflow-x: hidden;
+            overflow-y: visible;
+            flex: 1 1 auto;
+        }
+
+        .warehouse-table {
+            width: 100%;
+            min-width: 0;
+            table-layout: fixed;
         }
 
         .warehouse-table thead th {
             background: #f4f6fb;
             color: #8a94a6;
-            font-size: 12px;
-            font-weight: 700;
+            font-size: 11px;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             border-bottom: 0;
-            padding: 14px 16px;
+            padding: 12px 14px;
             white-space: nowrap;
+            vertical-align: middle;
         }
 
         .warehouse-table tbody td {
-            padding: 16px;
+            padding: 11px 14px;
             border-bottom: 1px solid #edf0f5;
             vertical-align: middle;
+            font-size: 13px;
+            line-height: 1.25;
+            overflow: hidden;
         }
 
         .warehouse-table tbody tr {
@@ -442,13 +585,118 @@
             background: #f8faff;
         }
 
+        .warehouse-recent-table th:nth-child(1),
+        .warehouse-recent-table td:nth-child(1) {
+            width: 16%;
+        }
+
+        .warehouse-recent-table th:nth-child(2),
+        .warehouse-recent-table td:nth-child(2) {
+            width: 18%;
+        }
+
+        .warehouse-recent-table th:nth-child(3),
+        .warehouse-recent-table td:nth-child(3) {
+            width: 12%;
+        }
+
+        .warehouse-recent-table th:nth-child(4),
+        .warehouse-recent-table td:nth-child(4) {
+            width: 19%;
+        }
+
+        .warehouse-recent-table th:nth-child(5),
+        .warehouse-recent-table td:nth-child(5) {
+            width: 20%;
+        }
+
+        .warehouse-recent-table th:nth-child(6),
+        .warehouse-recent-table td:nth-child(6) {
+            width: 7.5%;
+        }
+
+        .warehouse-recent-table th:nth-child(7),
+        .warehouse-recent-table td:nth-child(7) {
+            width: 7.5%;
+        }
+
+        .warehouse-cell-nowrap {
+            white-space: nowrap;
+        }
+
+        .warehouse-cell-truncate {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .warehouse-recent-table .badge {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 0.35rem 0.6rem !important;
+            font-size: 11px;
+            border-radius: 999px;
+        }
+
+        .warehouse-dashboard-pagination {
+            border-top: 1px solid #edf0f5;
+        }
+
+        .warehouse-recent-loading {
+            opacity: 0.78;
+            pointer-events: none;
+            transition: opacity 0.12s ease-in-out;
+        }
+
+        .warehouse-page-btn,
+        .warehouse-page-indicator {
+            min-width: 78px;
+            height: 34px;
+            padding: 0 12px;
+            border: 1px solid #e4e8f1;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            background: #fff;
+        }
+
+        .warehouse-page-btn {
+            color: #3f5cff;
+        }
+
+        .warehouse-page-btn:hover {
+            color: #fff;
+            background: #3f5cff;
+            border-color: #3f5cff;
+        }
+
+        .warehouse-page-btn.disabled {
+            color: #a0a8b8;
+            background: #f8fafc;
+            pointer-events: none;
+        }
+
+        .warehouse-page-indicator {
+            min-width: 58px;
+            color: #606b80;
+            background: #f8fafc;
+        }
+
         .warehouse-empty-td {
-            height: 190px;
+            height: 150px;
             padding: 0 !important;
         }
 
         .warehouse-empty-state {
-            min-height: 190px;
+            min-height: 150px;
             width: 100%;
             display: flex;
             align-items: center;
@@ -456,18 +704,41 @@
             flex-direction: column;
             gap: 10px;
             text-align: center;
+            background: #f8fafc;
         }
 
         .warehouse-empty-icon {
-            width: 52px;
-            height: 52px;
-            border-radius: 18px;
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
             color: #94a3b8;
-            background: #f8fafc;
+            background: #fff;
+        }
+
+        .warehouse-side-stack {
+            height: 100%;
+            min-height: 100%;
+            display: grid;
+            grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1.5rem;
+        }
+
+        .warehouse-side-card {
+            min-height: 0 !important;
+            height: 100% !important;
+            margin-bottom: 0 !important;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .warehouse-side-card .card-body {
+            flex: 1 1 auto;
+            overflow: hidden;
         }
 
         .warehouse-side-empty {
             min-height: 96px;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -482,5 +753,205 @@
             border-radius: 14px;
             background: #f8fafc;
         }
+
+
+        .warehouse-cell-date,
+        .warehouse-cell-truncate,
+        .warehouse-type-badge {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .warehouse-standard-pagination .page-link {
+            min-width: 42px;
+            height: 36px;
+            padding: 0 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-color: #e4e8f1;
+            color: #3f5cff;
+            font-size: 13px;
+            font-weight: 700;
+            box-shadow: none !important;
+        }
+
+        .warehouse-standard-pagination .page-item:first-child .page-link {
+            border-top-left-radius: 10px;
+            border-bottom-left-radius: 10px;
+        }
+
+        .warehouse-standard-pagination .page-item:last-child .page-link {
+            border-top-right-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+
+        .warehouse-standard-pagination .page-item.active .page-link {
+            background: #3f5cff;
+            border-color: #3f5cff;
+            color: #fff;
+        }
+
+        .warehouse-standard-pagination .page-item.disabled .page-link {
+            color: #a0a8b8;
+            background: #f8fafc;
+            pointer-events: none;
+        }
+
+        .warehouse-standard-pagination .page-link:hover {
+            background: #eef2ff;
+            border-color: #cfd7ff;
+            color: #3f5cff;
+        }
+
+        .warehouse-standard-pagination .page-item.active .page-link:hover {
+            background: #3f5cff;
+            color: #fff;
+        }
+
+        @media (max-width: 1399.98px) {
+            .warehouse-table thead th,
+            .warehouse-table tbody td {
+                padding-left: 8px;
+                padding-right: 8px;
+                font-size: 12px;
+            }
+
+        }
+
+        @media (max-width: 1199.98px) {
+            .warehouse-side-stack {
+                grid-template-rows: auto auto;
+            }
+
+            .warehouse-side-card {
+                min-height: 190px !important;
+            }
+        }
     </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const recentBox = document.querySelector('[data-recent-movements-box]');
+            const recentSearchInput = document.querySelector('[data-recent-movement-search]');
+
+            if (!recentBox) {
+                return;
+            }
+
+            let searchTimer = null;
+            let activeController = null;
+
+            function getBaseRecentUrl() {
+                // Important for deployments inside a subfolder like /wizhopeui.
+                // Do not use route() here because it may generate /warehouse instead of /wizhopeui/warehouse.
+                const url = new URL(recentBox.dataset.recentUrl || window.location.href, window.location.origin);
+                url.search = '';
+                return url;
+            }
+
+            function buildRecentUrl(pageUrl = null) {
+                const url = pageUrl
+                    ? new URL(pageUrl, window.location.origin)
+                    : getBaseRecentUrl();
+
+                url.searchParams.set('warehouse_recent_ajax', '1');
+                url.searchParams.set('_ts', Date.now().toString());
+
+                const searchValue = recentSearchInput ? recentSearchInput.value.trim() : '';
+                if (searchValue.length > 0) {
+                    url.searchParams.set('recent_search', searchValue);
+
+                    // Only reset to page 1 when typing a new search.
+                    // When clicking pagination, keep the clicked page number.
+                    if (!pageUrl) {
+                        url.searchParams.set('recent_page', '1');
+                    }
+                } else {
+                    url.searchParams.delete('recent_search');
+                }
+
+                return url;
+            }
+
+            function loadRecentMovements(pageUrl = null) {
+                const url = buildRecentUrl(pageUrl);
+
+                if (activeController) {
+                    activeController.abort();
+                }
+
+                activeController = new AbortController();
+                recentBox.classList.add('warehouse-recent-loading');
+
+                fetch(url.toString(), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html',
+                        'Cache-Control': 'no-cache',
+                    },
+                    credentials: 'same-origin',
+                    signal: activeController.signal,
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error('Recent movements request failed. HTTP ' + response.status);
+                        }
+
+                        return response.text();
+                    })
+                    .then(function (html) {
+                        recentBox.innerHTML = html;
+                    })
+                    .catch(function (error) {
+                        if (error.name !== 'AbortError') {
+                            console.error(error);
+                            recentBox.innerHTML = '<div class="alert alert-danger mb-0">Unable to load recent stock movements. Please refresh the page.</div>';
+                        }
+                    })
+                    .finally(function () {
+                        recentBox.classList.remove('warehouse-recent-loading');
+                    });
+            }
+
+            recentBox.addEventListener('click', function (event) {
+                const link = event.target.closest('.warehouse-standard-pagination a.page-link');
+
+                if (!link || link.getAttribute('href') === '#' || link.closest('.page-item.disabled')) {
+                    return;
+                }
+
+                event.preventDefault();
+                loadRecentMovements(link.href);
+            });
+
+            if (recentSearchInput) {
+                recentSearchInput.addEventListener('input', function () {
+                    window.clearTimeout(searchTimer);
+
+                    searchTimer = window.setTimeout(function () {
+                        loadRecentMovements(null);
+                    }, 180);
+                });
+
+                recentSearchInput.addEventListener('search', function () {
+                    loadRecentMovements(null);
+                });
+
+                recentSearchInput.addEventListener('keyup', function () {
+                    window.clearTimeout(searchTimer);
+
+                    searchTimer = window.setTimeout(function () {
+                        loadRecentMovements(null);
+                    }, 180);
+                });
+            }
+        });
+    </script>
+
+
 </x-app-layout>

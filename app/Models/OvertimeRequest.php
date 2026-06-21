@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class OvertimeRequest extends Model
 {
@@ -101,6 +102,35 @@ class OvertimeRequest extends Model
             'double_holiday' => 'G. Double Holiday',
             default => 'Waiting for computation',
         };
+    }
+
+
+
+    public function getOvertimeRequestNoAttribute(): string
+    {
+        $baseDate = $this->date_filed ?: ($this->overtime_date ?: $this->created_at);
+        $year = $baseDate ? Carbon::parse($baseDate)->format('Y') : now()->format('Y');
+
+        $sequenceIds = static::query()
+            ->select(['id', 'date_filed', 'overtime_date', 'created_at'])
+            ->get()
+            ->filter(function ($request) use ($year) {
+                $requestDate = $request->date_filed ?: ($request->overtime_date ?: $request->created_at);
+
+                return $requestDate && Carbon::parse($requestDate)->format('Y') === (string) $year;
+            })
+            ->sortBy(function ($request) {
+                $requestDate = $request->date_filed ?: ($request->overtime_date ?: $request->created_at);
+
+                return Carbon::parse($requestDate)->format('Y-m-d H:i:s').'-'.str_pad((string) $request->id, 10, '0', STR_PAD_LEFT);
+            })
+            ->pluck('id')
+            ->values();
+
+        $position = $sequenceIds->search($this->id);
+        $sequence = $position === false ? $sequenceIds->count() + 1 : $position + 1;
+
+        return 'OT-'.$year.'-'.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
 
     public function getApprovalFlowAttribute(): array

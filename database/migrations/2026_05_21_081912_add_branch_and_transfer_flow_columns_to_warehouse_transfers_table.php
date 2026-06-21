@@ -75,3 +75,4 @@ class AddBranchAndTransferFlowColumnsToWarehouseTransfersTable extends Migration
         });
     }
 }
+

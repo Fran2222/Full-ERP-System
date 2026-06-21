@@ -83,6 +83,87 @@
             margin: 0 !important;
             min-width: 120px;
         }
+
+
+        /* Departments table 125% scale fix: keep Status and Action visible without horizontal drag */
+        .wmc-department-table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed;
+        }
+
+        .wmc-department-table th,
+        .wmc-department-table td {
+            vertical-align: middle !important;
+        }
+
+        .wmc-department-table .wmc-col-id {
+            width: 70px !important;
+        }
+
+        .wmc-department-table .wmc-col-name {
+            width: 26% !important;
+        }
+
+        .wmc-department-table .wmc-col-designation {
+            width: 32% !important;
+        }
+
+        .wmc-department-table .wmc-col-status {
+            width: 105px !important;
+            text-align: center !important;
+        }
+
+        .wmc-department-table .wmc-col-action {
+            width: 120px !important;
+            text-align: center !important;
+        }
+
+        .wmc-department-table .wmc-department-name,
+        .wmc-department-table .wmc-designation-summary,
+        .wmc-department-table .wmc-designation-preview {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wmc-department-table .wmc-designation-summary {
+            font-weight: 500;
+            color: #1f2937;
+            margin-bottom: 2px;
+        }
+
+        .wmc-department-table .wmc-designation-preview {
+            color: #6b7280;
+        }
+
+        .wmc-department-table .wmc-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 58px;
+            white-space: nowrap;
+        }
+
+        .wmc-department-table .wmc-department-action-wrap {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 1199.98px) {
+            .wmc-department-table {
+                min-width: 860px !important;
+            }
+
+            .wmc-department-table .wmc-col-name {
+                width: 24% !important;
+            }
+
+            .wmc-department-table .wmc-col-designation {
+                width: 30% !important;
+            }
+        }
     </style>
 
     <div class="container-fluid content-inner mt-n5 py-0">
@@ -200,46 +281,46 @@
                             <table class="table table-striped table-bordered align-middle mb-0 wmc-department-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 90px;">
+                                        <th class="wmc-col-id">
                                             <a href="{{ $sortUrl('id') }}" class="wmc-sort-link">
                                                 ID {!! $sortIconSvg('id') !!}
                                             </a>
                                         </th>
 
-                                        <th>
+                                        <th class="wmc-col-name">
                                             <a href="{{ $sortUrl('name') }}" class="wmc-sort-link">
                                                 Name {!! $sortIconSvg('name') !!}
                                             </a>
                                         </th>
 
-                                        <th>
+                                        <th class="wmc-col-designation">
                                             <a href="{{ $sortUrl('designation') }}" class="wmc-sort-link">
                                                 Designation {!! $sortIconSvg('designation') !!}
                                             </a>
                                         </th>
 
-                                        <th style="width: 130px;">Status</th>
-                                        <th style="width: 120px;" class="text-center">Action</th>
+                                        <th class="wmc-col-status">Status</th>
+                                        <th class="wmc-col-action text-center">Action</th>
                                     </tr>
                                 </thead>
 
                                 <tbody>
                                     @forelse($departments as $department)
                                         <tr>
-                                            <td>{{ $department->id }}</td>
-                                            <td>{{ $department->name }}</td>
-                                            <td>
+                                            <td class="wmc-col-id">{{ $department->id }}</td>
+                                            <td class="wmc-col-name"><span class="wmc-department-name">{{ $department->name }}</span></td>
+                                            <td class="wmc-col-designation">
                                                 @php
                                                     $designationNames = $department->positions->pluck('name')->filter()->values();
                                                 @endphp
 
                                                 @if($designationNames->isNotEmpty())
-                                                    <div>
+                                                    <span class="wmc-designation-summary">
                                                         {{ $department->positions_count }}
                                                         {{ \Illuminate\Support\Str::plural('designation', $department->positions_count) }}
-                                                    </div>
+                                                    </span>
 
-                                                    <small class="text-secondary">
+                                                    <small class="wmc-designation-preview" title="{{ $designationNames->implode(', ') }}">
                                                         {{ $designationNames->take(3)->implode(', ') }}{{ $designationNames->count() > 3 ? ' ...' : '' }}
                                                     </small>
                                                 @else
@@ -247,13 +328,13 @@
                                                 @endif
                                             </td>
 
-                                            <td>
-                                                <span class="badge {{ $department->status === 'active' ? 'bg-success' : 'bg-danger' }}">
+                                            <td class="wmc-col-status">
+                                                <span class="badge wmc-status-badge {{ $department->status === 'active' ? 'bg-success' : 'bg-danger' }}">
                                                     {{ ucfirst($department->status) }}
                                                 </span>
                                             </td>
 
-                                            <td class="wmc-department-action-cell">
+                                            <td class="wmc-col-action wmc-department-action-cell">
                                                 @php
                                                     $currentUser = auth()->user();
 

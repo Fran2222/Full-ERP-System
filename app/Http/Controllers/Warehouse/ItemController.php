@@ -7,6 +7,7 @@ use App\Models\Warehouse\WarehouseCategory;
 use App\Models\Warehouse\WarehouseItem;
 use App\Models\Warehouse\WarehouseSupplier;
 use App\Models\Warehouse\WarehouseUnit;
+use App\Models\Warehouse\WarehouseTransfer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -80,41 +81,27 @@ class ItemController extends Controller
             return true;
         }
 
-        $levels = array_values(array_filter([
-            $this->moduleAccessLevel('warehouse'),
-            $this->moduleAccessLevel('inventory'),
-        ]));
+        /*
+         * Only Warehouse Admin can maintain item master data.
+         * Warehouse Manager/Staff may view item details from Inventory, but they must not
+         * access Items list/create/edit/delete even if old permissions still exist.
+         */
+        $warehouseLevel = $this->normalizeLevel($this->moduleAccessLevel('warehouse') ?? '');
 
-        $normalizedLevels = array_map(fn ($level) => $this->normalizeLevel($level), $levels);
-
-        $hasManagerLevel = collect($normalizedLevels)->contains(fn ($level) => in_array($level, [
+        if (in_array($warehouseLevel, [
             'admin',
-            'manager',
             'administrator',
             'owner',
-        ], true));
-
-        if ($hasManagerLevel) {
+            'system_admin',
+            'system admin',
+            'super admin',
+            'super-admin',
+            'superadmin',
+        ], true)) {
             return true;
         }
 
-        $isStaffOrViewer = collect($normalizedLevels)->contains(fn ($level) => in_array($level, [
-            'staff',
-            'viewer',
-            'view',
-            'read only',
-            'read-only',
-            'readonly',
-            'employee',
-            'user',
-        ], true));
-
-        if ($isStaffOrViewer) {
-            return false;
-        }
-
-        // Fallback for older accounts without module-assignment rows.
-        return $permission ? $user->can($permission) : false;
+        return false;
     }
 
     private function hasAssignedModule(string $module): bool
@@ -391,8 +378,25 @@ class ItemController extends Controller
                     return '<span class="text-secondary">' . e($supplierName) . '</span>';
                 })
                 ->editColumn('cost_price', function ($row) {
+                    $user = auth()->user();
+
+                    $canViewCostPrice = $user && $user->hasAnyRole([
+                        'Super Admin',
+                        'Super Administrator',
+                        'Admin',
+                        'BOD',
+                        'Bod',
+                        'Board of Directors',
+                        'Board Of Directors',
+                    ]);
+
+                    if (! $canViewCostPrice) {
+                        return '<span class="text-muted d-block text-end">Hidden</span>';
+                    }
+
                     return '<span class="text-end d-block">' . number_format((float) $row->cost_price, 2) . '</span>';
                 })
+
                 ->editColumn('selling_price', function ($row) {
                     return '<span class="text-end d-block">' . number_format((float) $row->selling_price, 2) . '</span>';
                 })
@@ -461,6 +465,38 @@ class ItemController extends Controller
     }
 
 
+
+    private function itemIsSerializedForDisplay(WarehouseItem $item): bool
+    {
+        foreach (['is_serialized', 'serialized', 'has_serials', 'track_serials', 'requires_serials'] as $column) {
+            if (isset($item->{$column})) {
+                return (bool) $item->{$column};
+            }
+        }
+
+        return false;
+    }
+
+    private function availableSerialCountForInventoryRow(WarehouseItem $item, $inventory): float
+    {
+        if (! DB::getSchemaBuilder()->hasTable('warehouse_item_serials')) {
+            return 0;
+        }
+
+        $query = DB::table('warehouse_item_serials')
+            ->where('item_id', $item->id)
+            ->where('location_id', $inventory->location_id)
+            ->whereIn('status', ['available', 'Available']);
+
+        if (is_null($inventory->branch_id)) {
+            $query->whereNull('branch_id');
+        } else {
+            $query->where('branch_id', $inventory->branch_id);
+        }
+
+        return (float) $query->count();
+    }
+
     public function show(WarehouseItem $item)
     {
         $this->access('warehouse.items.view');
@@ -477,11 +513,25 @@ class ItemController extends Controller
             ->orderByDesc('quantity')
             ->get();
 
+        $isSerializedForDisplay = $this->itemIsSerializedForDisplay($item);
+
+        if ($isSerializedForDisplay) {
+            $inventories = $inventories->map(function ($inventory) use ($item) {
+                $inventory->setAttribute('quantity', $this->availableSerialCountForInventoryRow($item, $inventory));
+
+                return $inventory;
+            })->sortByDesc(function ($inventory) {
+                return (float) $inventory->quantity;
+            })->values();
+        }
+
         $movements = $item->stockMovements()
             ->with(['location.branch', 'creator'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
             ->get();
+
+        $this->applyTransferMovementLocationDisplay($movements);
 
         $borrowHistory = $item->serviceUnitBorrows()
             ->with(['employee', 'serial', 'location.branch', 'releasedBy', 'receivedBy'])
@@ -489,9 +539,11 @@ class ItemController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $availableQty = (float) $inventories->sum('quantity');
-        $borrowedQty = (float) $serials->where('status', 'borrowed')->count();
-        $unavailableQty = (float) $serials->whereIn('status', ['for_repair', 'damaged', 'lost'])->count();
+        $availableQty = $isSerializedForDisplay
+            ? (float) $serials->whereIn('status', ['available', 'Available'])->count()
+            : (float) $inventories->sum('quantity');
+        $borrowedQty = (float) $serials->whereIn('status', ['borrowed', 'Borrowed'])->count();
+        $unavailableQty = (float) $serials->whereIn('status', ['for_repair', 'damaged', 'lost', 'For Repair', 'Damaged', 'Lost'])->count();
         $onHandQty = $availableQty + $borrowedQty + $unavailableQty;
 
         $canManageItem = $this->canManageItemMasterData('warehouse.items.edit');
@@ -508,6 +560,59 @@ class ItemController extends Controller
             'onHandQty',
             'canManageItem'
         ));
+    }
+
+    private function applyTransferMovementLocationDisplay($movements): void
+    {
+        $transferMovements = $movements->filter(function ($movement) {
+            return in_array((string) $movement->movement_type, ['transfer_in', 'transfer_out', 'transfer_cancelled'], true);
+        });
+
+        if ($transferMovements->isEmpty()) {
+            return;
+        }
+
+        $referenceIds = $transferMovements->pluck('reference_id')->filter()->unique()->values();
+        $referenceTypes = $transferMovements->pluck('reference_type')->filter()->unique()->values();
+
+        $transfers = WarehouseTransfer::with(['fromLocation', 'toLocation', 'fromBranch', 'toBranch'])
+            ->where(function ($query) use ($referenceIds, $referenceTypes) {
+                if ($referenceIds->isNotEmpty()) {
+                    $query->whereIn('id', $referenceIds);
+                }
+
+                if ($referenceTypes->isNotEmpty()) {
+                    $method = $referenceIds->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('transfer_no', $referenceTypes);
+                }
+            })
+            ->get();
+
+        $byId = $transfers->keyBy('id');
+        $byNo = $transfers->keyBy('transfer_no');
+
+        $movements->each(function ($movement) use ($byId, $byNo) {
+            $type = (string) $movement->movement_type;
+            $transfer = $movement->reference_id ? $byId->get($movement->reference_id) : null;
+            $transfer = $transfer ?: $byNo->get((string) $movement->reference_type);
+
+            if (! $transfer || ! in_array($type, ['transfer_in', 'transfer_out', 'transfer_cancelled'], true)) {
+                $movement->location_display_name = $movement->location?->location_name ?? $movement->location?->name ?? '-';
+                $movement->location_display_branch = $movement->location?->branch?->name ?? '-';
+                return;
+            }
+
+            if ($type === 'transfer_in') {
+                $location = $transfer->toLocation;
+                $branch = $transfer->toBranch;
+            } else {
+                $location = $transfer->fromLocation;
+                $branch = $transfer->fromBranch;
+            }
+
+            $movement->location_display_name = $location?->location_name ?? $location?->name ?? '-';
+            $movement->location_display_branch = $branch?->name ?? 'Central / Unassigned';
+        });
     }
 
     public function create()

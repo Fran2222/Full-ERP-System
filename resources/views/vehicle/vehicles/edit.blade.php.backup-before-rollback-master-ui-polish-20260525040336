@@ -1,0 +1,36 @@
+<x-app-layout :assets="$assets ?? []">
+<div class="container-fluid py-4">
+    @include('vehicle.partials.nav')
+
+    <div class="mb-3">
+        <h4 class="mb-1">Edit Vehicle</h4>
+        <p class="text-muted mb-0">{{ $vehicle->display_name }}</p>
+    </div>
+
+    <form action="{{ route('vehicle.vehicles.update', $vehicle) }}" method="POST" enctype="multipart/form-data">
+        @method('PUT')
+        @include('vehicle.vehicles._form', ['buttonText' => 'Update Vehicle'])
+    </form>
+</div>
+
+{{-- vehicle-master-ui-polish-marker --}}
+<style>
+    .vm-polish-select,.select2-container .select2-selection--single{min-height:42px!important;border-radius:10px!important;border-color:#e2e8f0!important;display:flex!important;align-items:center!important}
+    .select2-container--default .select2-selection--single .select2-selection__rendered{line-height:40px!important;padding-left:12px!important;color:#334155!important}
+    .select2-container--default .select2-selection--single .select2-selection__arrow{height:40px!important}
+    .select2-dropdown{border-color:#e2e8f0!important;border-radius:10px!important;overflow:hidden;box-shadow:0 12px 24px rgba(15,23,42,.08)}
+    .select2-search__field{min-height:36px!important;border-radius:8px!important;border-color:#dbe3ef!important;outline:none!important}
+    .card{border-radius:16px}.form-control,.form-select{min-height:42px;border-radius:10px}
+    [data-vm-generated-preview]{margin-top:12px;width:210px;height:150px;object-fit:cover;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc}
+</style>
+<script>
+(function(){
+function initVehicleFormPolish(){
+ document.querySelectorAll('[data-vm-uppercase="true"]').forEach(function(input){input.addEventListener('input',function(){const s=this.selectionStart,e=this.selectionEnd;this.value=this.value.toUpperCase();try{this.setSelectionRange(s,e)}catch(x){}})});
+ document.querySelectorAll('[data-vm-photo-input="true"]').forEach(function(input){input.addEventListener('change',function(){const file=this.files&&this.files[0]?this.files[0]:null;if(!file||!file.type||!file.type.startsWith('image/'))return;let preview=this.closest('.card, .form-group, .mb-3, div')?.querySelector('[data-vm-generated-preview]');if(!preview){preview=document.createElement('img');preview.setAttribute('data-vm-generated-preview','true');this.insertAdjacentElement('afterend',preview)}preview.src=URL.createObjectURL(file);});});
+ if(window.jQuery&&jQuery.fn&&jQuery.fn.select2){jQuery('.vm-polish-select').each(function(){const $select=jQuery(this);if($select.data('select2'))return;$select.select2({width:'100%',placeholder:$select.data('placeholder')||'Select option',allowClear:true});});}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initVehicleFormPolish);else initVehicleFormPolish();
+})();
+</script>
+</x-app-layout>

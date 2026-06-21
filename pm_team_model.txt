@@ -1,0 +1,52 @@
+   1: <?php
+   2: 
+   3: namespace App\Models\ProjectMgmt;
+   4: 
+   5: use App\Models\User;
+   6: use Illuminate\Database\Eloquent\Factories\HasFactory;
+   7: use Illuminate\Database\Eloquent\Model;
+   8: 
+   9: class Team extends Model
+  10: {
+  11:     use HasFactory;
+  12: 
+  13:     protected $fillable = [
+  14:         'code',
+  15:         'name',
+  16:         'team_leader_id',
+  17:         'remarks',
+  18:         'status',
+  19:     ];
+  20: 
+  21:     public function teamLeader()
+  22:     {
+  23:         return $this->belongsTo(User::class, 'team_leader_id');
+  24:     }
+  25: 
+  26:     public function members()
+  27:     {
+  28:         return $this->belongsToMany(User::class, 'project_team_members', 'team_id', 'user_id')
+  29:             ->withTimestamps();
+  30:     }
+  31: 
+  32:     public function milestones()
+  33:     {
+  34:         return $this->belongsToMany(
+  35:             ProjectMilestone::class,
+  36:             'project_milestone_team',
+  37:             'team_id',
+  38:             'project_milestone_id'
+  39:         )->withTimestamps();
+  40:     }
+  41: 
+  42:     public function tasks()
+  43:     {
+  44:         return $this->belongsToMany(
+  45:             ProjectTask::class,
+  46:             'project_task_team',
+  47:             'team_id',
+  48:             'project_task_id'
+  49:         )->withTimestamps();
+  50:     }
+  51: }
+  52: 

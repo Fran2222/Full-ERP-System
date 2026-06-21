@@ -3,16 +3,16 @@
                         <table class="table table-bordered table-hover align-middle mb-0 performance-summary-table">
                             <thead>
                                 <tr>
-                                    <th class="text-center" style="width: 4%;">#</th>
-                                    <th style="width: 18%;">Employee</th>
-                                    <th style="width: 13%;">Branch</th>
-                                    <th style="width: 15%;">Department</th>
-                                    <th class="text-center" style="width: 10%;">Evaluations</th>
-                                    <th class="text-center" style="width: 12%;">Overall Rating</th>
-                                    <th class="text-center" style="width: 12%;">Performance</th>
-                                    <th class="text-center" style="width: 12%;">Trend</th>
-                                    <th class="text-center" style="width: 7%;">Action</th>
-                                    <th class="text-center" style="width: 7%;">PDF</th>
+                                    <th class="text-center" style="width: 3.5%;">#</th>
+                                    <th style="width: 16%;">Employee</th>
+                                    <th style="width: 12%;">Branch</th>
+                                    <th style="width: 13.5%;">Department</th>
+                                    <th class="text-center" style="width: 9%;">Evaluations</th>
+                                    <th class="text-center" style="width: 9.5%;">Overall Rating</th>
+                                    <th class="text-center" style="width: 10%;">Performance</th>
+                                    <th class="text-center" style="width: 10.5%;">Trend</th>
+                                    <th class="text-center" style="width: 8%;">Action</th>
+                                    <th class="text-center" style="width: 8%;">PDF</th>
                                 </tr>
                             </thead>
 

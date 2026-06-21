@@ -1,0 +1,772 @@
+===== PM CONTROLLERS =====
+app\Http\Controllers\ProjectMgmt\ClientController.php:11:class ClientController extends Controller
+app\Http\Controllers\ProjectMgmt\ClientController.php:35:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ClientController.php:45:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ClientController.php:60:            'status',
+app\Http\Controllers\ProjectMgmt\ClientController.php:65:            ->with('success', 'Client created successfully.');
+app\Http\Controllers\ProjectMgmt\ClientController.php:78:    public function update(Request $request, Client $client)
+app\Http\Controllers\ProjectMgmt\ClientController.php:88:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ClientController.php:95:        $client->update($request->only([
+app\Http\Controllers\ProjectMgmt\ClientController.php:103:            'status',
+app\Http\Controllers\ProjectMgmt\ClientController.php:108:            ->with('success', 'Client updated successfully.');
+app\Http\Controllers\ProjectMgmt\ClientController.php:118:                    'status' => false,
+app\Http\Controllers\ProjectMgmt\ClientController.php:134:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ClientController.php:141:            ->with('success', $message);
+app\Http\Controllers\ProjectMgmt\ClientController.php:156:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ClientController.php:157:            $query->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\DashboardController.php:7:class DashboardController extends Controller
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:13:class DocumentControlController extends Controller
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:32:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:33:            $documents->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:48:                        ->orWhere('status', 'ILIKE', "%{$search}%");
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:52:            ->addColumn('status_badge', function ($doc) {
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:53:                $status = strtolower((string) $doc->status);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:54:                $class = match ($status) {
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:62:                return '<span class="fw-semibold ' . $class . '">' . e(ucfirst($status ?: 'Unknown')) . '</span>';
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:68:                $html = '<div class="d-flex align-items-center justify-content-end gap-2">';
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:71:                    $html .= '<form action="' . e(route('document-controls.new-revision', $doc->id)) . '" method="POST" class="m-0 d-inline-flex new-revision-form">' . csrf_field() . '
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:72:                        <button type="submit" class="btn btn-sm btn-light d-inline-flex align-items-center justify-content-center new-revision-btn" data-name="' . e($doc->document_no) . '" title="New Revision" style="width:34px;height:30px;padding:0;border-radius:6px;">
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:77:                if (auth()->user()->can('projects_mgmt.edit') && strtolower((string) $doc->status) === 'draft') {
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:78:                    $html .= '<form action="' . e(route('document-controls.publish', $doc->id)) . '" method="POST" class="m-0 d-inline-flex publish-revision-form">' . csrf_field() . '
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:79:                        <button type="submit" class="btn btn-sm btn-success d-inline-flex align-items-center justify-content-center publish-revision-btn" data-name="' . e($doc->document_no) . '" title="Publish Revision" style="width:34px;height:30px;padding:0;border-radius:6px;">
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:89:            ->rawColumns(['status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:98:            'status' => 'draft',
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:104:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:118:        return redirect()->route('document-controls.index')->with('success', 'Document control record created successfully.');
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:132:    public function update(Request $request, DocumentControl $documentControl)
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:136:        $documentControl->update(array_merge($validated, [
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:144:        return redirect()->route('document-controls.show', $documentControl->id)->with('success', 'Document control record updated successfully.');
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:158:            'status' => 'draft',
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:165:        return redirect()->route('document-controls.edit', $draft->id)->with('success', 'New draft revision created. Review and publish when ready.');
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:174:                ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:176:                ->update(['status' => 'archived', 'updated_by' => auth()->id(), 'updated_at' => now()]);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:178:            $documentControl->update([
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:179:                'status' => 'active',
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:184:        return redirect()->route('document-controls.index')->with('success', 'Revision published. Previous active revision was archived automatically.');
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:189:        if (strtolower((string) $documentControl->status) === 'active') {
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:192:                return response()->json(['status' => false, 'message' => $message], 422);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:194:            return redirect()->route('document-controls.index')->with('error', $message);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:200:            return response()->json(['status' => true, 'message' => 'Document control record deleted successfully.']);
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:203:        return redirect()->route('document-controls.index')->with('success', 'Document control record deleted successfully.');
+app\Http\Controllers\ProjectMgmt\DocumentControlController.php:213:            'status' => ['required', 'in:draft,active,inactive,archived'],
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:15:class ProjectExpenseController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:90:                return '<div class="d-flex flex-column align-items-start gap-1">'
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:91:                    . $numbers->map(fn ($number) => '<span class="badge bg-soft-primary text-primary">' . e($number) . '</span>')->implode('')
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:95:            ->addColumn('status_badge', function ($expense) {
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:96:                $status = strtolower($expense->status ?? 'pending');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:97:                if (! in_array($status, ['pending', 'liquidated'], true)) {
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:98:                    $status = 'pending';
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:101:                $class = $status === 'liquidated' ? 'text-success' : 'text-warning';
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:102:                return '<span class="' . $class . ' fw-semibold">' . ucfirst($status) . '</span>';
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:107:                $editUrl = auth()->user()->can('projects_mgmt.edit') && strtolower($expense->status ?? 'pending') !== 'liquidated'
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:110:                $deleteUrl = auth()->user()->can('projects_mgmt.delete') && strtolower($expense->status ?? 'pending') !== 'liquidated'
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:115:                $viewButton = '<a href="' . e($viewUrl) . '" class="btn btn-sm btn-info d-inline-flex align-items-center justify-content-center" title="View Expense" style="width:34px;height:30px;padding:0;border-radius:6px;">'
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:118:                return '<div class="d-flex align-items-center justify-content-end gap-2">' . $viewButton . ActionButtonHelper::editDelete($editUrl, $deleteUrl, 'Expense #' . $expense->id, 'delete-project-expense', 'Edit Expense', 'Delete Expense') . '</div>';
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:120:            ->rawColumns(['receipt_numbers', 'status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:127:        $stores = StoreName::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:131:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:141:                'status' => 'pending',
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:152:        return redirect()->route('project-expenses.index')->with('success', 'Expense created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:181:        abort_if(strtolower($projectExpense->status ?? 'pending') === 'liquidated', 403, 'Liquidated expenses can no longer be edited.');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:185:        $stores = StoreName::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:191:    public function update(Request $request, $projectExpense)
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:201:        abort_if(strtolower($projectExpense->status ?? 'pending') === 'liquidated', 403, 'Liquidated expenses can no longer be edited.');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:211:                'status' => 'pending',
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:222:            ->with('success', 'Expense updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:234:                return response()->json(['status' => false, 'message' => $message], 404);
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:237:            return redirect()->route('project-expenses.index')->with('error', $message);
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:240:        abort_if(strtolower($projectExpense->status ?? 'pending') === 'liquidated', 422, 'Liquidated expenses can no longer be deleted.');
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:250:            return response()->json(['status' => true, 'message' => $message]);
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:253:        return redirect()->route('project-expenses.index')->with('success', $message);
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:279:            ->where('status', 'released')
+app\Http\Controllers\ProjectMgmt\ProjectExpenseController.php:330:        $path = $file->store('project-expenses', 'public');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:21:class ProjectFileController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:34:            ->with(['client', 'type', 'projectStatus', 'fileFolder'])
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:54:                    ->orWhereHas('projectStatus', function ($status) use ($search) {
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:55:                        $status->where('name', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:118:    public function store(Request $request): RedirectResponse
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:171:            ->with('success', 'Project files uploaded successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:178:        $project->load(['client', 'type', 'projectStatus', 'fileFolder']);
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:252:        $projectFile->update([
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:258:        return back()->with('success', 'File renamed successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:281:        $projectFile->update([
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:290:            ->with('success', 'File moved successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:308:        return back()->with('success', 'Folder color updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:363:            ->with('success', 'File deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:458:        $isAssigned = $project->users->contains('id', $user->id);
+app\Http\Controllers\ProjectMgmt\ProjectFileController.php:460:        abort_unless($isManager || $isAssigned, 403);
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:13:class ProjectGasSlipController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:25:        $vehicles = ProjectVehicle::where('status', 'active')->orderBy('plate_name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:36:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:37:            $query->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:51:                $checked = strtolower($slip->status) === 'returned' ? 'checked' : '';
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:53:                return '<div class="form-check d-flex justify-content-center"><input class="form-check-input gas-slip-done-toggle" type="checkbox" data-url="' . e(route('project-gas-slips.toggle-done', $slip->id)) . '" ' . $checked . ' ' . $disabled . '></div>';
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:58:            ->addColumn('status_badge', function ($slip) {
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:59:                return strtolower($slip->status) === 'returned'
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:60:                    ? '<span class="text-success fw-semibold">Returned</span>'
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:61:                    : '<span class="text-warning fw-semibold">Issued</span>';
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:77:            ->rawColumns(['done_checkbox', 'status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:88:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:99:            'status' => 'issued',
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:107:        return redirect()->route('project-gas-slips.index')->with('success', 'Gas slip created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:124:    public function update(Request $request, ProjectGasSlip $projectGasSlip)
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:140:        return redirect()->route('project-gas-slips.show', $projectGasSlip->id)->with('success', 'Gas slip updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:148:        if ($request->expectsJson() || $request->ajax()) return response()->json(['status' => true, 'message' => $message]);
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:149:        return redirect()->route('project-gas-slips.index')->with('success', $message);
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:155:        $projectGasSlip->update([
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:156:            'status' => $done ? 'returned' : 'issued',
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:162:            'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:164:            'status_label' => $done ? 'Returned' : 'Issued',
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:195:        return ProjectVehicle::with('drivers')->where('status', 'active')->orderBy('plate_name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectGasSlipController.php:213:        $path = $file->store('project-gas-slips', 'public');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:9:use App\Models\ProjectMgmt\ProjectStatus;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:10:use App\Models\ProjectMgmt\Team;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:15:class ProjectMilestoneController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:21:        $this->middleware('permission:projects_mgmt.edit')->only(['edit', 'update', 'toggleComplete']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:37:        $query = ProjectMilestone::with(['project', 'team', 'teams']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:43:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:44:            $query->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:62:           ->addColumn('team_name', function ($milestone) {
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:63:                if ($milestone->relationLoaded('teams') && $milestone->teams->isNotEmpty()) {
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:64:                    return $milestone->teams
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:70:                return $milestone->team->name ?? '-';
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:77:                    <div class="wmc-duration-wrap">
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:78:                        <div class="wmc-duration-date">' . e($start) . '</div>
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:79:                        <div class="wmc-duration-to">to</div>
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:80:                        <div class="wmc-duration-date">' . e($end) . '</div>
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:85:                $checked = $milestone->is_completed ? 'checked' : '';
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:88:                    <div class="form-check d-flex justify-content-center">
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:90:                            class="form-check-input toggle-milestone"
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:91:                            data-url="' . route('project-milestones.toggle-complete', $milestone->id) . '"
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:117:            ->rawColumns(['team_name', 'date_range', 'completion_checkbox', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:128:        $teams = Team::where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:133:        return view('modules.project-mgmt.milestones.create', compact('projects', 'teams'));
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:136:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:143:        $teamIds = $validated['team_ids'] ?? [];
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:144:        unset($validated['team_ids']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:146:        $validated['team_id'] = $teamIds[0] ?? null;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:147:        $validated['status'] = 'pending';
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:148:        $validated['is_completed'] = false;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:149:        $validated['completed_at'] = null;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:154:        $milestone->teams()->sync($teamIds);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:160:            ->with('success', 'Milestone created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:165:        $milestone->load(['project', 'team', 'teams', 'creator']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:172:        $milestone->load('teams');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:179:        $teams = Team::where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:184:        return view('modules.project-mgmt.milestones.edit', compact('milestone', 'projects', 'teams'));
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:187:    public function update(Request $request, ProjectMilestone $milestone)
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:196:        $teamIds = $validated['team_ids'] ?? [];
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:197:        unset($validated['team_ids']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:199:        $validated['team_id'] = $teamIds[0] ?? null;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:201:        $milestone->update($validated);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:202:        $milestone->teams()->sync($teamIds);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:209:            ->with('success', 'Milestone updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:212:    public function toggleComplete(ProjectMilestone $milestone)
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:214:        $willBeCompleted = ! $milestone->is_completed;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:216:        $milestone->update([
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:217:            'is_completed' => $willBeCompleted,
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:218:            'status' => $willBeCompleted ? 'completed' : 'pending',
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:219:            'completed_at' => $willBeCompleted ? now() : null,
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:225:            'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:234:        $milestone->teams()->detach();
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:241:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:248:            ->with('success', 'Milestone deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:255:            'team_ids' => ['nullable', 'array'],
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:256:            'team_ids.*' => ['exists:teams,id'],
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:302:        $project = Project::with('projectStatus')->find($projectId);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:309:            ->where('is_completed', true)
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:318:        if (! $this->isManualProjectStatus($project)) {
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:319:            $autoStatus = $this->getAutoProjectStatusByProgress($progress);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:321:            if ($autoStatus) {
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:322:                $updateData['status_id'] = $autoStatus->id;
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:323:                $updateData['status'] = strtolower($autoStatus->name);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:327:        $project->update($updateData);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:330:    private function getAutoProjectStatusByProgress(int $progress): ?ProjectStatus
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:333:            return $this->findActiveProjectStatus(['completed', 'complete', 'done']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:337:            return $this->findActiveProjectStatus(['ongoing', 'on going', 'in progress', 'in-progress']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:340:        return $this->findActiveProjectStatus(['pending', 'not started', 'new']);
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:343:    private function findActiveProjectStatus(array $keywords): ?ProjectStatus
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:350:        return ProjectStatus::where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:362:    private function isManualProjectStatus(Project $project): bool
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:364:        $statusName = strtolower(optional($project->projectStatus)->name ?? $project->status ?? '');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:365:        $statusCode = strtolower(optional($project->projectStatus)->code ?? '');
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:367:        $manualStatuses = [
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:376:        return in_array($statusName, $manualStatuses, true)
+app\Http\Controllers\ProjectMgmt\ProjectMilestoneController.php:377:            || in_array($statusCode, $manualStatuses, true);
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:11:class ProjectPriorityController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:31:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:32:            $projectPriorities->where('project_priorities.status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:47:                        ->orWhere('project_priorities.status', 'ILIKE', "%{$search}%");
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:89:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:96:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:104:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:109:            ->with('success', 'Project priority created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:122:    public function update(Request $request, ProjectPriority $projectPriority)
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:129:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:132:        $projectPriority->update([
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:137:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:142:            ->with('success', 'Project priority updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:152:                    'status' => false,
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:166:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectPriorityController.php:173:            ->with('success', 'Project priority deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:19:class ProjectRfpController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:31:        $types = RfpType::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:45:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:46:            $rfps->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:76:                        ->orWhere('status', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:91:            ->addColumn('status_badge', fn ($rfp) => $this->statusBadge($rfp->status))
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:94:                $editUrl = (auth()->user()->can('projects_mgmt.edit') && $rfp->status === 'pending') ? route('project-rfps.edit', $rfp->id) : null;
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:100:                       class="btn btn-sm btn-info d-inline-flex align-items-center justify-content-center"
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:104:                        <i class="icon d-inline-flex align-items-center justify-content-center" style="line-height: 1;">
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:113:                return '<div class="d-flex align-items-center justify-content-end gap-2">' .
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:118:            ->rawColumns(['status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:124:        $types = RfpType::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:131:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:136:            $type = RfpType::lockForUpdate()->findOrFail($validated['rfp_type_id']);
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:162:                'status' => 'pending',
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:191:        return redirect()->route('project-rfps.index')->with('success', 'RFP created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:203:        abort_if($projectRfp->status !== 'pending', 403, 'Only pending RFP records can be edited.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:204:        $types = RfpType::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:212:    public function update(Request $request, ProjectRfp $projectRfp)
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:214:        abort_if($projectRfp->status !== 'pending', 403, 'Only pending RFP records can be edited.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:220:            $projectRfp->update([
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:260:        return redirect()->route('project-rfps.show', $projectRfp->id)->with('success', 'RFP updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:265:        abort_if(! in_array($projectRfp->status, ['pending'], true), 422, 'Only pending RFP records can be approved.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:266:        $projectRfp->update(['status' => 'approved', 'approved_by' => auth()->id(), 'approved_at' => now(), 'updated_by' => auth()->id()]);
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:269:        return back()->with('success', 'RFP approved successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:275:        abort_if(! in_array($projectRfp->status, ['pending'], true), 422, 'Only pending RFP records can be rejected.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:280:        $projectRfp->update([
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:281:            'status' => 'rejected',
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:290:        return back()->with('success', 'RFP rejected successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:295:        abort_if($projectRfp->status !== 'approved', 422, 'Only approved RFP records can be released.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:303:        $projectRfp->update([
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:307:            'status' => 'released',
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:315:        return back()->with('success', 'Payment release details saved successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:322:            return response()->json(['status' => true, 'message' => 'RFP deleted successfully.']);
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:324:        return redirect()->route('project-rfps.index')->with('success', 'RFP deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:370:            ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:392:            ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:424:                'status' => $step[1],
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:432:    private function markApproval(ProjectRfp $rfp, string $stepName, string $status, ?string $remarks = null): void
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:436:            ->update(['status' => $status, 'approver_id' => auth()->id(), 'remarks' => $remarks, 'acted_at' => now()]);
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:449:            $path = $file->store('project-rfps/' . $rfp->id, 'public');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:479:    private function statusBadge(?string $status): string
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:481:        $status = strtolower($status ?: 'pending');
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:482:        $classes = [
+app\Http\Controllers\ProjectMgmt\ProjectRfpController.php:491:        return '<span class="fw-semibold ' . ($classes[$status] ?? 'text-secondary') . '">' . e(ucfirst($status)) . '</span>';
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:12:use App\Models\ProjectMgmt\ProjectStatus;
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:20:class ProjectsController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:32:        $projectTypes = ProjectType::where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:52:                'projectStatus',
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:83:                        ->orWhere('projects.status', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:96:                        ->orWhereHas('projectStatus', function ($status) use ($search) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:97:                            $status->where('name', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:134:            ->editColumn('status', function ($project) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:135:                return $this->getComputedProjectStatusName((int) $project->id);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:137:            ->addColumn('status_badge', function ($project) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:138:                $statusName = $this->getComputedProjectStatusName((int) $project->id);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:140:                $statusClass = $this->getProjectStatusTextClass($statusName);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:142:                return '<span class="fw-semibold ' . $statusClass . '">' . e($statusName) . '</span>';
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:162:            ->rawColumns(['status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:191:        $clients = Client::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:192:        $projectTypes = ProjectType::where('status', 'active')->orderBy('name')->get();
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:193:        $priorities = ProjectPriority::where('status', 'active')->orderBy('level')->get();
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:209:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:233:        $projectStatus = $this->getAutoProjectStatusByProgress(0);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:239:        $assignedUsers = collect($validated['users'] ?? [])
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:254:            'status_id' => optional($projectStatus)->id,
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:264:            'status' => strtolower($this->getAutoProjectStatusNameByProgress(0)),
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:268:        $project->users()->sync($assignedUsers);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:272:            ->with('success', 'Project created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:284:            'projectStatus',
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:299:            $isAssigned = $project->users->contains('id', $user->id);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:301:            if (! $isManager && ! $isAssigned) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:344:            if ($milestone->is_completed && $milestone->completed_at) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:346:                    'title' => 'Milestone Completed',
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:347:                    'description' => 'Milestone completed: ' . $milestone->title . '.',
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:349:                    'date' => $milestone->completed_at,
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:394:            $query->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:399:            $query->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:404:            $query->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:423:    public function update(Request $request, Project $project)
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:441:                    $query->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:458:        $projectStatus = $this->getAutoProjectStatusByProgress($progress);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:464:        $assignedUsers = collect($validated['users'] ?? [])
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:471:        $project->update([
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:478:            'status_id' => optional($projectStatus)->id,
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:488:            'status' => strtolower($this->getAutoProjectStatusNameByProgress($progress)),
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:491:        $project->users()->sync($assignedUsers);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:495:            ->with('success', 'Project updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:505:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:512:            ->with('success', 'Project deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:536:            ->where('is_completed', true)
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:542:    private function getComputedProjectStatusName(int $projectId): string
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:546:        return $this->getAutoProjectStatusNameByProgress($progress);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:549:    private function getAutoProjectStatusNameByProgress(int $progress): string
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:551:        $projectStatus = $this->getAutoProjectStatusByProgress($progress);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:553:        if ($projectStatus) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:554:            return $projectStatus->name;
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:558:            return 'Completed';
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:568:    private function getProjectStatusTextClass(string $statusName): string
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:570:        return match (strtolower(trim($statusName))) {
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:571:            'completed', 'complete', 'done' => 'text-success',
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:580:    private function getAutoProjectStatusByProgress(int $progress): ?ProjectStatus
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:583:            return $this->findActiveProjectStatus(['completed', 'complete', 'done']);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:587:            return $this->findActiveProjectStatus(['ongoing', 'on going', 'in progress', 'in-progress']);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:590:        return $this->findActiveProjectStatus(['pending', 'not started', 'new']);
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:593:    private function findActiveProjectStatus(array $keywords): ?ProjectStatus
+app\Http\Controllers\ProjectMgmt\ProjectsController.php:600:        return ProjectStatus::where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:7:use App\Models\ProjectMgmt\ProjectStatus;
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:11:class ProjectStatusController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:23:        return view('modules.project-mgmt.project-statuses.index');
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:28:        $projectStatuses = ProjectStatus::query()
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:29:            ->select('project_statuses.*');
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:31:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:32:            $projectStatuses->where('project_statuses.status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:35:        return DataTables::eloquent($projectStatuses)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:44:                    $q->where('project_statuses.code', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:45:                        ->orWhere('project_statuses.name', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:46:                        ->orWhere('project_statuses.description', 'ILIKE', "%{$search}%")
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:47:                        ->orWhere('project_statuses.status', 'ILIKE', "%{$search}%");
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:51:            ->addColumn('created_at_formatted', function ($projectStatus) {
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:52:                return optional($projectStatus->created_at)->format('M d, Y') ?: '-';
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:54:            ->addColumn('show_url', function ($projectStatus) {
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:55:                return route('project-statuses.show', $projectStatus->id);
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:57:            ->addColumn('action', function ($projectStatus) {
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:59:                    ? route('project-statuses.edit', $projectStatus->id)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:63:                    ? route('project-statuses.destroy', $projectStatus->id)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:69:                    $projectStatus->name,
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:70:                    'delete-project-status',
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:71:                    'Edit Project Status',
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:72:                    'Delete Project Status'
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:81:        return view('modules.project-mgmt.project-statuses.create');
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:84:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:87:            'code' => ['required', 'string', 'max:50', 'unique:project_statuses,code'],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:91:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:94:        ProjectStatus::create([
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:99:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:103:            ->route('project-statuses.index')
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:104:            ->with('success', 'Project status created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:107:    public function show(ProjectStatus $projectStatus)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:109:        return view('modules.project-mgmt.project-statuses.show', compact('projectStatus'));
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:112:    public function edit(ProjectStatus $projectStatus)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:114:        return view('modules.project-mgmt.project-statuses.edit', compact('projectStatus'));
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:117:    public function update(Request $request, ProjectStatus $projectStatus)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:120:            'code' => ['required', 'string', 'max:50', 'unique:project_statuses,code,' . $projectStatus->id],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:124:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:127:        $projectStatus->update([
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:132:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:136:            ->route('project-statuses.index')
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:137:            ->with('success', 'Project status updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:140:    public function destroy(Request $request, ProjectStatus $projectStatus)
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:142:        if ($projectStatus->projects()->exists()) {
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:143:            $message = 'Cannot delete this project status because it is already used by projects.';
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:147:                    'status' => false,
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:153:                ->route('project-statuses.index')
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:157:        $projectStatus->delete();
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:161:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:162:                'message' => 'Project status deleted successfully.',
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:167:            ->route('project-statuses.index')
+app\Http\Controllers\ProjectMgmt\ProjectStatusController.php:168:            ->with('success', 'Project status deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:10:use App\Models\ProjectMgmt\Team;
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:20:class ProjectTaskController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:40:        $dailyTasks = ProjectTask::with(['project.manager', 'projectType', 'teams.members', 'teams.teamLeader', 'reports.reporter'])
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:49:            ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:67:        $tasks = ProjectTask::with(['project.manager', 'projectType', 'teams.members', 'teams.teamLeader', 'reports.reporter'])
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:98:    public function store(Request $request): RedirectResponse
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:117:                $task->teams()->sync($validated['team_ids'] ?? []);
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:123:            ->with('success', 'Task/s created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:129:            'task' => $projectTask->load(['teams']),
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:133:    public function update(Request $request, ProjectTask $projectTask): RedirectResponse
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:137:            'project_type_id' => ['required', Rule::exists('project_types', 'id')->where('status', 'active')],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:142:            'team_ids' => ['nullable', 'array'],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:143:            'team_ids.*' => ['exists:teams,id'],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:150:        $projectTask->update([
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:161:        $projectTask->teams()->sync($validated['team_ids'] ?? []);
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:165:            ->with('success', 'Task updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:170:        $projectTask->loadMissing(['project.manager', 'teams.members', 'teams.teamLeader']);
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:189:            $photoPaths[] = $photo->store('project-task-reports/' . $projectTask->id, 'public');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:202:            ->with('success', 'Task report submitted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:209:        return redirect()->route('project-tasks.index')->with('success', 'Task deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:220:                ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:223:            'teams' => Team::select('id', 'code', 'name')
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:224:                ->where('status', 'active')
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:234:            'project_type_id' => ['required', Rule::exists('project_types', 'id')->where('status', 'active')],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:241:            'team_ids' => ['nullable', 'array'],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:242:            'team_ids.*' => ['exists:teams,id'],
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:251:        $task->loadMissing(['project.manager', 'projectType', 'teams.members', 'teams.teamLeader', 'reports.reporter']);
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:266:            'teams' => $task->teams->pluck('name')->implode(', ') ?: 'No team assigned',
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:306:        $task->loadMissing(['project.manager', 'teams.members', 'teams.teamLeader']);
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:312:        foreach ($task->teams as $team) {
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:313:            if ((int) $team->team_leader_id === (int) $user->id) {
+app\Http\Controllers\ProjectMgmt\ProjectTaskController.php:317:            if ($team->members->contains('id', $user->id)) {
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:11:class ProjectTypeController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:31:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:32:            $projectTypes->where('project_types.status', $request->status);
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:47:                        ->orWhere('project_types.status', 'ILIKE', "%{$search}%");
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:89:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:95:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:102:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:107:            ->with('success', 'Project type created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:120:    public function update(Request $request, ProjectType $projectType)
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:126:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:129:        $projectType->update([
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:133:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:138:            ->with('success', 'Project type updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:148:                    'status' => false,
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:162:                'status' => true,
+app\Http\Controllers\ProjectMgmt\ProjectTypeController.php:169:            ->with('success', 'Project type deleted successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:13:class ProjectVehicleController extends Controller
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:51:                return '<div class="vehicle-members-wrap">'
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:55:                        return '<span class="vehicle-member-avatar" title="' . e($name) . '">' . e($initials) . '</span>';
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:59:            ->addColumn('status_badge', fn ($vehicle) => strtolower($vehicle->status) === 'active' ? '<span class="text-success fw-semibold">Active</span>' : '<span class="text-danger fw-semibold">Inactive</span>')
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:74:            ->rawColumns(['drivers_badges', 'status_badge', 'action'])
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:85:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:97:                'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:104:        return redirect()->route('project-vehicles.index')->with('success', 'Vehicle created successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:120:    public function update(Request $request, ProjectVehicle $projectVehicle)
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:123:        $projectVehicle->update([
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:126:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:130:        return redirect()->route('project-vehicles.show', $projectVehicle->id)->with('success', 'Vehicle updated successfully.');
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:137:            if ($request->expectsJson() || $request->ajax()) return response()->json(['status' => false, 'message' => $message], 422);
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:142:        if ($request->expectsJson() || $request->ajax()) return response()->json(['status' => true, 'message' => $message]);
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:143:        return redirect()->route('project-vehicles.index')->with('success', $message);
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:153:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\ProjectVehicleController.php:165:        return User::query()->where(function ($q) { $q->whereNull('status')->orWhere('status', '!=', 'inactive'); })->orderBy('first_name')->orderBy('last_name')->get();
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:11:class RfpTypeController extends Controller
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:30:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:31:            $rfpTypes->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:45:                        ->orWhere('status', 'ILIKE', "%{$search}%");
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:65:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:71:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:78:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:83:        return redirect()->route('rfp-types.index')->with('success', 'RFP type created successfully.');
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:96:    public function update(Request $request, RfpType $rfpType)
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:102:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:105:        $rfpType->update([
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:109:            'status' => $validated['status'],
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:113:        return redirect()->route('rfp-types.index')->with('success', 'RFP type updated successfully.');
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:121:                return response()->json(['status' => false, 'message' => $message], 422);
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:123:            return redirect()->route('rfp-types.index')->with('error', $message);
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:129:            return response()->json(['status' => true, 'message' => 'RFP type deleted successfully.']);
+app\Http\Controllers\ProjectMgmt\RfpTypeController.php:132:        return redirect()->route('rfp-types.index')->with('success', 'RFP type deleted successfully.');
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:12:class StoreNameController extends Controller
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:31:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:32:            $query->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:52:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:54:        $validated = $this->validatedStore($request);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:60:        return redirect()->route('store-names.index')->with('success', 'Store name created successfully.');
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:74:    public function update(Request $request, StoreName $storeName)
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:76:        $validated = $this->validatedStore($request, $storeName);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:79:        $storeName->update($validated);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:81:        return redirect()->route('store-names.index')->with('success', 'Store name updated successfully.');
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:89:                return response()->json(['status' => false, 'message' => $message], 422);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:98:            return response()->json(['status' => true, 'message' => $message]);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:101:        return redirect()->route('store-names.index')->with('success', $message);
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:104:    private function validatedStore(Request $request, ?StoreName $storeName = null): array
+app\Http\Controllers\ProjectMgmt\StoreNameController.php:113:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:7:use App\Models\ProjectMgmt\Team;
+app\Http\Controllers\ProjectMgmt\TeamController.php:12:class TeamController extends Controller
+app\Http\Controllers\ProjectMgmt\TeamController.php:24:        return view('modules.project-mgmt.teams.index');
+app\Http\Controllers\ProjectMgmt\TeamController.php:29:        $query = Team::with(['teamLeader', 'members']);
+app\Http\Controllers\ProjectMgmt\TeamController.php:31:        if ($request->filled('status')) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:32:            $query->where('status', $request->status);
+app\Http\Controllers\ProjectMgmt\TeamController.php:36:            ->addColumn('team_leader_name', function ($team) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:37:                if (! $team->teamLeader) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:41:                return trim(($team->teamLeader->first_name ?? '') . ' ' . ($team->teamLeader->last_name ?? '')) ?: $team->teamLeader->email;
+app\Http\Controllers\ProjectMgmt\TeamController.php:43:            ->addColumn('members', function ($team) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:44:                return $team->members->map(function ($user) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:52:            ->addColumn('show_url', function ($team) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:53:                return route('project-teams.show', $team->id);
+app\Http\Controllers\ProjectMgmt\TeamController.php:55:            ->addColumn('action', function ($team) {
+app\Http\Controllers\ProjectMgmt\TeamController.php:57:                    ? route('project-teams.edit', $team->id)
+app\Http\Controllers\ProjectMgmt\TeamController.php:61:                    ? route('project-teams.destroy', $team->id)
+app\Http\Controllers\ProjectMgmt\TeamController.php:67:                    $team->name,
+app\Http\Controllers\ProjectMgmt\TeamController.php:68:                    'delete-team',
+app\Http\Controllers\ProjectMgmt\TeamController.php:69:                    'Edit Team',
+app\Http\Controllers\ProjectMgmt\TeamController.php:70:                    'Delete Team'
+app\Http\Controllers\ProjectMgmt\TeamController.php:86:        return view('modules.project-mgmt.teams.create', compact('code', 'users'));
+app\Http\Controllers\ProjectMgmt\TeamController.php:89:    public function store(Request $request)
+app\Http\Controllers\ProjectMgmt\TeamController.php:92:            'code' => ['required', 'string', 'max:50', 'unique:teams,code'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:94:            'team_leader_id' => ['required', 'exists:users,id'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:95:            'members' => ['nullable', 'array'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:96:            'members.*' => ['exists:users,id'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:98:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:101:        $team = Team::create([
+app\Http\Controllers\ProjectMgmt\TeamController.php:104:            'team_leader_id' => $request->team_leader_id,
+app\Http\Controllers\ProjectMgmt\TeamController.php:106:            'status' => $request->status,
+app\Http\Controllers\ProjectMgmt\TeamController.php:109:        $team->members()->sync($request->input('members', []));
+app\Http\Controllers\ProjectMgmt\TeamController.php:112:            ->route('project-teams.index')
+app\Http\Controllers\ProjectMgmt\TeamController.php:113:            ->with('success', 'Team created successfully.');
+app\Http\Controllers\ProjectMgmt\TeamController.php:116:    public function show(Team $team)
+app\Http\Controllers\ProjectMgmt\TeamController.php:118:        $team->load(['teamLeader', 'members']);
+app\Http\Controllers\ProjectMgmt\TeamController.php:120:        return view('modules.project-mgmt.teams.show', compact('team'));
+app\Http\Controllers\ProjectMgmt\TeamController.php:123:    public function edit(Team $team)
+app\Http\Controllers\ProjectMgmt\TeamController.php:125:        $team->load('members');
+app\Http\Controllers\ProjectMgmt\TeamController.php:132:        return view('modules.project-mgmt.teams.edit', compact('team', 'users'));
+app\Http\Controllers\ProjectMgmt\TeamController.php:135:    public function update(Request $request, Team $team)
+app\Http\Controllers\ProjectMgmt\TeamController.php:138:            'code' => ['required', 'string', 'max:50', 'unique:teams,code,' . $team->id],
+app\Http\Controllers\ProjectMgmt\TeamController.php:140:            'team_leader_id' => ['required', 'exists:users,id'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:141:            'members' => ['nullable', 'array'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:142:            'members.*' => ['exists:users,id'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:144:            'status' => ['required', 'in:active,inactive'],
+app\Http\Controllers\ProjectMgmt\TeamController.php:147:        $team->update([
+app\Http\Controllers\ProjectMgmt\TeamController.php:150:            'team_leader_id' => $request->team_leader_id,
+app\Http\Controllers\ProjectMgmt\TeamController.php:152:            'status' => $request->status,
+app\Http\Controllers\ProjectMgmt\TeamController.php:155:        $team->members()->sync($request->input('members', []));
+app\Http\Controllers\ProjectMgmt\TeamController.php:158:            ->route('project-teams.index')
+app\Http\Controllers\ProjectMgmt\TeamController.php:159:            ->with('success', 'Team updated successfully.');
+app\Http\Controllers\ProjectMgmt\TeamController.php:162:    public function destroy(Team $team)
+app\Http\Controllers\ProjectMgmt\TeamController.php:164:        $team->delete();
+app\Http\Controllers\ProjectMgmt\TeamController.php:168:                'status' => true,
+app\Http\Controllers\ProjectMgmt\TeamController.php:169:                'message' => 'Team deleted successfully.',
+app\Http\Controllers\ProjectMgmt\TeamController.php:174:            ->route('project-teams.index')
+app\Http\Controllers\ProjectMgmt\TeamController.php:175:            ->with('success', 'Team deleted successfully.');
+app\Http\Controllers\ProjectMgmt\TeamController.php:180:        $lastTeam = Team::latest('id')->first();
+app\Http\Controllers\ProjectMgmt\TeamController.php:181:        $nextId = $lastTeam ? $lastTeam->id + 1 : 1;
+===== PM ROUTES =====
+routes\web.php:65:use App\Http\Controllers\ProjectMgmt\ProjectsController; //PROJECTMGMT CONTROLLERS
+routes\web.php:69:use App\Http\Controllers\ProjectMgmt\ProjectStatusController;  //PROJECTMGMT CONTROLLERS
+routes\web.php:1087:        Route::get('/project-management', function () {
+routes\web.php:1089:            return view('modules.project-management');
+routes\web.php:1090:        })->name('project-management');
+routes\web.php:1755:    | PROJECTS MANAGEMENT MODULE ROUTES START
+routes\web.php:1759:    Route::prefix('project-management')->group(function () {
+routes\web.php:1765:        Route::middleware(['permission:project_management.view|project_dashboard.view|projects_mgmt.view'])->group(function () {
+routes\web.php:1769:            Route::get('/projects', [ProjectsController::class, 'index'])
+routes\web.php:1770:                ->name('projects.index');
+routes\web.php:1772:            Route::get('/projects/list', [ProjectsController::class, 'list'])
+routes\web.php:1773:                ->name('projects.list');
+routes\web.php:1775:            Route::get('/projects/{project}', [ProjectsController::class, 'show'])
+routes\web.php:1777:                ->name('projects.show');
+routes\web.php:1804:            Route::get('/milestones', [ProjectMilestoneController::class, 'index'])
+routes\web.php:1805:                ->name('project-milestones.index');
+routes\web.php:1807:            Route::get('/milestones/list', [ProjectMilestoneController::class, 'list'])
+routes\web.php:1808:                ->name('project-milestones.list');
+routes\web.php:1810:            Route::get('/milestones/{milestone}', [ProjectMilestoneController::class, 'show'])
+routes\web.php:1812:                ->name('project-milestones.show');
+routes\web.php:1814:            Route::get('/tasks', [ProjectTaskController::class, 'index'])
+routes\web.php:1815:                ->name('project-tasks.index');
+routes\web.php:1817:            Route::get('/tasks/events', [ProjectTaskController::class, 'events'])
+routes\web.php:1818:                ->name('project-tasks.events');
+routes\web.php:1820:            Route::post('/tasks/{projectTask}/reports', [ProjectTaskController::class, 'storeReport'])
+routes\web.php:1822:                ->name('project-tasks.reports.store');
+routes\web.php:1824:            Route::redirect('/setup', '/project-management/project-types')
+routes\web.php:1884:            Route::get('/project-statuses', [ProjectStatusController::class, 'index'])
+routes\web.php:1887:            Route::get('/project-statuses/list', [ProjectStatusController::class, 'list'])
+routes\web.php:1890:            Route::get('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'show'])
+routes\web.php:1891:                ->whereNumber('projectStatus')
+routes\web.php:1975:        | Projects Create / Edit / Delete
+routes\web.php:1978:        Route::middleware(['permission:project_management.create|projects_mgmt.create'])->group(function () {
+routes\web.php:1979:            Route::get('/projects/create', [ProjectsController::class, 'create'])
+routes\web.php:1980:                ->name('projects.create');
+routes\web.php:1982:            Route::post('/projects', [ProjectsController::class, 'store'])
+routes\web.php:1983:                ->name('projects.store');
+routes\web.php:1991:            Route::get('/milestones/create', [ProjectMilestoneController::class, 'create'])
+routes\web.php:1992:                ->name('project-milestones.create');
+routes\web.php:1994:            Route::post('/milestones', [ProjectMilestoneController::class, 'store'])
+routes\web.php:1995:                ->name('project-milestones.store');
+routes\web.php:1997:            Route::get('/tasks/create', [ProjectTaskController::class, 'create'])
+routes\web.php:1998:                ->name('project-tasks.create');
+routes\web.php:2000:            Route::post('/tasks', [ProjectTaskController::class, 'store'])
+routes\web.php:2001:                ->name('project-tasks.store');
+routes\web.php:2021:            Route::get('/project-statuses/create', [ProjectStatusController::class, 'create'])
+routes\web.php:2024:            Route::post('/project-statuses', [ProjectStatusController::class, 'store'])
+routes\web.php:2070:        Route::middleware(['permission:project_management.edit|projects_mgmt.edit'])->group(function () {
+routes\web.php:2071:            Route::get('/projects/{project}/edit', [ProjectsController::class, 'edit'])
+routes\web.php:2073:                ->name('projects.edit');
+routes\web.php:2075:            Route::put('/projects/{project}', [ProjectsController::class, 'update'])
+routes\web.php:2077:                ->name('projects.update');
+routes\web.php:2087:            Route::get('/milestones/{milestone}/edit', [ProjectMilestoneController::class, 'edit'])
+routes\web.php:2089:                ->name('project-milestones.edit');
+routes\web.php:2091:            Route::put('/milestones/{milestone}', [ProjectMilestoneController::class, 'update'])
+routes\web.php:2093:                ->name('project-milestones.update');
+routes\web.php:2095:            Route::post('/milestones/{milestone}/toggle-complete', [ProjectMilestoneController::class, 'toggleComplete'])
+routes\web.php:2097:                ->name('project-milestones.toggle-complete');
+routes\web.php:2099:            Route::get('/tasks/{projectTask}/edit', [ProjectTaskController::class, 'edit'])
+routes\web.php:2101:                ->name('project-tasks.edit');
+routes\web.php:2103:            Route::put('/tasks/{projectTask}', [ProjectTaskController::class, 'update'])
+routes\web.php:2105:                ->name('project-tasks.update');
+routes\web.php:2135:            Route::get('/project-statuses/{projectStatus}/edit', [ProjectStatusController::class, 'edit'])
+routes\web.php:2136:                ->whereNumber('projectStatus')
+routes\web.php:2139:            Route::put('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'update'])
+routes\web.php:2140:                ->whereNumber('projectStatus')
+routes\web.php:2216:        Route::middleware(['permission:project_management.delete|projects_mgmt.delete'])->group(function () {
+routes\web.php:2217:            Route::delete('/projects/{project}', [ProjectsController::class, 'destroy'])
+routes\web.php:2219:                ->name('projects.destroy');
+routes\web.php:2225:            Route::delete('/milestones/{milestone}', [ProjectMilestoneController::class, 'destroy'])
+routes\web.php:2227:                ->name('project-milestones.destroy');
+routes\web.php:2229:            Route::delete('/tasks/{projectTask}', [ProjectTaskController::class, 'destroy'])
+routes\web.php:2231:                ->name('project-tasks.destroy');
+routes\web.php:2245:            Route::delete('/project-statuses/{projectStatus}', [ProjectStatusController::class, 'destroy'])
+routes\web.php:2246:                ->whereNumber('projectStatus')
+routes\web.php:2281:    | PROJECTS MANAGEMENT MODULE ROUTES END
+routes\webB.php:1000:        Route::get('/project-management', function () {
+routes\webB.php:1002:            return view('modules.project-management');
+routes\webB.php:1003:        })->name('project-management');
+===== PM MODELS =====
+app\Models\CrmLead.php:29:        'project_id',
+app\Models\CrmLead.php:75:        return $this->belongsTo(\App\Models\ProjectMgmt\Client::class, 'client_id');
+app\Models\EvaluationForm.php:10:        'task_title',    
+app\Models\EvaluationForm.php:26:    public function tasks()
+app\Models\EvaluationForm.php:28:        return $this->hasMany(EvaluationTask::class);
+app\Models\EvaluationTask.php:7:class EvaluationTask extends Model
+app\Models\EvaluationTask.php:48:        return $this->hasMany(EvaluationTaskAnswer::class, 'evaluation_task_id');
+app\Models\EvaluationTaskAnswer.php:7:class EvaluationTaskAnswer extends Model
+app\Models\EvaluationTaskAnswer.php:10:        'evaluation_task_id',
+app\Models\EvaluationTaskAnswer.php:16:    public function task()
+app\Models\EvaluationTaskAnswer.php:18:        return $this->belongsTo(EvaluationTask::class, 'evaluation_task_id');
+app\Models\ProjectMgmt\Client.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\Client.php:23:    public function projects()
+app\Models\ProjectMgmt\Client.php:25:        return $this->hasMany(Project::class);
+app\Models\ProjectMgmt\DocumentControl.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\Project.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\Project.php:10:class Project extends Model
+app\Models\ProjectMgmt\Project.php:12:    protected $table = 'projects';
+app\Models\ProjectMgmt\Project.php:22:        'project_type',
+app\Models\ProjectMgmt\Project.php:28:        'project_type_id',
+app\Models\ProjectMgmt\Project.php:31:        'project_manager_id',
+app\Models\ProjectMgmt\Project.php:62:        return $this->belongsToMany(User::class, 'project_users', 'project_id', 'user_id')
+app\Models\ProjectMgmt\Project.php:73:        return $this->belongsTo(ProjectType::class, 'project_type_id');
+app\Models\ProjectMgmt\Project.php:78:        return $this->belongsTo(ProjectPriority::class, 'priority_id');
+app\Models\ProjectMgmt\Project.php:81:    public function projectStatus()
+app\Models\ProjectMgmt\Project.php:83:        return $this->belongsTo(ProjectStatus::class, 'status_id');
+app\Models\ProjectMgmt\Project.php:88:        return $this->belongsTo(User::class, 'project_manager_id');
+app\Models\ProjectMgmt\Project.php:96:    public function milestones()
+app\Models\ProjectMgmt\Project.php:98:        return $this->hasMany(ProjectMilestone::class);
+app\Models\ProjectMgmt\Project.php:101:    public function tasks()
+app\Models\ProjectMgmt\Project.php:103:        return $this->hasMany(ProjectTask::class);
+app\Models\ProjectMgmt\Project.php:107:        return $this->hasMany(ProjectFile::class);
+app\Models\ProjectMgmt\Project.php:112:        return $this->hasOne(ProjectFileFolder::class);
+app\Models\ProjectMgmt\Project.php:115:    public function projectFileActivities()
+app\Models\ProjectMgmt\Project.php:117:        return $this->hasMany(ProjectFileActivity::class);
+app\Models\ProjectMgmt\ProjectExpense.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectExpense.php:12:class ProjectExpense extends Model
+app\Models\ProjectMgmt\ProjectExpense.php:14:    protected $table = 'project_expenses';
+app\Models\ProjectMgmt\ProjectExpense.php:18:        'project_rfp_id',
+app\Models\ProjectMgmt\ProjectExpense.php:37:        return $this->belongsTo(ProjectRfp::class, 'project_rfp_id');
+app\Models\ProjectMgmt\ProjectExpense.php:47:        return $this->hasMany(ProjectExpenseReceipt::class, 'project_expense_id', 'id')->orderBy('store_receipt_date')->orderBy('id');
+app\Models\ProjectMgmt\ProjectExpenseReceipt.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectExpenseReceipt.php:9:class ProjectExpenseReceipt extends Model
+app\Models\ProjectMgmt\ProjectExpenseReceipt.php:11:    protected $table = 'project_expense_receipts';
+app\Models\ProjectMgmt\ProjectExpenseReceipt.php:15:        'project_expense_id',
+app\Models\ProjectMgmt\ProjectExpenseReceipt.php:29:        return $this->belongsTo(ProjectExpense::class, 'project_expense_id');
+app\Models\ProjectMgmt\ProjectFile.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectFile.php:9:class ProjectFile extends Model
+app\Models\ProjectMgmt\ProjectFile.php:11:    protected $table = 'project_files';
+app\Models\ProjectMgmt\ProjectFile.php:14:        'project_id',
+app\Models\ProjectMgmt\ProjectFile.php:31:    public function project()
+app\Models\ProjectMgmt\ProjectFile.php:33:        return $this->belongsTo(Project::class, 'project_id');
+app\Models\ProjectMgmt\ProjectFile.php:43:        return $this->hasMany(ProjectFileActivity::class, 'project_file_id');
+app\Models\ProjectMgmt\ProjectFile.php:77:        return route('project-files.download', $this->id);
+app\Models\ProjectMgmt\ProjectFileActivity.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectFileActivity.php:8:class ProjectFileActivity extends Model
+app\Models\ProjectMgmt\ProjectFileActivity.php:10:    protected $table = 'project_file_activities';
+app\Models\ProjectMgmt\ProjectFileActivity.php:13:        'project_id',
+app\Models\ProjectMgmt\ProjectFileActivity.php:14:        'project_file_id',
+app\Models\ProjectMgmt\ProjectFileActivity.php:25:    public function project()
+app\Models\ProjectMgmt\ProjectFileActivity.php:27:        return $this->belongsTo(Project::class, 'project_id');
+app\Models\ProjectMgmt\ProjectFileActivity.php:32:        return $this->belongsTo(ProjectFile::class, 'project_file_id');
+app\Models\ProjectMgmt\ProjectFileFolder.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectFileFolder.php:7:class ProjectFileFolder extends Model
+app\Models\ProjectMgmt\ProjectFileFolder.php:9:    protected $table = 'project_file_folders';
+app\Models\ProjectMgmt\ProjectFileFolder.php:12:        'project_id',
+app\Models\ProjectMgmt\ProjectFileFolder.php:16:    public function project()
+app\Models\ProjectMgmt\ProjectFileFolder.php:18:        return $this->belongsTo(Project::class, 'project_id');
+app\Models\ProjectMgmt\ProjectGasSlip.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectGasSlip.php:11:class ProjectGasSlip extends Model
+app\Models\ProjectMgmt\ProjectGasSlip.php:15:    protected $table = 'project_gas_slips';
+app\Models\ProjectMgmt\ProjectGasSlip.php:18:        'po_no', 'project_vehicle_id', 'location', 'amount', 'issued_date', 'returned_date', 'attachment_path',
+app\Models\ProjectMgmt\ProjectGasSlip.php:30:        return $this->belongsTo(ProjectVehicle::class, 'project_vehicle_id');
+app\Models\ProjectMgmt\ProjectGasSlip.php:35:        return $this->belongsToMany(User::class, 'project_gas_slip_drivers', 'project_gas_slip_id', 'user_id')->withTimestamps();
+app\Models\ProjectMgmt\ProjectMilestone.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectMilestone.php:9:class ProjectMilestone extends Model
+app\Models\ProjectMgmt\ProjectMilestone.php:14:        'project_id',
+app\Models\ProjectMgmt\ProjectMilestone.php:35:    public function project()
+app\Models\ProjectMgmt\ProjectMilestone.php:37:        return $this->belongsTo(Project::class);
+app\Models\ProjectMgmt\ProjectMilestone.php:49:            'project_milestone_team',
+app\Models\ProjectMgmt\ProjectMilestone.php:50:            'project_milestone_id',
+app\Models\ProjectMgmt\ProjectPriority.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectPriority.php:8:class ProjectPriority extends Model
+app\Models\ProjectMgmt\ProjectPriority.php:12:    protected $table = 'project_priorities';
+app\Models\ProjectMgmt\ProjectPriority.php:22:    public function projects()
+app\Models\ProjectMgmt\ProjectPriority.php:24:        return $this->hasMany(Project::class, 'priority_id');
+app\Models\ProjectMgmt\ProjectRfp.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectRfp.php:8:class ProjectRfp extends Model
+app\Models\ProjectMgmt\ProjectRfp.php:10:    protected $table = 'project_rfps';
+app\Models\ProjectMgmt\ProjectRfp.php:24:        'project_id',
+app\Models\ProjectMgmt\ProjectRfp.php:25:        'project_code_snapshot',
+app\Models\ProjectMgmt\ProjectRfp.php:26:        'project_name_snapshot',
+app\Models\ProjectMgmt\ProjectRfp.php:27:        'project_amount_snapshot',
+app\Models\ProjectMgmt\ProjectRfp.php:57:        'project_amount_snapshot' => 'decimal:2',
+app\Models\ProjectMgmt\ProjectRfp.php:72:    public function project()
+app\Models\ProjectMgmt\ProjectRfp.php:74:        return $this->belongsTo(Project::class, 'project_id');
+app\Models\ProjectMgmt\ProjectRfp.php:99:        return $this->hasMany(ProjectRfpItem::class, 'project_rfp_id')->orderBy('sort_order');
+app\Models\ProjectMgmt\ProjectRfp.php:104:        return $this->hasMany(ProjectRfpApproval::class, 'project_rfp_id')->orderBy('sort_order');
+app\Models\ProjectMgmt\ProjectRfp.php:109:        return $this->hasMany(ProjectRfpAttachment::class, 'project_rfp_id');
+app\Models\ProjectMgmt\ProjectRfpApproval.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectRfpApproval.php:8:class ProjectRfpApproval extends Model
+app\Models\ProjectMgmt\ProjectRfpApproval.php:10:    protected $table = 'project_rfp_approvals';
+app\Models\ProjectMgmt\ProjectRfpApproval.php:13:        'project_rfp_id',
+app\Models\ProjectMgmt\ProjectRfpApproval.php:28:        return $this->belongsTo(ProjectRfp::class, 'project_rfp_id');
+app\Models\ProjectMgmt\ProjectRfpAttachment.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectRfpAttachment.php:8:class ProjectRfpAttachment extends Model
+app\Models\ProjectMgmt\ProjectRfpAttachment.php:10:    protected $table = 'project_rfp_attachments';
+app\Models\ProjectMgmt\ProjectRfpAttachment.php:13:        'project_rfp_id',
+app\Models\ProjectMgmt\ProjectRfpAttachment.php:23:        return $this->belongsTo(ProjectRfp::class, 'project_rfp_id');
+app\Models\ProjectMgmt\ProjectRfpItem.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectRfpItem.php:7:class ProjectRfpItem extends Model
+app\Models\ProjectMgmt\ProjectRfpItem.php:9:    protected $table = 'project_rfp_items';
+app\Models\ProjectMgmt\ProjectRfpItem.php:12:        'project_rfp_id',
+app\Models\ProjectMgmt\ProjectRfpItem.php:29:        return $this->belongsTo(ProjectRfp::class, 'project_rfp_id');
+app\Models\ProjectMgmt\ProjectStatus.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectStatus.php:8:class ProjectStatus extends Model
+app\Models\ProjectMgmt\ProjectStatus.php:12:    protected $table = 'project_statuses';
+app\Models\ProjectMgmt\ProjectStatus.php:22:    public function projects()
+app\Models\ProjectMgmt\ProjectStatus.php:24:        return $this->hasMany(Project::class, 'status_id');
+app\Models\ProjectMgmt\ProjectTask.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectTask.php:9:class ProjectTask extends Model
+app\Models\ProjectMgmt\ProjectTask.php:14:        'project_id',
+app\Models\ProjectMgmt\ProjectTask.php:15:        'project_type_id',
+app\Models\ProjectMgmt\ProjectTask.php:19:        'task_time',
+app\Models\ProjectMgmt\ProjectTask.php:30:    public function project()
+app\Models\ProjectMgmt\ProjectTask.php:32:        return $this->belongsTo(Project::class, 'project_id');
+app\Models\ProjectMgmt\ProjectTask.php:35:    public function projectType()
+app\Models\ProjectMgmt\ProjectTask.php:37:        return $this->belongsTo(ProjectType::class, 'project_type_id');
+app\Models\ProjectMgmt\ProjectTask.php:62:        $seed = $this->project_type_id;
+app\Models\ProjectMgmt\ProjectTask.php:64:        if ($this->relationLoaded('projectType') && $this->projectType) {
+app\Models\ProjectMgmt\ProjectTask.php:65:            $seed = $this->projectType->code ?: $this->projectType->name ?: $this->project_type_id;
+app\Models\ProjectMgmt\ProjectTask.php:73:        return $this->belongsToMany(Team::class, 'project_task_team', 'project_task_id', 'team_id')
+app\Models\ProjectMgmt\ProjectTask.php:84:        return $this->hasMany(ProjectTaskReport::class, 'project_task_id')->latest();
+app\Models\ProjectMgmt\ProjectTaskReport.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectTaskReport.php:9:class ProjectTaskReport extends Model
+app\Models\ProjectMgmt\ProjectTaskReport.php:14:        'project_task_id',
+app\Models\ProjectMgmt\ProjectTaskReport.php:26:    public function task()
+app\Models\ProjectMgmt\ProjectTaskReport.php:28:        return $this->belongsTo(ProjectTask::class, 'project_task_id');
+app\Models\ProjectMgmt\ProjectType.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectType.php:7:use App\Models\ProjectMgmt\Project;
+app\Models\ProjectMgmt\ProjectType.php:9:class ProjectType extends Model
+app\Models\ProjectMgmt\ProjectType.php:13:    protected $table = 'project_types';
+app\Models\ProjectMgmt\ProjectType.php:22:    public function projects()
+app\Models\ProjectMgmt\ProjectType.php:24:        return $this->hasMany(Project::class, 'project_type_id');
+app\Models\ProjectMgmt\ProjectVehicle.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\ProjectVehicle.php:12:class ProjectVehicle extends Model
+app\Models\ProjectMgmt\ProjectVehicle.php:16:    protected $table = 'project_vehicles';
+app\Models\ProjectMgmt\ProjectVehicle.php:24:        return $this->belongsToMany(User::class, 'project_vehicle_drivers', 'project_vehicle_id', 'user_id')->withTimestamps();
+app\Models\ProjectMgmt\ProjectVehicle.php:29:        return $this->hasMany(ProjectGasSlip::class, 'project_vehicle_id');
+app\Models\ProjectMgmt\RfpType.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\RfpType.php:26:        return $this->hasMany(ProjectRfp::class, 'rfp_type_id');
+app\Models\ProjectMgmt\StoreName.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\StoreName.php:29:        return $this->hasMany(ProjectExpense::class);
+app\Models\ProjectMgmt\Team.php:3:namespace App\Models\ProjectMgmt;
+app\Models\ProjectMgmt\Team.php:28:        return $this->belongsToMany(User::class, 'project_team_members', 'team_id', 'user_id')
+app\Models\ProjectMgmt\Team.php:32:    public function milestones()
+app\Models\ProjectMgmt\Team.php:35:            ProjectMilestone::class,
+app\Models\ProjectMgmt\Team.php:36:            'project_milestone_team',
+app\Models\ProjectMgmt\Team.php:38:            'project_milestone_id'
+app\Models\ProjectMgmt\Team.php:42:    public function tasks()
+app\Models\ProjectMgmt\Team.php:45:            ProjectTask::class,
+app\Models\ProjectMgmt\Team.php:46:            'project_task_team',
+app\Models\ProjectMgmt\Team.php:48:            'project_task_id'
+app\Models\VehicleAssignment.php:17:        'project_id',
+app\Models\VehicleAssignment.php:18:        'project_site_text',

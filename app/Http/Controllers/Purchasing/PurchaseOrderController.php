@@ -12,6 +12,8 @@ use App\Models\Warehouse\WarehouseLocation as Location;
 use App\Models\Warehouse\WarehouseSupplier as Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use App\Models\User;
 use Yajra\DataTables\Facades\DataTables;
 
 class PurchaseOrderController extends Controller
@@ -77,12 +79,12 @@ class PurchaseOrderController extends Controller
         $postedPaymentsTotal = (float) PurchasePayment::where('status', 'posted')->sum('amount');
         $voidedPaymentsTotal = (float) PurchasePayment::where('status', 'voided')->sum('amount');
 
-        $recentPOs = PurchaseOrder::with(['supplier', 'location'])
+        $recentPOs = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
             ->latest()
             ->take(6)
             ->get();
 
-        $pendingPOs = PurchaseOrder::with(['supplier', 'location'])
+        $pendingPOs = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
             ->whereIn('status', ['ordered', 'partially_received'])
             ->latest()
             ->take(6)
@@ -151,7 +153,7 @@ class PurchaseOrderController extends Controller
         if ($request->ajax()) {
             $table = (new PurchaseOrder())->getTable();
 
-            $purchaseOrders = PurchaseOrder::with(['supplier', 'location'])
+            $purchaseOrders = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
                 ->select($table . '.*')
                 ->orderByDesc($table . '.id');
 
@@ -257,6 +259,31 @@ class PurchaseOrderController extends Controller
 
                     return '<span class="' . $statusClass . '">' . e(ucwords(str_replace('_', ' ', $paymentStatus))) . '</span>';
                 })
+
+                ->addColumn('approved_by_display', function ($row) {
+                    $name = $this->displayUserName($row->approver);
+                    $date = $row->approved_at ? optional($row->approved_at)->format('M d, Y h:i A') : null;
+
+                    if ($name === '-' && !$date) {
+                        return '<span class="text-secondary">-</span>';
+                    }
+
+                    return '<div class="fw-semibold text-dark">' . e($name) . '</div>'
+                        . '<div class="small text-secondary">' . e($date ?: '-') . '</div>';
+                })
+                ->addColumn('received_by_display', function ($row) {
+                    $tracker = $this->getReceivingTracker($row);
+                    $name = $tracker['name'] ?? '-';
+                    $date = $tracker['date'] ?? null;
+                    $dateText = $date ? \Carbon\Carbon::parse($date)->format('M d, Y h:i A') : null;
+
+                    if ($name === '-' && !$dateText) {
+                        return '<span class="text-secondary">-</span>';
+                    }
+
+                    return '<div class="fw-semibold text-dark">' . e($name) . '</div>'
+                        . '<div class="small text-secondary">' . e($dateText ?: '-') . '</div>';
+                })
                 ->addColumn('action', function ($row) use ($canViewPO, $canDeletePO) {
                     if (!$canViewPO && !$canDeletePO) {
                         return '';
@@ -311,6 +338,8 @@ class PurchaseOrderController extends Controller
                     'balance_display',
                     'receiving_status_display',
                     'payment_status_display',
+                    'approved_by_display',
+                    'received_by_display',
                     'action',
                 ])
                 ->toJson();
@@ -365,7 +394,7 @@ class PurchaseOrderController extends Controller
             'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $purchaseOrder = DB::transaction(function () use ($validated) {
             $subtotal = 0;
             $taxTotal = 0;
 
@@ -416,10 +445,20 @@ class PurchaseOrderController extends Controller
                     'line_total' => ($qty * $unitPrice) + $tax,
                 ]);
             }
+
+            return $po;
         });
 
+        if ($request->ajax() || $request->expectsJson()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Purchase order created successfully.',
+                'redirect' => route('purchasing.purchase-orders.show', $purchaseOrder),
+            ]);
+        }
+
         return redirect()
-            ->route('purchasing.purchase-orders.index')
+            ->route('purchasing.purchase-orders.show', $purchaseOrder)
             ->with('success', 'Purchase order created successfully.');
     }
 
@@ -427,7 +466,7 @@ class PurchaseOrderController extends Controller
     {
         $this->authorizePurchasing('purchasing.po.view');
 
-        $purchaseOrder->load(['supplier', 'location', 'items.item', 'creator']);
+        $purchaseOrder->load(['supplier', 'location', 'items.item', 'creator', 'approver', 'receiver']);
 
         $receivingRecords = DB::table('warehouse_receivings as wr')
             ->leftJoin('warehouse_suppliers as s', 's.id', '=', 'wr.supplier_id')
@@ -494,6 +533,8 @@ class PurchaseOrderController extends Controller
             'payment_status' => $paymentStatus,
         ];
 
+        $receivingTracker = $this->getReceivingTracker($purchaseOrder);
+
         $journalReferences = collect([$purchaseOrder->po_no])
             ->merge($bills->pluck('bill_no'))
             ->merge($payments->pluck('payment_no'))
@@ -534,7 +575,8 @@ class PurchaseOrderController extends Controller
             'bills',
             'payments',
             'journalEntries',
-            'paymentSummary'
+            'paymentSummary',
+            'receivingTracker'
         ));
     }
 
@@ -609,7 +651,11 @@ class PurchaseOrderController extends Controller
 
         $purchase_order->update([
             'status' => 'ordered',
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
         ]);
+
+        \App\Services\SystemNotificationService::notifyPurchaseOrderMarkedOrdered($purchase_order->fresh(), auth()->id());
 
         if ($request->ajax()) {
             return response()->json([
@@ -671,6 +717,92 @@ class PurchaseOrderController extends Controller
             ->sum('amount');
     }
 
+
+    private function displayUserName($user): string
+    {
+        if (!$user) {
+            return '-';
+        }
+
+        $name = trim((string) ($user->name ?? ''));
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        $firstName = trim((string) ($user->first_name ?? ''));
+        $lastName = trim((string) ($user->last_name ?? ''));
+        $fullName = trim($firstName . ' ' . $lastName);
+
+        if ($fullName !== '') {
+            return $fullName;
+        }
+
+        return $user->email ?? '-';
+    }
+
+    private function getReceivingTracker(PurchaseOrder $po): array
+    {
+        if ($po->receiver || $po->received_at) {
+            return [
+                'name' => $this->displayUserName($po->receiver),
+                'date' => $po->received_at,
+            ];
+        }
+
+        if (!Schema::hasTable('warehouse_receivings')) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $userColumn = collect(['received_by', 'received_by_id', 'created_by', 'created_by_id', 'user_id'])
+            ->first(fn ($column) => Schema::hasColumn('warehouse_receivings', $column));
+
+        $dateColumn = collect(['received_at', 'received_date', 'created_at'])
+            ->first(fn ($column) => Schema::hasColumn('warehouse_receivings', $column));
+
+        if (!$userColumn && !$dateColumn) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $selects = ['id'];
+
+        if ($userColumn) {
+            $selects[] = $userColumn . ' as tracker_user_id';
+        }
+
+        if ($dateColumn) {
+            $selects[] = $dateColumn . ' as tracker_date';
+        }
+
+        $receiving = DB::table('warehouse_receivings')
+            ->where(function ($query) use ($po) {
+                $query->where('reference_no', $po->po_no);
+
+                if (Schema::hasColumn('warehouse_receivings', 'remarks')) {
+                    $query->orWhere('remarks', 'ilike', '%' . $po->po_no . '%');
+                }
+            })
+            ->select($selects)
+            ->orderByDesc($dateColumn ?: 'id')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$receiving) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $user = null;
+
+        if (!empty($receiving->tracker_user_id)) {
+            $user = User::find($receiving->tracker_user_id);
+        }
+
+        return [
+            'name' => $this->displayUserName($user),
+            'date' => $receiving->tracker_date ?? null,
+        ];
+    }
+
     private function generatePoNo(): string
     {
         $prefix = 'PO-' . now()->format('Ymd') . '-';
@@ -688,4 +820,47 @@ class PurchaseOrderController extends Controller
 
         return $prefix . str_pad($next, 4, '0', STR_PAD_LEFT);
     }
+    public function markSupplierArrived(Request $request, PurchaseOrder $purchase_order)
+    {
+        $this->authorizePurchasing('purchasing.po.mark_ordered');
+
+        if (! in_array($purchase_order->status, ['ordered', 'partially_received'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Only ordered or partially received purchase orders can be marked as supplier arrived.',
+                ], 422);
+            }
+
+            return redirect()
+                ->route('purchasing.purchase-orders.show', $purchase_order)
+                ->with('error', 'Only ordered or partially received purchase orders can be marked as supplier arrived.');
+        }
+
+        $validated = $request->validate([
+            'supplier_arrival_notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $purchase_order->forceFill([
+            'supplier_arrived_at' => now(),
+            'supplier_arrived_by' => auth()->id(),
+            'supplier_arrival_notes' => $validated['supplier_arrival_notes'] ?? null,
+        ])->save();
+
+        \App\Services\SystemNotificationService::notifyPurchaseOrderSupplierArrived($purchase_order->fresh(['supplier', 'location']), auth()->id());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Warehouse department has been notified that the supplier stocks arrived.',
+                'redirect' => route('purchasing.purchase-orders.show', $purchase_order),
+            ]);
+        }
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchase_order)
+            ->with('success', 'Warehouse department has been notified that the supplier stocks arrived.');
+    }
+
 }
+

@@ -38,6 +38,7 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'last_seen_at' => 'datetime',
     ];
 
     protected $appends = ['full_name'];
@@ -150,4 +151,30 @@ class User extends Authenticatable implements MustVerifyEmail, HasMedia
             ->where('module', strtolower(trim((string) $module)))
             ->value('access_level') ?? $default;
     }
+
+    public function isWmcAdminOrBod(): bool
+    {
+        return $this->hasAnyRole([
+            'Super Admin',
+            'Super Administrator',
+            'Admin',
+            'BOD',
+            'Bod',
+            'Board of Directors',
+            'Board Of Directors',
+        ]);
+    }
+
+    public function canViewCostPrice(): bool
+    {
+        return $this->isWmcAdminOrBod()
+            || $this->can('warehouse.cost_price.view')
+            || $this->can('view cost price');
+    }
+
+    public function canUseStockOut(): bool
+    {
+        return $this->isWmcAdminOrBod();
+    }
+
 }

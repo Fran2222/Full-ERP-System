@@ -1,0 +1,66 @@
+@extends('layouts.dashboard.dashboard')
+
+@section('content')
+@php
+    $other = $conversation->otherParticipantFor(auth()->id());
+@endphp
+
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h3 class="mb-1 fw-bold">{{ $conversation->displayTitleFor(auth()->id()) }}</h3>
+            <p class="text-muted mb-0">
+                Direct internal conversation
+                @if($other && $other->email)
+                    • {{ $other->email }}
+                @endif
+            </p>
+        </div>
+        <a href="{{ route('chat.index') }}" class="btn btn-light border rounded-3">Back to Chats</a>
+    </div>
+
+    @if(session('success'))
+        <div class="alert alert-success rounded-3">{{ session('success') }}</div>
+    @endif
+
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body" style="min-height: 420px; max-height: 580px; overflow-y: auto;">
+            @forelse($messages as $message)
+                @php
+                    $isMine = (int) $message->sender_id === (int) auth()->id();
+                    $senderName = optional($message->sender)->full_name ?: optional($message->sender)->name ?: optional($message->sender)->email ?: 'User';
+                @endphp
+
+                <div class="d-flex mb-3 {{ $isMine ? 'justify-content-end' : 'justify-content-start' }}">
+                    <div class="{{ $isMine ? 'bg-primary text-white' : 'bg-light text-dark' }} rounded-4 px-3 py-2"
+                         style="max-width: 75%; white-space: pre-wrap; word-break: break-word;">
+                        <div class="small {{ $isMine ? 'text-white-50' : 'text-muted' }} mb-1">
+                            {{ $senderName }} • {{ $message->created_at->format('M d, Y h:i A') }}
+                        </div>
+                        <div>{{ $message->body }}</div>
+                    </div>
+                </div>
+            @empty
+                <div class="text-center py-5 text-muted">
+                    No messages yet. Send the first message below.
+                </div>
+            @endforelse
+        </div>
+
+        <div class="card-footer bg-white border-0">
+            <form action="{{ route('chat.send', $conversation) }}" method="POST">
+                @csrf
+                <label class="form-label fw-semibold">Message</label>
+                <textarea name="body" rows="3" class="form-control rounded-3" required maxlength="5000"
+                          placeholder="Type your message...">{{ old('body') }}</textarea>
+                @error('body')
+                    <div class="text-danger small mt-1">{{ $message }}</div>
+                @enderror
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-primary px-4">Send</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endsection

@@ -1,0 +1,854 @@
+<?php
+
+namespace App\Http\Controllers\Purchasing;
+
+use App\Http\Controllers\Controller;
+use App\Models\Purchasing\PurchaseOrder;
+use App\Models\Purchasing\PurchaseOrderItem;
+use App\Models\Purchasing\PurchaseBill;
+use App\Models\Purchasing\PurchasePayment;
+use App\Models\Warehouse\WarehouseItem as Item;
+use App\Models\Warehouse\WarehouseLocation as Location;
+use App\Models\Warehouse\WarehouseSupplier as Supplier;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use App\Models\User;
+use Yajra\DataTables\Facades\DataTables;
+
+class PurchaseOrderController extends Controller
+{
+    private function authorizePurchasing(string $permission): void
+    {
+        $user = auth()->user();
+
+        abort_unless(
+            $user && (
+                $user->can($permission) ||
+                $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+            ),
+            403,
+            'Unauthorized purchasing action.'
+        );
+    }
+
+    private function canAccess(string $permission): bool
+    {
+        $user = auth()->user();
+
+        return $user && (
+            $user->can($permission) ||
+            $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+        );
+    }
+
+    public function dashboard()
+    {
+        $this->authorizePurchasing('purchasing.dashboard.view');
+
+        $totalPOs = PurchaseOrder::count();
+        $draftPOs = PurchaseOrder::where('status', 'draft')->count();
+        $orderedPOs = PurchaseOrder::where('status', 'ordered')->count();
+        $partiallyReceivedPOs = PurchaseOrder::where('status', 'partially_received')->count();
+        $receivedPOs = PurchaseOrder::where('status', 'received')->count();
+        $pendingReceivingPOs = PurchaseOrder::whereIn('status', ['ordered', 'partially_received'])->count();
+
+        $totalAmount = (float) PurchaseOrder::sum('total_amount');
+        $openPOAmount = (float) PurchaseOrder::whereIn('status', ['draft', 'ordered', 'partially_received'])
+            ->sum('total_amount');
+
+        $totalReceivings = DB::table('warehouse_receivings')->count();
+        $totalReceivedQuantity = (float) DB::table('warehouse_receiving_items')->sum('quantity');
+        $totalReceivingCost = (float) DB::table('warehouse_receiving_items')->sum('total_cost');
+
+        $postedBillsTotal = (float) PurchaseBill::where('status', 'posted')->sum('total_amount');
+        $openBills = PurchaseBill::with(['supplier', 'purchaseOrder', 'postedPayments'])
+            ->where('status', 'posted')
+            ->get()
+            ->filter(fn ($bill) => (float) $bill->balance > 0);
+
+        $openBillsCount = $openBills->count();
+        $openBillsAmount = (float) $openBills->sum(fn ($bill) => (float) $bill->balance);
+        $partiallyPaidBillsCount = $openBills->filter(fn ($bill) => (float) $bill->paid_amount > 0)->count();
+        $unpaidBillsCount = $openBills->filter(fn ($bill) => (float) $bill->paid_amount <= 0)->count();
+
+        $paymentsThisMonth = (float) PurchasePayment::where('status', 'posted')
+            ->whereBetween('payment_date', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            ->sum('amount');
+
+        $postedPaymentsTotal = (float) PurchasePayment::where('status', 'posted')->sum('amount');
+        $voidedPaymentsTotal = (float) PurchasePayment::where('status', 'voided')->sum('amount');
+
+        $recentPOs = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
+            ->latest()
+            ->take(6)
+            ->get();
+
+        $pendingPOs = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
+            ->whereIn('status', ['ordered', 'partially_received'])
+            ->latest()
+            ->take(6)
+            ->get();
+
+        $recentReceivings = DB::table('warehouse_receivings as wr')
+            ->leftJoin('warehouse_suppliers as s', 's.id', '=', 'wr.supplier_id')
+            ->leftJoin('warehouse_locations as l', 'l.id', '=', 'wr.location_id')
+            ->select(
+                'wr.id',
+                'wr.receiving_no',
+                'wr.reference_no',
+                'wr.received_date',
+                'wr.status',
+                's.supplier_name',
+                's.contact_person',
+                'l.location_name',
+                'l.name as location_alt_name'
+            )
+            ->orderByDesc('wr.id')
+            ->limit(6)
+            ->get();
+
+        $recentBills = PurchaseBill::with(['supplier', 'purchaseOrder', 'postedPayments'])
+            ->latest()
+            ->take(6)
+            ->get();
+
+        $recentPayments = PurchasePayment::with(['supplier', 'purchaseOrder', 'purchaseBill', 'bankAccount'])
+            ->latest()
+            ->take(6)
+            ->get();
+
+        return view('purchasing.dashboard', compact(
+            'totalPOs',
+            'draftPOs',
+            'orderedPOs',
+            'partiallyReceivedPOs',
+            'receivedPOs',
+            'pendingReceivingPOs',
+            'totalAmount',
+            'openPOAmount',
+            'totalReceivings',
+            'totalReceivedQuantity',
+            'totalReceivingCost',
+            'postedBillsTotal',
+            'openBillsCount',
+            'openBillsAmount',
+            'partiallyPaidBillsCount',
+            'unpaidBillsCount',
+            'paymentsThisMonth',
+            'postedPaymentsTotal',
+            'voidedPaymentsTotal',
+            'recentPOs',
+            'pendingPOs',
+            'recentReceivings',
+            'recentBills',
+            'recentPayments'
+        ));
+    }
+
+    public function index(Request $request)
+    {
+        $this->authorizePurchasing('purchasing.po.view');
+
+        if ($request->ajax()) {
+            $table = (new PurchaseOrder())->getTable();
+
+            $purchaseOrders = PurchaseOrder::with(['supplier', 'location', 'approver', 'receiver'])
+                ->select($table . '.*')
+                ->orderByDesc($table . '.id');
+
+            $canViewPO = $this->canAccess('purchasing.po.view');
+            $canDeletePO = $this->canAccess('purchasing.po.delete');
+
+            return DataTables::eloquent($purchaseOrders)
+                ->addIndexColumn()
+                ->filter(function ($query) use ($request) {
+                    $search = $request->input('search.value');
+
+                    if ($search) {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('po_no', 'ilike', '%' . $search . '%')
+                                ->orWhere('reference_no', 'ilike', '%' . $search . '%')
+                                ->orWhere('status', 'ilike', '%' . $search . '%')
+                                ->orWhereHas('supplier', function ($supplierQuery) use ($search) {
+                                    $supplierQuery->where('supplier_name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('contact_person', 'ilike', '%' . $search . '%')
+                                        ->orWhere('email', 'ilike', '%' . $search . '%')
+                                        ->orWhere('phone', 'ilike', '%' . $search . '%');
+                                })
+                                ->orWhereHas('location', function ($locationQuery) use ($search) {
+                                    $locationQuery->where('location_name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('name', 'ilike', '%' . $search . '%')
+                                        ->orWhere('location_code', 'ilike', '%' . $search . '%');
+                                });
+                        });
+                    }
+                })
+                ->addColumn('po_no_display', function ($row) use ($canViewPO) {
+                    $html = '';
+
+                    if ($canViewPO) {
+                        $html .= '<a href="' . route('purchasing.purchase-orders.show', $row) . '" class="fw-semibold text-primary text-decoration-none">'
+                            . e($row->po_no)
+                            . '</a>';
+                    } else {
+                        $html .= '<span class="fw-semibold text-dark">' . e($row->po_no) . '</span>';
+                    }
+
+                    if ($row->reference_no) {
+                        $html .= '<div class="small text-secondary">Ref: ' . e($row->reference_no) . '</div>';
+                    }
+
+                    return $html;
+                })
+                ->addColumn('supplier_display', function ($row) {
+                    return '
+                        <div class="fw-semibold text-dark">' . e($row->supplier?->supplier_name ?? '-') . '</div>
+                        <div class="small text-secondary">' . e($row->supplier?->contact_person ?? '-') . '</div>
+                    ';
+                })
+                ->addColumn('po_date_display', function ($row) {
+                    return '<span class="text-secondary">' . (optional($row->po_date)->format('M d, Y') ?: '-') . '</span>';
+                })
+                ->addColumn('expected_date_display', function ($row) {
+                    return '<span class="text-secondary">' . (optional($row->expected_date)->format('M d, Y') ?: '-') . '</span>';
+                })
+                ->addColumn('location_display', function ($row) {
+                    $locationName = $row->location?->location_name
+                        ?? $row->location?->name
+                        ?? '-';
+
+                    return '<div class="fw-semibold text-dark">' . e($locationName) . '</div>';
+                })
+                ->addColumn('total_display', function ($row) {
+                    return '<span class="fw-bold text-success d-block text-end">' . number_format((float) $row->total_amount, 2) . '</span>';
+                })
+                ->addColumn('paid_display', function ($row) {
+                    $summary = $this->getPurchasePaymentSummary($row);
+
+                    return '<span class="fw-bold text-primary d-block text-end">' . number_format((float) $summary['paid_amount'], 2) . '</span>';
+                })
+                ->addColumn('balance_display', function ($row) {
+                    $summary = $this->getPurchasePaymentSummary($row);
+                    $class = ((float) $summary['payable_balance'] <= 0) ? 'text-success' : 'text-danger';
+
+                    return '<span class="fw-bold ' . $class . ' d-block text-end">' . number_format((float) $summary['payable_balance'], 2) . '</span>';
+                })
+                ->addColumn('receiving_status_display', function ($row) {
+                    $statusClass = match ($row->status) {
+                        'draft' => 'purchasing-badge purchasing-badge-warning',
+                        'ordered' => 'purchasing-badge purchasing-badge-info',
+                        'partially_received' => 'purchasing-badge purchasing-badge-primary',
+                        'received' => 'purchasing-badge purchasing-badge-success',
+                        'cancelled' => 'purchasing-badge purchasing-badge-muted',
+                        default => 'purchasing-badge purchasing-badge-muted',
+                    };
+
+                    return '<span class="' . $statusClass . '">' . e(ucwords(str_replace('_', ' ', $row->status))) . '</span>';
+                })
+                ->addColumn('payment_status_display', function ($row) {
+                    $summary = $this->getPurchasePaymentSummary($row);
+                    $paymentStatus = $summary['payment_status'];
+
+                    $statusClass = match ($paymentStatus) {
+                        'paid' => 'purchasing-badge purchasing-badge-success',
+                        'partially_paid' => 'purchasing-badge purchasing-badge-primary',
+                        'unpaid' => 'purchasing-badge purchasing-badge-warning',
+                        default => 'purchasing-badge purchasing-badge-muted',
+                    };
+
+                    return '<span class="' . $statusClass . '">' . e(ucwords(str_replace('_', ' ', $paymentStatus))) . '</span>';
+                })
+
+                ->addColumn('approved_by_display', function ($row) {
+                    $name = $this->displayUserName($row->approver);
+                    $date = $row->approved_at ? optional($row->approved_at)->format('M d, Y h:i A') : null;
+
+                    if ($name === '-' && !$date) {
+                        return '<span class="text-secondary">-</span>';
+                    }
+
+                    return '<div class="fw-semibold text-dark">' . e($name) . '</div>'
+                        . '<div class="small text-secondary">' . e($date ?: '-') . '</div>';
+                })
+                ->addColumn('received_by_display', function ($row) {
+                    $tracker = $this->getReceivingTracker($row);
+                    $name = $tracker['name'] ?? '-';
+                    $date = $tracker['date'] ?? null;
+                    $dateText = $date ? \Carbon\Carbon::parse($date)->format('M d, Y h:i A') : null;
+
+                    if ($name === '-' && !$dateText) {
+                        return '<span class="text-secondary">-</span>';
+                    }
+
+                    return '<div class="fw-semibold text-dark">' . e($name) . '</div>'
+                        . '<div class="small text-secondary">' . e($dateText ?: '-') . '</div>';
+                })
+                ->addColumn('action', function ($row) use ($canViewPO, $canDeletePO) {
+                    if (!$canViewPO && !$canDeletePO) {
+                        return '';
+                    }
+
+                    $html = '<div class="d-inline-flex gap-1">';
+
+                    if ($canViewPO) {
+                        $html .= '
+                            <a href="' . route('purchasing.purchase-orders.show', $row) . '"
+                               class="wmc-action-btn wmc-action-view"
+                               title="View">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"
+                                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </a>
+                        ';
+                    }
+
+                    if ($canDeletePO && !in_array($row->status, ['partially_received', 'received'], true)) {
+                        $html .= '
+                            <button type="button"
+                                    class="wmc-action-btn wmc-action-delete delete-po"
+                                    data-url="' . route('purchasing.purchase-orders.destroy', $row) . '"
+                                    data-name="' . e($row->po_no) . '"
+                                    title="Delete">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                    <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        ';
+                    }
+
+                    $html .= '</div>';
+
+                    return $html;
+                })
+                ->rawColumns([
+                    'po_no_display',
+                    'supplier_display',
+                    'po_date_display',
+                    'expected_date_display',
+                    'location_display',
+                    'total_display',
+                    'paid_display',
+                    'balance_display',
+                    'receiving_status_display',
+                    'payment_status_display',
+                    'approved_by_display',
+                    'received_by_display',
+                    'action',
+                ])
+                ->toJson();
+        }
+
+        return view('purchasing.purchase-orders.index');
+    }
+
+    public function create()
+    {
+        $this->authorizePurchasing('purchasing.po.create');
+
+        $suppliers = Supplier::where('status', true)
+            ->orderBy('supplier_name')
+            ->get();
+
+        $locations = Location::where('status', true)
+            ->orderByRaw('COALESCE(location_name, name) ASC')
+            ->get();
+
+        $items = Item::where('status', true)
+            ->with(['unit'])
+            ->orderByRaw('COALESCE(item_name, name) ASC')
+            ->get();
+
+        return view('purchasing.purchase-orders.create', compact(
+            'suppliers',
+            'locations',
+            'items'
+        ));
+    }
+
+    public function store(Request $request)
+    {
+        $this->authorizePurchasing('purchasing.po.create');
+
+        $validated = $request->validate([
+            'supplier_id' => ['required', 'exists:warehouse_suppliers,id'],
+            'po_date' => ['required', 'date'],
+            'expected_date' => ['nullable', 'date', 'after_or_equal:po_date'],
+            'location_id' => ['nullable', 'exists:warehouse_locations,id'],
+            'reference_no' => ['nullable', 'string', 'max:255'],
+            'ship_via' => ['nullable', 'string', 'max:255'],
+            'payment_terms' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.item_id' => ['required', 'exists:warehouse_items,id'],
+            'items.*.description' => ['nullable', 'string'],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            $subtotal = 0;
+            $taxTotal = 0;
+
+            foreach ($validated['items'] as $line) {
+                $qty = (float) $line['quantity'];
+                $unitPrice = (float) $line['unit_price'];
+                $tax = (float) ($line['tax_amount'] ?? 0);
+
+                $subtotal += $qty * $unitPrice;
+                $taxTotal += $tax;
+            }
+
+            $po = PurchaseOrder::create([
+                'po_no' => $this->generatePoNo(),
+                'supplier_id' => $validated['supplier_id'],
+                'po_date' => $validated['po_date'],
+                'expected_date' => $validated['expected_date'] ?? null,
+                'location_id' => $validated['location_id'] ?? null,
+                'reference_no' => $validated['reference_no'] ?? null,
+                'ship_via' => $validated['ship_via'] ?? null,
+                'payment_terms' => $validated['payment_terms'] ?? null,
+                'subtotal' => $subtotal,
+                'tax_amount' => $taxTotal,
+                'total_amount' => $subtotal + $taxTotal,
+                'status' => 'draft',
+                'notes' => $validated['notes'] ?? null,
+                'created_by' => auth()->id(),
+            ]);
+
+            foreach ($validated['items'] as $line) {
+                $item = Item::with('unit')->findOrFail($line['item_id']);
+
+                $qty = (float) $line['quantity'];
+                $unitPrice = (float) $line['unit_price'];
+                $tax = (float) ($line['tax_amount'] ?? 0);
+
+                PurchaseOrderItem::create([
+                    'purchase_order_id' => $po->id,
+                    'item_id' => $item->id,
+                    'item_code' => $item->item_code ?? $item->code,
+                    'item_name' => $item->item_name ?? $item->name,
+                    'description' => $line['description'] ?? $item->description,
+                    'quantity' => $qty,
+                    'received_quantity' => 0,
+                    'unit_name' => $item->unit?->name ?? $item->unit?->abbreviation,
+                    'unit_price' => $unitPrice,
+                    'tax_amount' => $tax,
+                    'line_total' => ($qty * $unitPrice) + $tax,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchaseOrder)->with('success', 'Purchase order created successfully.');
+    }
+
+    public function show(PurchaseOrder $purchaseOrder)
+    {
+        $this->authorizePurchasing('purchasing.po.view');
+
+        $purchaseOrder->load(['supplier', 'location', 'items.item', 'creator', 'approver', 'receiver']);
+
+        $receivingRecords = DB::table('warehouse_receivings as wr')
+            ->leftJoin('warehouse_suppliers as s', 's.id', '=', 'wr.supplier_id')
+            ->leftJoin('warehouse_locations as l', 'l.id', '=', 'wr.location_id')
+            ->leftJoinSub(
+                DB::table('warehouse_receiving_items')
+                    ->select('receiving_id', DB::raw('SUM(total_cost) as total_cost'))
+                    ->groupBy('receiving_id'),
+                'ri_totals',
+                'ri_totals.receiving_id',
+                '=',
+                'wr.id'
+            )
+            ->where('wr.reference_no', $purchaseOrder->po_no)
+            ->select(
+                'wr.id',
+                'wr.receiving_no',
+                'wr.reference_no',
+                'wr.received_date',
+                'wr.status',
+                's.supplier_name',
+                's.contact_person',
+                'l.location_name',
+                'l.name as location_alt_name',
+                DB::raw('COALESCE(ri_totals.total_cost, 0) as total_cost')
+            )
+            ->orderByDesc('wr.id')
+            ->get();
+
+        $bills = PurchaseBill::withTrashed()
+            ->with(['postedPayments', 'journalEntry'])
+            ->where('purchase_order_id', $purchaseOrder->id)
+            ->orderByDesc('id')
+            ->get();
+
+        $payments = PurchasePayment::withTrashed()
+            ->with(['bankAccount', 'journalEntry'])
+            ->where('purchase_order_id', $purchaseOrder->id)
+            ->orderByDesc('id')
+            ->get();
+
+        $postedPaymentAmount = (float) $payments
+            ->where('status', 'posted')
+            ->sum(fn ($payment) => (float) $payment->amount);
+
+        $poTotal = round((float) $purchaseOrder->total_amount, 2);
+        $paidAmount = round($postedPaymentAmount, 2);
+        $balance = max(0, round($poTotal - $paidAmount, 2));
+
+        $paymentStatus = 'Unpaid';
+
+        if ($poTotal > 0 && $paidAmount >= $poTotal) {
+            $paymentStatus = 'Paid';
+        } elseif ($paidAmount > 0) {
+            $paymentStatus = 'Partially Paid';
+        }
+
+        $paymentSummary = [
+            'received_amount' => (float) $receivingRecords->sum(fn ($receiving) => (float) $receiving->total_cost),
+            'billed_amount' => (float) $bills->where('status', '!=', 'voided')->sum(fn ($bill) => (float) $bill->total_amount),
+            'paid_amount' => $paidAmount,
+            'payable_base_amount' => $poTotal,
+            'payable_balance' => $balance,
+            'payment_status' => $paymentStatus,
+        ];
+
+        $receivingTracker = $this->getReceivingTracker($purchaseOrder);
+
+        $journalReferences = collect([$purchaseOrder->po_no])
+            ->merge($bills->pluck('bill_no'))
+            ->merge($payments->pluck('payment_no'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $journalEntries = collect();
+
+        if ($journalReferences->isNotEmpty()) {
+            $journalEntriesQuery = DB::table('accounting_journal_entries as je')
+                ->leftJoin('accounting_journal_lines as jl', 'jl.accounting_journal_entry_id', '=', 'je.id')
+                ->where(function ($query) use ($journalReferences) {
+                    foreach ($journalReferences as $reference) {
+                        $query->orWhere('je.description', 'ilike', '%' . $reference . '%');
+                    }
+                })
+                ->select(
+                    'je.id',
+                    'je.entry_no',
+                    'je.entry_date',
+                    'je.description',
+                    'je.status',
+                    DB::raw('COALESCE(SUM(jl.debit), 0) as total_debit'),
+                    DB::raw('COALESCE(SUM(jl.credit), 0) as total_credit')
+                )
+                ->groupBy('je.id', 'je.entry_no', 'je.entry_date', 'je.description', 'je.status')
+                ->orderByDesc('je.entry_date')
+                ->orderByDesc('je.id')
+                ->get();
+
+            $journalEntries = $journalEntriesQuery;
+        }
+
+        return view('purchasing.purchase-orders.show', compact(
+            'purchaseOrder',
+            'receivingRecords',
+            'bills',
+            'payments',
+            'journalEntries',
+            'paymentSummary',
+            'receivingTracker'
+        ));
+    }
+
+    public function edit(PurchaseOrder $purchaseOrder)
+    {
+        $this->authorizePurchasing('purchasing.po.edit');
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchaseOrder)
+            ->with('error', 'Edit purchase order will be added after PO creation flow is finalized.');
+    }
+
+    public function update(Request $request, PurchaseOrder $purchaseOrder)
+    {
+        $this->authorizePurchasing('purchasing.po.edit');
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchaseOrder)
+            ->with('error', 'Update purchase order will be added later.');
+    }
+
+    public function destroy(PurchaseOrder $purchaseOrder)
+    {
+        $this->authorizePurchasing('purchasing.po.delete');
+
+        if (in_array($purchaseOrder->status, ['partially_received', 'received'], true)) {
+            if (request()->ajax()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Cannot delete a received purchase order.',
+                ], 422);
+            }
+
+            return back()->with('error', 'Cannot delete a received purchase order.');
+        }
+
+        $poNo = $purchaseOrder->po_no;
+
+        DB::transaction(function () use ($purchaseOrder) {
+            $purchaseOrder->items()->delete();
+            $purchaseOrder->delete();
+        });
+
+        if (request()->ajax()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Purchase order "' . $poNo . '" deleted successfully.',
+            ]);
+        }
+
+        return redirect()
+            ->route('purchasing.purchase-orders.index')
+            ->with('success', 'Purchase order deleted successfully.');
+    }
+
+    public function markOrdered(Request $request, PurchaseOrder $purchase_order)
+    {
+        $this->authorizePurchasing('purchasing.po.mark_ordered');
+
+        if ($purchase_order->status !== 'draft') {
+            if ($request->ajax()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Only draft purchase orders can be marked as ordered.',
+                ], 422);
+            }
+
+            return redirect()
+                ->route('purchasing.purchase-orders.show', $purchase_order)
+                ->with('error', 'Only draft purchase orders can be marked as ordered.');
+        }
+
+        $purchase_order->update([
+            'status' => 'ordered',
+            'approved_by' => auth()->id(),
+            'approved_at' => now(),
+        ]);
+
+        \App\Services\SystemNotificationService::notifyPurchaseOrderMarkedOrdered($purchase_order->fresh(), auth()->id());
+
+        if ($request->ajax()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Purchase order marked as ordered successfully.',
+                'redirect' => route('purchasing.purchase-orders.show', $purchase_order),
+            ]);
+        }
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchase_order)
+            ->with('success', 'Purchase order marked as ordered successfully.');
+    }
+
+
+    private function getPurchasePaymentSummary(PurchaseOrder $po): array
+    {
+        $receivedAmount = $this->getReceivedAmount($po);
+        $paidAmount = $this->getPaidAmount($po);
+
+        $payableBaseAmount = $receivedAmount > 0
+            ? $receivedAmount
+            : (float) $po->total_amount;
+
+        $payableBalance = max(0, round($payableBaseAmount - $paidAmount, 2));
+
+        if ($paidAmount <= 0) {
+            $paymentStatus = 'unpaid';
+        } elseif ($payableBalance <= 0) {
+            $paymentStatus = 'paid';
+        } else {
+            $paymentStatus = 'partially_paid';
+        }
+
+        return [
+            'received_amount' => round((float) $receivedAmount, 2),
+            'paid_amount' => round((float) $paidAmount, 2),
+            'payable_base_amount' => round((float) $payableBaseAmount, 2),
+            'payable_balance' => $payableBalance,
+            'payment_status' => $paymentStatus,
+        ];
+    }
+
+    private function getReceivedAmount(PurchaseOrder $po): float
+    {
+        return (float) DB::table('warehouse_receiving_items as ri')
+            ->join('warehouse_receivings as r', 'r.id', '=', 'ri.receiving_id')
+            ->where(function ($query) use ($po) {
+                $query->where('r.reference_no', $po->po_no)
+                    ->orWhere('r.remarks', 'ilike', '%' . $po->po_no . '%');
+            })
+            ->sum('ri.total_cost');
+    }
+
+    private function getPaidAmount(PurchaseOrder $po): float
+    {
+        return (float) PurchasePayment::where('purchase_order_id', $po->id)
+            ->where('status', 'posted')
+            ->sum('amount');
+    }
+
+
+    private function displayUserName($user): string
+    {
+        if (!$user) {
+            return '-';
+        }
+
+        $name = trim((string) ($user->name ?? ''));
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        $firstName = trim((string) ($user->first_name ?? ''));
+        $lastName = trim((string) ($user->last_name ?? ''));
+        $fullName = trim($firstName . ' ' . $lastName);
+
+        if ($fullName !== '') {
+            return $fullName;
+        }
+
+        return $user->email ?? '-';
+    }
+
+    private function getReceivingTracker(PurchaseOrder $po): array
+    {
+        if ($po->receiver || $po->received_at) {
+            return [
+                'name' => $this->displayUserName($po->receiver),
+                'date' => $po->received_at,
+            ];
+        }
+
+        if (!Schema::hasTable('warehouse_receivings')) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $userColumn = collect(['received_by', 'received_by_id', 'created_by', 'created_by_id', 'user_id'])
+            ->first(fn ($column) => Schema::hasColumn('warehouse_receivings', $column));
+
+        $dateColumn = collect(['received_at', 'received_date', 'created_at'])
+            ->first(fn ($column) => Schema::hasColumn('warehouse_receivings', $column));
+
+        if (!$userColumn && !$dateColumn) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $selects = ['id'];
+
+        if ($userColumn) {
+            $selects[] = $userColumn . ' as tracker_user_id';
+        }
+
+        if ($dateColumn) {
+            $selects[] = $dateColumn . ' as tracker_date';
+        }
+
+        $receiving = DB::table('warehouse_receivings')
+            ->where(function ($query) use ($po) {
+                $query->where('reference_no', $po->po_no);
+
+                if (Schema::hasColumn('warehouse_receivings', 'remarks')) {
+                    $query->orWhere('remarks', 'ilike', '%' . $po->po_no . '%');
+                }
+            })
+            ->select($selects)
+            ->orderByDesc($dateColumn ?: 'id')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$receiving) {
+            return ['name' => '-', 'date' => null];
+        }
+
+        $user = null;
+
+        if (!empty($receiving->tracker_user_id)) {
+            $user = User::find($receiving->tracker_user_id);
+        }
+
+        return [
+            'name' => $this->displayUserName($user),
+            'date' => $receiving->tracker_date ?? null,
+        ];
+    }
+
+    private function generatePoNo(): string
+    {
+        $prefix = 'PO-' . now()->format('Ymd') . '-';
+
+        $last = PurchaseOrder::where('po_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->first();
+
+        $next = 1;
+
+        if ($last) {
+            $lastNumber = (int) str_replace($prefix, '', $last->po_no);
+            $next = $lastNumber + 1;
+        }
+
+        return $prefix . str_pad($next, 4, '0', STR_PAD_LEFT);
+    }
+    public function markSupplierArrived(Request $request, PurchaseOrder $purchase_order)
+    {
+        $this->authorizePurchasing('purchasing.po.mark_ordered');
+
+        if (! in_array($purchase_order->status, ['ordered', 'partially_received'], true)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Only ordered or partially received purchase orders can be marked as supplier arrived.',
+                ], 422);
+            }
+
+            return redirect()
+                ->route('purchasing.purchase-orders.show', $purchase_order)
+                ->with('error', 'Only ordered or partially received purchase orders can be marked as supplier arrived.');
+        }
+
+        $validated = $request->validate([
+            'supplier_arrival_notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $purchase_order->forceFill([
+            'supplier_arrived_at' => now(),
+            'supplier_arrived_by' => auth()->id(),
+            'supplier_arrival_notes' => $validated['supplier_arrival_notes'] ?? null,
+        ])->save();
+
+        \App\Services\SystemNotificationService::notifyPurchaseOrderSupplierArrived($purchase_order->fresh(['supplier', 'location']), auth()->id());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Warehouse department has been notified that the supplier stocks arrived.',
+                'redirect' => route('purchasing.purchase-orders.show', $purchase_order),
+            ]);
+        }
+
+        return redirect()
+            ->route('purchasing.purchase-orders.show', $purchase_order)
+            ->with('success', 'Warehouse department has been notified that the supplier stocks arrived.');
+    }
+
+}

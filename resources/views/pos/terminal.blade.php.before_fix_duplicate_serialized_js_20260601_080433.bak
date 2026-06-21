@@ -1,0 +1,533 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0 pos-page">
+        <div class="pos-topbar">
+            <div>
+                <div class="pos-eyebrow">Separate POS Module</div>
+                <h2 class="mb-1">Front Desk POS Terminal</h2>
+                <p class="text-secondary mb-0">
+                    Fast item search, branch-stock cart checkout, and paid/partial/unpaid sale support.
+                </p>
+            </div>
+
+            <form method="POST" action="{{ route('pos.logout') }}">
+                @csrf
+                <button type="submit" class="btn btn-outline-danger pos-soft-btn">Lock POS</button>
+            </form>
+        </div>
+
+        @if(session('success'))
+            <div class="alert alert-success rounded-3">{{ session('success') }}</div>
+        @endif
+
+        <div class="pos-grid">
+            <section class="pos-products-card">
+                <div class="pos-card-head">
+                    <div>
+                        <h5 class="mb-1 fw-bold">Products</h5>
+                        <p class="text-secondary mb-0 small">Real-time search by item name, code, or barcode.</p>
+                    </div>
+                    <span class="badge rounded-pill bg-primary-subtle text-primary">{{ $branchName ?? 'Branch Stock' }}</span>
+                </div>
+
+                <div class="pos-search-row">
+                    <input type="text" id="posProductSearch" class="form-control pos-search-input" placeholder="Search item / scan barcode..." autocomplete="off">
+                    <button class="btn btn-primary pos-soft-btn" id="posSearchButton" type="button">Search</button>
+                </div>
+
+                <div class="pos-filter-row" id="posFilterRow">
+                    <button class="pos-filter active" type="button" data-filter="all">All</button>
+                    <button class="pos-filter" type="button" data-filter="available">Available</button>
+                    <button class="pos-filter" type="button" data-filter="serialized">Serialized</button>
+                    <button class="pos-filter" type="button" data-filter="low-stock">Low Stock</button>
+                </div>
+
+                <div class="pos-product-grid" id="posProductGrid">
+                    @forelse($items as $item)
+                        @php
+                            $name = $item->item_name ?? $item->name ?? 'Unnamed Item';
+                            $code = $item->item_code ?? $item->code ?? 'NO-CODE';
+                            $price = (float) ($item->selling_price ?? 0);
+                            $image = $item->image_path ?? null;
+                            $availableQty = (float) ($item->pos_available_qty ?? $item->quantity ?? 0);
+                            $isSerialized = (int) ($item->is_serialized ?? 0) === 1;
+                            $keywords = strtolower(trim($name . ' ' . $code . ' ' . ($item->description ?? '')));
+                        @endphp
+                        <button type="button"
+                                class="pos-product-card"
+                                data-product-id="{{ $item->id }}"
+                                data-name="{{ e($name) }}"
+                                data-code="{{ e($code) }}"
+                                data-price="{{ $price }}"
+                                data-available="{{ $availableQty }}"
+                                data-serialized="{{ $isSerialized ? '1' : '0' }}"
+                                data-keywords="{{ e($keywords) }}">
+                            <div class="pos-product-image">
+                                @if($image)
+                                    <img src="{{ asset('storage/' . $image) }}" alt="{{ $name }}">
+                                @else
+                                    <span>{{ strtoupper(substr($name, 0, 1)) }}</span>
+                                @endif
+                            </div>
+                            <div class="pos-product-info">
+                                <div class="pos-product-name" title="{{ $name }}">{{ $name }}</div>
+                                <div class="pos-product-code">{{ $code }}</div>
+                                <div class="pos-product-price">₱{{ number_format($price, 2) }}</div>
+                                <div class="pos-product-stock {{ $availableQty <= 3 ? 'text-danger' : 'text-success' }}">
+                                    Stock: {{ rtrim(rtrim(number_format($availableQty, 2), '0'), '.') }}
+                                    @if($isSerialized)
+                                        <span class="pos-mini-badge">Serialized</span>
+                                    @endif
+                                </div>
+                            </div>
+                        </button>
+                    @empty
+                        <div class="pos-empty">
+                            <div class="fw-bold">No branch stock available</div>
+                            <div class="text-secondary small">POS only sells from the logged-in user's assigned branch stock. Request transfer from Warehouse if branch stock is empty.</div>
+                        </div>
+                    @endforelse
+
+                    <div class="pos-empty d-none" id="posNoResults">
+                        <div class="fw-bold">No matching products</div>
+                        <div class="text-secondary small">Try another item name, code, or barcode.</div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="pos-cart-card">
+                <div class="pos-card-head">
+                    <div>
+                        <h5 class="mb-1 fw-bold">Cart</h5>
+                        <p class="text-secondary mb-0 small">Walk-in customer by default.</p>
+                    </div>
+                    <span class="pos-cart-count" id="posCartCount">0 items</span>
+                </div>
+
+                <div class="pos-customer-box">
+                    <label class="form-label small fw-semibold mb-1">Customer</label>
+                    <select class="form-select" id="posCustomer" name="customer_id">
+                        <option value="">Walk-in Customer</option>
+                        @foreach(($customers ?? collect()) as $customer)
+                            <option value="{{ $customer->id }}">{{ $customer->customer_name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="pos-cart-empty" id="posCartEmpty">
+                    <div class="pos-cart-icon">🛒</div>
+                    <div class="fw-bold">Cart is empty</div>
+                    <div class="text-secondary small">Click an item to add it to cart.</div>
+                </div>
+
+                <div class="pos-cart-items d-none" id="posCartItems"></div>
+
+                <div class="pos-totals">
+                    <div><span>Subtotal</span><strong id="posSubtotal">₱0.00</strong></div>
+                    <div><span>Discount</span><strong id="posDiscount">₱0.00</strong></div>
+                    <div><span>Tax</span><strong id="posTax">₱0.00</strong></div>
+                    <div class="pos-grand-total"><span>Total</span><strong id="posTotal">₱0.00</strong></div>
+                </div>
+
+                <div class="pos-payment-panel">
+                    <label class="form-label small fw-semibold">Payment Status</label>
+                    <div class="pos-payment-options" id="posPaymentStatus">
+                        <button type="button" class="active" data-status="paid">Paid</button>
+                        <button type="button" data-status="partial">Partial</button>
+                        <button type="button" data-status="unpaid">Unpaid / Utang</button>
+                    </div>
+
+                    <label class="form-label small fw-semibold mt-3">Payment Method</label>
+                    <select class="form-select" id="posPaymentMethod">
+                        <option value="cash">Cash</option>
+                        <option value="gcash">GCash</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="card">Card</option>
+                        <option value="credit">Credit / Utang</option>
+                        <option value="mixed">Mixed Payment</option>
+                    </select>
+
+                    <div class="row g-2 mt-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Amount Paid</label>
+                            <input class="form-control" id="posAmountPaid" type="number" min="0" step="0.01" value="0.00">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Balance</label>
+                            <input class="form-control" id="posBalance" value="0.00" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="posSaleForm" method="POST" action="{{ url('/pos/sales') }}">
+                    @csrf
+                    <input type="hidden" name="customer_id" id="posSubmitCustomer">
+                    <input type="hidden" name="payment_status" id="posSubmitPaymentStatus" value="paid">
+                    <input type="hidden" name="payment_method" id="posSubmitPaymentMethod" value="cash">
+                    <input type="hidden" name="amount_paid" id="posSubmitAmountPaid" value="0">
+                    <input type="hidden" name="items_json" id="posSubmitItems">
+                    <input type="hidden" name="notes" value="Created from POS terminal.">
+                    <button type="submit" class="btn btn-success btn-lg w-100 pos-complete-btn" id="posCompleteSale" disabled>
+                        Complete Sale
+                    </button>
+                </form>
+
+                <div class="pos-note">
+                    This patch saves the POS sale, deducts branch stock only, and records paid/partial/unpaid status. Accounting posting and receivables list will be connected next.
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <style>
+        .pos-page {
+            --pos-border: rgba(226,232,240,.95);
+            --pos-shadow: 0 18px 50px rgba(15,23,42,.08);
+            --pos-radius: 24px;
+        }
+        .pos-topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            background: linear-gradient(135deg, #ffffff, #f8fbff);
+            border: 1px solid var(--pos-border);
+            border-radius: 28px;
+            padding: 24px;
+            box-shadow: var(--pos-shadow);
+            margin-bottom: 18px;
+        }
+        .pos-eyebrow {
+            color: #2563eb;
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 6px;
+        }
+        .pos-topbar h2 { font-weight: 850; letter-spacing: -.035em; }
+        .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 18px; align-items: start; }
+        .pos-products-card, .pos-cart-card { background: rgba(255,255,255,.98); border: 1px solid var(--pos-border); border-radius: var(--pos-radius); box-shadow: var(--pos-shadow); padding: 18px; }
+        .pos-cart-card { position: sticky; top: 18px; }
+        .pos-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+        .pos-soft-btn, .pos-search-input, .pos-customer-box .form-select, .pos-payment-panel .form-select, .pos-payment-panel .form-control { border-radius: 14px; }
+        .pos-search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-bottom: 12px; }
+        .pos-search-input { min-height: 48px; }
+        .pos-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .pos-filter { border: 1px solid #dbeafe; background: #eff6ff; color: #2563eb; border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: 12px; }
+        .pos-filter.active { background: #2563eb; color: white; }
+        .pos-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; }
+        .pos-product-card { display: flex; gap: 12px; text-align: left; width: 100%; border: 1px solid #e2e8f0; background: #fff; border-radius: 18px; padding: 12px; transition: .18s ease; cursor: pointer; }
+        .pos-product-card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(15,23,42,.1); border-color: #bfdbfe; }
+        .pos-product-card.pos-hidden { display: none; }
+        .pos-product-image { width: 54px; height: 54px; border-radius: 16px; background: linear-gradient(135deg, #eff6ff, #ecfdf5); display: grid; place-items: center; overflow: hidden; flex: 0 0 54px; color: #2563eb; font-weight: 900; }
+        .pos-product-image img { width: 100%; height: 100%; object-fit: cover; }
+        .pos-product-name { font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 105px; }
+        .pos-product-code { color: #64748b; font-size: 12px; }
+        .pos-product-price { margin-top: 4px; color: #16a34a; font-weight: 900; }
+        .pos-product-stock { margin-top: 2px; font-size: 11px; font-weight: 800; }
+        .pos-mini-badge { display: inline-block; margin-left: 4px; border-radius: 999px; background: #eff6ff; color: #2563eb; padding: 2px 5px; font-size: 10px; }
+        .pos-empty, .pos-cart-empty { grid-column: 1 / -1; border: 1px dashed #cbd5e1; border-radius: 20px; padding: 28px; text-align: center; background: #f8fafc; }
+        .pos-cart-count { border-radius: 999px; background: #f1f5f9; color: #475569; padding: 7px 11px; font-size: 12px; font-weight: 800; }
+        .pos-cart-icon { font-size: 38px; margin-bottom: 8px; }
+        .pos-cart-items { margin-top: 12px; display: grid; gap: 10px; max-height: 300px; overflow: auto; padding-right: 2px; }
+        .pos-cart-line { border: 1px solid #e2e8f0; border-radius: 16px; padding: 10px; background: #fff; }
+        .pos-cart-line-top { display: flex; justify-content: space-between; gap: 8px; }
+        .pos-cart-line-name { font-weight: 850; color: #0f172a; line-height: 1.2; }
+        .pos-cart-line-code { color: #64748b; font-size: 11px; }
+        .pos-cart-line-price { font-weight: 850; color: #16a34a; white-space: nowrap; }
+        .pos-cart-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+        .pos-qty-controls { display: inline-flex; align-items: center; gap: 6px; }
+        .pos-qty-controls button, .pos-remove-line { border: 1px solid #dbeafe; background: #eff6ff; color: #2563eb; border-radius: 10px; min-width: 32px; height: 32px; font-weight: 900; }
+        .pos-remove-line { border-color: #fee2e2; background: #fff1f2; color: #dc2626; padding: 0 10px; }
+        .pos-line-qty { min-width: 28px; text-align: center; font-weight: 850; }
+        .pos-totals { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
+        .pos-totals > div { display: flex; justify-content: space-between; margin-bottom: 8px; color: #475569; }
+        .pos-grand-total { border-top: 1px solid #e2e8f0; padding-top: 12px; color: #0f172a !important; font-size: 20px; }
+        .pos-payment-panel { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; padding: 14px; margin: 14px 0; }
+        .pos-payment-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .pos-payment-options button { border: 1px solid #dbeafe; background: #fff; border-radius: 12px; min-height: 42px; font-size: 12px; font-weight: 800; cursor: pointer; }
+        .pos-payment-options button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+        .pos-complete-btn { border-radius: 16px; font-weight: 900; min-height: 54px; }
+        .pos-note { margin-top: 12px; font-size: 12px; color: #64748b; line-height: 1.45; }
+        @media (max-width: 1100px) { .pos-grid { grid-template-columns: 1fr; } .pos-cart-card { position: static; } }
+        @media (max-width: 640px) { .pos-topbar { flex-direction: column; } .pos-search-row, .pos-payment-options { grid-template-columns: 1fr; } }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const productCards = Array.from(document.querySelectorAll('.pos-product-card'));
+            const searchInput = document.getElementById('posProductSearch');
+            const searchButton = document.getElementById('posSearchButton');
+            const filterButtons = Array.from(document.querySelectorAll('.pos-filter'));
+            const noResults = document.getElementById('posNoResults');
+            const cartItems = document.getElementById('posCartItems');
+            const cartEmpty = document.getElementById('posCartEmpty');
+            const cartCount = document.getElementById('posCartCount');
+            const subtotalEl = document.getElementById('posSubtotal');
+            const discountEl = document.getElementById('posDiscount');
+            const taxEl = document.getElementById('posTax');
+            const totalEl = document.getElementById('posTotal');
+            const amountPaidEl = document.getElementById('posAmountPaid');
+            const balanceEl = document.getElementById('posBalance');
+            const completeBtn = document.getElementById('posCompleteSale');
+            const paymentStatusButtons = Array.from(document.querySelectorAll('#posPaymentStatus button'));
+            const paymentMethod = document.getElementById('posPaymentMethod');
+            const customerSelect = document.getElementById('posCustomer');
+            const saleForm = document.getElementById('posSaleForm');
+            const submitCustomer = document.getElementById('posSubmitCustomer');
+            const submitPaymentStatus = document.getElementById('posSubmitPaymentStatus');
+            const submitPaymentMethod = document.getElementById('posSubmitPaymentMethod');
+            const submitAmountPaid = document.getElementById('posSubmitAmountPaid');
+            const submitItems = document.getElementById('posSubmitItems');
+
+            let activeFilter = 'all';
+            let paymentStatus = 'paid';
+            const cart = new Map();
+
+            const peso = new Intl.NumberFormat('en-PH', {
+                style: 'currency',
+                currency: 'PHP',
+                minimumFractionDigits: 2,
+            });
+
+            function money(value) {
+                return peso.format(Number(value || 0));
+            }
+
+            function cartTotal() {
+                let total = 0;
+                cart.forEach(item => total += item.price * item.qty);
+                return total;
+            }
+
+            function applyProductFilter() {
+                const term = (searchInput.value || '').trim().toLowerCase();
+                let visible = 0;
+
+                productCards.forEach(card => {
+                    const keywords = card.dataset.keywords || '';
+                    const available = Number(card.dataset.available || 0);
+                const serialized = card.dataset.serialized === '1';
+                    const serialized = card.dataset.serialized === '1';
+
+                    let matchesFilter = true;
+                    if (activeFilter === 'available') matchesFilter = available > 0;
+                    if (activeFilter === 'serialized') matchesFilter = serialized;
+                    if (activeFilter === 'low-stock') matchesFilter = available > 0 && available <= 3;
+
+                    const matchesSearch = !term || keywords.includes(term);
+                    const show = matchesFilter && matchesSearch;
+
+                    card.classList.toggle('pos-hidden', !show);
+                    if (show) visible++;
+                });
+
+                if (noResults) {
+                    noResults.classList.toggle('d-none', visible > 0);
+                }
+            }
+
+            function setPaymentStatus(status) {
+                paymentStatus = status;
+                paymentStatusButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.status === status));
+
+                const total = cartTotal();
+                if (status === 'paid') {
+                    amountPaidEl.value = total.toFixed(2);
+                    amountPaidEl.readOnly = false;
+                    paymentMethod.value = 'cash';
+                } else if (status === 'partial') {
+                    if (Number(amountPaidEl.value || 0) >= total) {
+                        amountPaidEl.value = '0.00';
+                    }
+                    amountPaidEl.readOnly = false;
+                } else {
+                    amountPaidEl.value = '0.00';
+                    amountPaidEl.readOnly = true;
+                    paymentMethod.value = 'credit';
+                }
+
+                renderCart();
+            }
+
+            function addToCart(card) {
+                const id = String(card.dataset.productId || '');
+                const name = card.dataset.name || 'Unnamed Item';
+                const code = card.dataset.code || 'NO-CODE';
+                const price = Number(card.dataset.price || 0);
+                const available = Number(card.dataset.available || 0);
+                const serialized = card.dataset.serialized === '1';
+
+                if (!id || available <= 0) {
+                    alert('This item has no available branch stock.');
+                    return;
+                }
+
+                const existing = cart.get(id);
+                if (existing) {
+                    if (existing.qty + 1 > existing.available) {
+                        alert('Quantity cannot exceed available branch stock.');
+                        return;
+                    }
+                    existing.qty += 1;
+                } else {
+                    cart.set(id, { id, name, code, price, available, serialized, qty: 1 });
+                }
+
+                renderCart();
+            }
+
+            function changeQty(id, delta) {
+                const item = cart.get(String(id));
+                if (!item) return;
+
+                const nextQty = item.qty + delta;
+                if (nextQty <= 0) {
+                    cart.delete(String(id));
+                } else if (nextQty > item.available) {
+                    alert('Quantity cannot exceed available branch stock.');
+                } else {
+                    item.qty = nextQty;
+                }
+
+                renderCart();
+            }
+
+            function removeItem(id) {
+                cart.delete(String(id));
+                renderCart();
+            }
+
+            function renderCart() {
+                const itemCount = Array.from(cart.values()).reduce((sum, item) => sum + item.qty, 0);
+                const subtotal = cartTotal();
+                const discount = 0;
+                const tax = 0;
+                const total = subtotal - discount + tax;
+
+                cartCount.textContent = itemCount + (itemCount === 1 ? ' item' : ' items');
+                subtotalEl.textContent = money(subtotal);
+                discountEl.textContent = money(discount);
+                taxEl.textContent = money(tax);
+                totalEl.textContent = money(total);
+
+                cartEmpty.classList.toggle('d-none', cart.size > 0);
+                cartItems.classList.toggle('d-none', cart.size === 0);
+                completeBtn.disabled = cart.size === 0;
+
+                cartItems.innerHTML = '';
+                cart.forEach(item => {
+                    const line = document.createElement('div');
+                    line.className = 'pos-cart-line';
+                    line.innerHTML = `
+                        <div class="pos-cart-line-top">
+                            <div>
+                                <div class="pos-cart-line-name">${escapeHtml(item.name)}</div>
+                                <div class="pos-cart-line-code">${escapeHtml(item.code)} • Available ${item.available}</div>
+                            </div>
+                            <div class="pos-cart-line-price">${money(item.price * item.qty)}</div>
+                        </div>
+                        <div class="pos-cart-controls">
+                            <div class="pos-qty-controls">
+                                <button type="button" data-action="minus" data-id="${item.id}">−</button>
+                                <span class="pos-line-qty">${item.qty}</span>
+                                <button type="button" data-action="plus" data-id="${item.id}">+</button>
+                            </div>
+                            <button type="button" class="pos-remove-line" data-action="remove" data-id="${item.id}">Remove</button>
+                        </div>
+                    `;
+                    cartItems.appendChild(line);
+                });
+
+                if (paymentStatus === 'paid') {
+                    amountPaidEl.value = total.toFixed(2);
+                } else if (paymentStatus === 'unpaid') {
+                    amountPaidEl.value = '0.00';
+                }
+
+                let paid = Number(amountPaidEl.value || 0);
+                if (paid > total) paid = total;
+                const balance = Math.max(total - paid, 0);
+                balanceEl.value = balance.toFixed(2);
+            }
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            productCards.forEach(card => card.addEventListener('click', () => addToCart(card)));
+            searchInput.addEventListener('input', applyProductFilter);
+            searchButton.addEventListener('click', applyProductFilter);
+
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    activeFilter = this.dataset.filter || 'all';
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    applyProductFilter();
+                });
+            });
+
+            cartItems.addEventListener('click', function (event) {
+                const button = event.target.closest('button[data-action]');
+                if (!button) return;
+                const id = button.dataset.id;
+                const action = button.dataset.action;
+                if (action === 'plus') changeQty(id, 1);
+                if (action === 'minus') changeQty(id, -1);
+                if (action === 'remove') removeItem(id);
+            });
+
+            paymentStatusButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    setPaymentStatus(this.dataset.status || 'paid');
+                });
+            });
+
+            amountPaidEl.addEventListener('input', renderCart);
+
+            saleForm.addEventListener('submit', function (event) {
+                if (!cart.size) {
+                    event.preventDefault();
+                    return;
+                }
+
+                const hasSerialized = Array.from(cart.values()).some(item => item.serialized);
+                if (hasSerialized) {
+                    event.preventDefault();
+                    alert('Serialized item selling needs serial number selection. This will be added in the next POS patch. Please remove serialized items first.');
+                    return;
+                }
+
+                const total = cartTotal();
+                const paid = Number(amountPaidEl.value || 0);
+
+                if (paymentStatus === 'partial' && (paid <= 0 || paid >= total)) {
+                    event.preventDefault();
+                    alert('Partial payment must be greater than 0 and less than the total.');
+                    return;
+                }
+
+                submitCustomer.value = customerSelect.value || '';
+                submitPaymentStatus.value = paymentStatus;
+                submitPaymentMethod.value = paymentMethod.value || 'cash';
+                submitAmountPaid.value = amountPaidEl.value || '0';
+                submitItems.value = JSON.stringify(Array.from(cart.values()).map(item => ({
+                    id: item.id,
+                    qty: item.qty,
+                })));
+
+                completeBtn.disabled = true;
+                completeBtn.textContent = 'Saving Sale...';
+            });
+
+            setPaymentStatus('paid');
+            applyProductFilter();
+        });
+    </script>
+</x-app-layout>

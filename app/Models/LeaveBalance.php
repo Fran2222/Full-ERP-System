@@ -16,6 +16,9 @@ class LeaveBalance extends Model
         'allocated',
         'used',
         'remaining',
+        'adjustment_remarks',
+        'adjusted_by',
+        'adjusted_at',
     ];
 
     protected $casts = [
@@ -23,6 +26,7 @@ class LeaveBalance extends Model
         'used' => 'decimal:2',
         'remaining' => 'decimal:2',
         'year' => 'integer',
+        'adjusted_at' => 'datetime',
     ];
 
     public function employeeProfile()
@@ -33,5 +37,10 @@ class LeaveBalance extends Model
     public function leaveType()
     {
         return $this->belongsTo(LeaveType::class);
+    }
+
+    public function adjustedBy()
+    {
+        return $this->belongsTo(User::class, 'adjusted_by');
     }
 }

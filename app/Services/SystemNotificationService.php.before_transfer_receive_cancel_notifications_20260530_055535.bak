@@ -1,0 +1,275 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\SystemNotification;
+use App\Models\User;
+use App\Models\Warehouse\WarehouseLocation;
+use App\Models\Warehouse\WarehouseTransfer;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class SystemNotificationService
+{
+    public static function notifyUser(
+        int $userId,
+        string $module,
+        string $type,
+        string $title,
+        ?string $message = null,
+        ?string $actionUrl = null,
+        ?string $relatedType = null,
+        ?int $relatedId = null,
+        ?int $createdBy = null
+    ): ?SystemNotification {
+        if (! Schema::hasTable('system_notifications')) {
+            return null;
+        }
+
+        return SystemNotification::firstOrCreate(
+            [
+                'user_id' => $userId,
+                'type' => $type,
+                'related_type' => $relatedType,
+                'related_id' => $relatedId,
+            ],
+            [
+                'module' => $module,
+                'title' => $title,
+                'message' => $message,
+                'action_url' => $actionUrl,
+                'is_read' => false,
+                'created_by' => $createdBy,
+            ]
+        );
+    }
+
+    public static function notifyUsers(
+        $userIds,
+        string $module,
+        string $type,
+        string $title,
+        ?string $message = null,
+        ?string $actionUrl = null,
+        ?string $relatedType = null,
+        ?int $relatedId = null,
+        ?int $createdBy = null
+    ): void {
+        collect($userIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->each(function ($userId) use ($module, $type, $title, $message, $actionUrl, $relatedType, $relatedId, $createdBy) {
+                self::notifyUser((int) $userId, $module, $type, $title, $message, $actionUrl, $relatedType, $relatedId, $createdBy);
+            });
+    }
+
+    public static function notifyWarehouseTransferDispatched(WarehouseTransfer $transfer, ?int $createdBy = null): void
+    {
+        if (! Schema::hasTable('system_notifications')) {
+            return;
+        }
+
+        $transfer->loadMissing(['fromBranch', 'fromLocation', 'toBranch', 'toLocation']);
+
+        $recipientIds = self::warehouseTransferReceiverUserIds($transfer);
+
+        if ($recipientIds->isEmpty()) {
+            return;
+        }
+
+        $fromName = optional($transfer->fromLocation)->location_name
+            ?? optional($transfer->fromLocation)->name
+            ?? 'source';
+
+        $toName = optional($transfer->toLocation)->location_name
+            ?? optional($transfer->toLocation)->name
+            ?? optional($transfer->toBranch)->name
+            ?? 'destination';
+
+        self::notifyUsers(
+            $recipientIds,
+            'warehouse',
+            'warehouse_transfer_to_receive',
+            'Warehouse Transfer To Receive',
+            "{$transfer->transfer_no} was dispatched from {$fromName} to {$toName}.",
+            url('/warehouse/transfer/' . $transfer->id),
+            'warehouse_transfer',
+            (int) $transfer->id,
+            $createdBy
+        );
+    }
+
+                public static function warehouseTransferReceiverUserIds(WarehouseTransfer $transfer): Collection
+    {
+        $transfer->loadMissing(['toBranch', 'toLocation']);
+
+        $toLocation = $transfer->toLocation ?: WarehouseLocation::find($transfer->to_location_id);
+        $isWarehouseDestination = self::isWarehouseLocation($toLocation);
+
+        // Use actual TO location first. This is the important part.
+        // Example: to_branch_id may be Central, but to_location_id = Wizmaster Solana,
+        // so destination branch must be Wizmaster Solana's branch_id.
+        $destinationBranchId = null;
+        if ($toLocation && ! empty($toLocation->branch_id)) {
+            $destinationBranchId = (int) $toLocation->branch_id;
+        } elseif (! empty($transfer->to_branch_id)) {
+            $destinationBranchId = (int) $transfer->to_branch_id;
+        }
+
+        return User::query()
+            ->get()
+            ->filter(function ($user) use ($isWarehouseDestination, $destinationBranchId) {
+                if (! self::isActiveUser($user)) {
+                    return false;
+                }
+
+                if (self::isAdminOrBod($user)) {
+                    return true;
+                }
+
+                if ($isWarehouseDestination) {
+                    return self::isWarehouseDepartmentUser($user);
+                }
+
+                // Branch destination: only branch-assigned users can be receivers.
+                // Warehouse Department users should not receive branch-destination transfers.
+                if (self::isWarehouseDepartmentUser($user)) {
+                    return false;
+                }
+
+                if (! $destinationBranchId || (int) ($user->branch_id ?? 0) !== (int) $destinationBranchId) {
+                    return false;
+                }
+
+                return self::hasAnyModuleAccess($user, ['warehouse', 'inventory']);
+            })
+            ->pluck('id')
+            ->values();
+    }
+
+
+
+
+
+    public static function unreadCountForUser(?int $userId): int
+    {
+        if (! $userId || ! Schema::hasTable('system_notifications')) {
+            return 0;
+        }
+
+        return SystemNotification::where('user_id', $userId)->unread()->count();
+    }
+
+    public static function latestForUser(?int $userId, int $limit = 5): Collection
+    {
+        if (! $userId || ! Schema::hasTable('system_notifications')) {
+            return collect();
+        }
+
+        return SystemNotification::where('user_id', $userId)
+            ->latest()
+            ->limit($limit)
+            ->get();
+    }
+
+    private static function isActiveUser($user): bool
+    {
+        $status = strtolower((string) ($user->status ?? 'active'));
+
+        return in_array($status, ['active', '1', 'true', 'enabled'], true);
+    }
+
+    private static function isAdminOrBod($user): bool
+    {
+        $roleNames = [
+            'Super Admin',
+            'Super Administrator',
+            'super admin',
+            'super-admin',
+            'superadmin',
+            'Admin',
+            'admin',
+            'BOD',
+            'bod',
+            'Board of Directors',
+        ];
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole($roleNames)) {
+            return true;
+        }
+
+        $userType = strtolower((string) ($user->user_type ?? ''));
+
+        return in_array($userType, ['admin', 'super-admin', 'superadmin', 'bod'], true);
+    }
+
+            private static function hasModuleAccess($user, string $module): bool
+    {
+        return self::hasAnyModuleAccess($user, [$module]);
+    }
+
+
+
+
+        private static function hasAnyModuleAccess($user, array $modules): bool
+    {
+        $modules = collect($modules)
+            ->map(fn ($module) => strtolower(trim((string) $module)))
+            ->filter()
+            ->values()
+            ->all();
+
+        if (! $user || empty($modules)) {
+            return false;
+        }
+
+        $primaryModule = strtolower(trim((string) ($user->primary_module ?? '')));
+        if ($primaryModule && in_array($primaryModule, $modules, true)) {
+            return true;
+        }
+
+        if (! Schema::hasTable('user_module_accesses')) {
+            return false;
+        }
+
+        return DB::table('user_module_accesses')
+            ->where('user_id', $user->id)
+            ->pluck('module')
+            ->map(fn ($module) => strtolower(trim((string) $module)))
+            ->filter()
+            ->contains(fn ($module) => in_array($module, $modules, true));
+    }
+
+
+    private static function isWarehouseDepartmentUser($user): bool
+    {
+        if (! Schema::hasTable('departments') || empty($user->department_id)) {
+            return false;
+        }
+
+        $departmentName = DB::table('departments')
+            ->where('id', $user->department_id)
+            ->value('name');
+
+        return str_contains(strtolower((string) $departmentName), 'warehouse');
+    }
+
+        private static function isWarehouseLocation($location): bool
+    {
+        if (! $location) {
+            return false;
+        }
+
+        $type = strtolower(trim((string) ($location->location_type ?? '')));
+        $name = strtolower(trim((string) (($location->location_name ?? '') . ' ' . ($location->name ?? '') . ' ' . ($location->location_code ?? ''))));
+
+        return str_contains($type, 'warehouse')
+            || str_contains($type, 'stock room')
+            || str_contains($type, 'stockroom')
+            || str_contains($name, 'warehouse')
+            || str_contains($name, 'main warehouse');
+    }
+
+}

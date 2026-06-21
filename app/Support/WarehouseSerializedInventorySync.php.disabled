@@ -1,0 +1,133 @@
+﻿<?php
+
+namespace App\Support;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class WarehouseSerializedInventorySync
+{
+    /**
+     * Recompute warehouse_inventories.quantity from actual available serial rows.
+     * For serialized items only, warehouse_item_serials is the source of truth.
+     */
+    public static function syncItem(int $itemId): void
+    {
+        if ($itemId <= 0 || ! self::tablesReady()) {
+            return;
+        }
+
+        $isSerialized = (bool) DB::table('warehouse_items')
+            ->where('id', $itemId)
+            ->value('is_serialized');
+
+        if (! $isSerialized) {
+            return;
+        }
+
+        $now = now();
+
+        $serialRows = DB::table('warehouse_item_serials')
+            ->where('item_id', $itemId)
+            ->where('status', 'available')
+            ->select('branch_id', 'location_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('branch_id', 'location_id')
+            ->get();
+
+        foreach ($serialRows as $row) {
+            DB::table('warehouse_inventories')->updateOrInsert(
+                [
+                    'item_id' => $itemId,
+                    'branch_id' => $row->branch_id,
+                    'location_id' => $row->location_id,
+                ],
+                [
+                    'quantity' => (float) $row->total,
+                    'updated_at' => $now,
+                    'created_at' => $now,
+                ]
+            );
+        }
+
+        $activeKeys = $serialRows->map(function ($row) {
+            return ((string) ($row->branch_id ?? 'NULL')) . ':' . ((string) ($row->location_id ?? 'NULL'));
+        })->all();
+
+        $inventoryRows = DB::table('warehouse_inventories')
+            ->where('item_id', $itemId)
+            ->get(['id', 'branch_id', 'location_id']);
+
+        foreach ($inventoryRows as $inventory) {
+            $key = ((string) ($inventory->branch_id ?? 'NULL')) . ':' . ((string) ($inventory->location_id ?? 'NULL'));
+
+            if (! in_array($key, $activeKeys, true)) {
+                DB::table('warehouse_inventories')
+                    ->where('id', $inventory->id)
+                    ->update([
+                        'quantity' => 0,
+                        'updated_at' => $now,
+                    ]);
+            }
+        }
+    }
+
+    public static function syncLocation(int $itemId, $branchId, $locationId): float
+    {
+        if ($itemId <= 0 || ! self::tablesReady()) {
+            return 0;
+        }
+
+        $isSerialized = (bool) DB::table('warehouse_items')
+            ->where('id', $itemId)
+            ->value('is_serialized');
+
+        if (! $isSerialized) {
+            return (float) DB::table('warehouse_inventories')
+                ->where('item_id', $itemId)
+                ->when($branchId === null || $branchId === '', fn ($q) => $q->whereNull('branch_id'), fn ($q) => $q->where('branch_id', $branchId))
+                ->where('location_id', $locationId)
+                ->value('quantity');
+        }
+
+        $query = DB::table('warehouse_item_serials')
+            ->where('item_id', $itemId)
+            ->where('location_id', $locationId)
+            ->where('status', 'available');
+
+        if ($branchId === null || $branchId === '') {
+            $query->whereNull('branch_id');
+            $cleanBranchId = null;
+        } else {
+            $query->where('branch_id', $branchId);
+            $cleanBranchId = $branchId;
+        }
+
+        $count = (float) $query->count();
+        $now = now();
+
+        DB::table('warehouse_inventories')->updateOrInsert(
+            [
+                'item_id' => $itemId,
+                'branch_id' => $cleanBranchId,
+                'location_id' => $locationId,
+            ],
+            [
+                'quantity' => $count,
+                'updated_at' => $now,
+                'created_at' => $now,
+            ]
+        );
+
+        return $count;
+    }
+
+    private static function tablesReady(): bool
+    {
+        return Schema::hasTable('warehouse_items')
+            && Schema::hasTable('warehouse_item_serials')
+            && Schema::hasTable('warehouse_inventories')
+            && Schema::hasColumn('warehouse_items', 'is_serialized')
+            && Schema::hasColumn('warehouse_item_serials', 'item_id')
+            && Schema::hasColumn('warehouse_item_serials', 'status');
+    }
+}

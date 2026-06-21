@@ -11,9 +11,11 @@
                 'purchasing' => 'Purchasing',
                 'sales' => 'Sales',
                 'accounting' => 'Accounting',
+                'pos' => 'POS',
                 'payroll' => 'Payroll',
                 'reports' => 'Reports',
                 'project_management' => 'Project Management',
+                'vehicle_management' => 'Vehicle Management',
             ];
 
             $accessLevelOptions = [

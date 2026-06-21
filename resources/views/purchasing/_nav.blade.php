@@ -21,7 +21,7 @@
             'active' => request()->routeIs('purchasing.bills.*'),
         ],
         [
-            'label' => 'Payments',
+            'label' => 'Payment History',
             'route' => 'purchasing.payments.index',
             'active' => request()->routeIs('purchasing.payments.*'),
         ],

@@ -1,0 +1,359 @@
+<div class="modal fade" id="wmcItemPickerModal" tabindex="-1" aria-labelledby="wmcItemPickerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <h5 class="modal-title fw-bold" id="wmcItemPickerModalLabel">Select Warehouse Item</h5>
+                    <p class="text-muted mb-0 small">Search item, view details, select serial if required, then use item.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-lg-8">
+                        <div class="card border-0 shadow-sm mb-3">
+                            <div class="card-body">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-7">
+                                        <label class="form-label small text-muted">Search</label>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="wmcItemPickerSearch"
+                                               placeholder="Search item code, name, description, specs...">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small text-muted">Filter</label>
+                                        <select class="form-select" id="wmcItemPickerSerializedFilter">
+                                            <option value="">All items</option>
+                                            <option value="0">Non-serialized</option>
+                                            <option value="1">Serialized</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small text-muted d-block">Stock</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="wmcItemPickerAvailableOnly" checked>
+                                            <label class="form-check-label small" for="wmcItemPickerAvailableOnly">Available only</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body p-0">
+                                <div class="table-responsive wmc-item-picker-table-wrap">
+                                    <table class="table align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 130px;">Code</th>
+                                                <th>Item</th>
+                                                <th style="width: 140px;">Category</th>
+                                                <th style="width: 160px;">Location</th>
+                                                <th style="width: 90px;" class="text-end">Available</th>
+                                                <th style="width: 80px;">Type</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="wmcItemPickerResults">
+                                            <tr>
+                                                <td colspan="6" class="text-center text-muted py-4">Type to search items.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <div id="wmcItemPickerPreviewEmpty" class="text-center text-muted py-5">
+                                    <div class="mb-2" style="font-size: 36px;">📦</div>
+                                    Select an item to preview details.
+                                </div>
+
+                                <div id="wmcItemPickerPreview" class="d-none">
+                                    <div class="d-flex gap-3 align-items-start mb-3">
+                                        <div class="wmc-item-picker-photo">
+                                            <img id="wmcItemPickerPhoto" src="" alt="Item Photo" class="d-none">
+                                            <span id="wmcItemPickerPhotoFallback">No Image</span>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <div class="small text-primary fw-semibold" id="wmcItemPickerCode"></div>
+                                            <h5 class="mb-1" id="wmcItemPickerName"></h5>
+                                            <span class="badge bg-primary-subtle text-primary" id="wmcItemPickerType"></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-6">
+                                            <div class="wmc-picker-info-box">
+                                                <span>Available</span>
+                                                <strong id="wmcItemPickerAvailable">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="wmc-picker-info-box">
+                                                <span>On Hand</span>
+                                                <strong id="wmcItemPickerOnHand">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="wmc-picker-info-box">
+                                                <span>Cost</span>
+                                                <strong id="wmcItemPickerCost">0.00</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="wmc-picker-info-box">
+                                                <span>Price / SRP</span>
+                                                <strong id="wmcItemPickerPrice">0.00</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <label class="form-label small text-muted">Description</label>
+                                        <div class="small" id="wmcItemPickerDescription">-</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small text-muted">Specs</label>
+                                        <div class="small" id="wmcItemPickerSpecs">-</div>
+                                    </div>
+
+                                    <div class="mb-3 d-none" id="wmcItemPickerSerialBox">
+                                        <label class="form-label small text-muted">Serial No.</label>
+                                        <input type="text" class="form-control mb-2" id="wmcItemPickerSerialSearch" placeholder="Search serial...">
+                                        <select class="form-select" id="wmcItemPickerSerialSelect">
+                                            <option value="">Select serial</option>
+                                        </select>
+                                        <div class="small text-muted mt-1">Serialized items automatically use quantity 1.</div>
+                                    </div>
+
+                                    <div class="mb-3" id="wmcItemPickerQtyBox">
+                                        <label class="form-label small text-muted">Quantity</label>
+                                        <input type="number" class="form-control" id="wmcItemPickerQty" min="1" step="1" value="1">
+                                        <div class="small text-muted mt-1" id="wmcItemPickerQtyHelp">Cannot exceed available quantity.</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small text-muted">Material Remarks</label>
+                                        <input type="text" class="form-control" id="wmcItemPickerRemarks" placeholder="Optional remarks">
+                                    </div>
+
+                                    <button type="button" class="btn btn-primary w-100" id="wmcItemPickerUseBtn">
+                                        Use Selected Item
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #wmcItemPickerModal .modal-content {
+        border-radius: 18px;
+    }
+
+    #wmcItemPickerModal .form-control,
+    #wmcItemPickerModal .form-select {
+        min-height: 42px;
+        border-radius: 8px;
+        border-color: #e6e9f4;
+    }
+
+    .wmc-item-picker-table-wrap {
+        max-height: 430px;
+        overflow-y: auto;
+    }
+
+    #wmcItemPickerResults tr {
+        cursor: pointer;
+    }
+
+    #wmcItemPickerResults tr:hover,
+    #wmcItemPickerResults tr.wmc-picker-active {
+        background: #f4f7ff;
+    }
+
+    .wmc-item-picker-photo {
+        width: 88px;
+        height: 88px;
+        border-radius: 14px;
+        background: #f4f7fb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        font-size: 12px;
+        color: #8a92a6;
+        flex: 0 0 88px;
+    }
+
+    .wmc-item-picker-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .wmc-picker-info-box {
+        border: 1px solid #eef1f7;
+        border-radius: 12px;
+        padding: 10px;
+        background: #fbfcff;
+    }
+
+    .wmc-picker-info-box span {
+        display: block;
+        color: #8a92a6;
+        font-size: 11px;
+        margin-bottom: 3px;
+    }
+
+    .wmc-picker-info-box strong {
+        font-size: 15px;
+        color: #232d42;
+    }
+
+    .wmc-global-picker-hidden-native {
+        display: none !important;
+    }
+
+    .wmc-selected-material-summary {
+        border: 1px dashed #cdd6f6;
+        background: #f8faff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        font-size: 13px;
+    }
+</style>
+
+{{-- item-picker-photo-zoom-ui-patch-v1 --}}
+<div class="modal fade" id="wmcItemPhotoZoomModal" tabindex="-1" aria-labelledby="wmcItemPhotoZoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg wmc-photo-zoom-content">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <h5 class="modal-title fw-bold" id="wmcItemPhotoZoomModalLabel">Item Photo Preview</h5>
+                    <p class="text-muted small mb-0" id="wmcItemPhotoZoomSubtitle">Warehouse item image</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="wmc-photo-zoom-frame">
+                    <img id="wmcItemPhotoZoomImg" src="" alt="Item Photo Preview">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* item-picker-photo-zoom-ui-patch-v1 */
+    #wmcItemPickerModal .modal-content {
+        border: 1px solid rgba(58, 87, 232, 0.18) !important;
+        box-shadow: 0 22px 60px rgba(35, 45, 66, 0.20) !important;
+    }
+
+    #wmcItemPickerModal .card {
+        border: 1px solid rgba(58, 87, 232, 0.08) !important;
+        box-shadow: 0 10px 24px rgba(35, 45, 66, 0.055) !important;
+    }
+
+    #wmcItemPickerModal .modal-header {
+        border-bottom: 1px solid rgba(58, 87, 232, 0.08) !important;
+        padding-bottom: 14px !important;
+    }
+
+    #wmcItemPickerResults tr.wmc-picker-active {
+        background: linear-gradient(90deg, rgba(58, 87, 232, 0.12), rgba(58, 87, 232, 0.04)) !important;
+        box-shadow: inset 3px 0 0 #3a57e8;
+    }
+
+    .wmc-item-picker-photo {
+        border: 1px solid rgba(58, 87, 232, 0.30) !important;
+        background: linear-gradient(145deg, #f8faff, #ffffff) !important;
+        box-shadow: 0 10px 22px rgba(58, 87, 232, 0.12);
+        cursor: pointer;
+        position: relative;
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .wmc-item-picker-photo:hover {
+        transform: translateY(-1px);
+        border-color: rgba(58, 87, 232, 0.75) !important;
+        box-shadow: 0 14px 28px rgba(58, 87, 232, 0.20);
+    }
+
+    .wmc-item-picker-photo::after {
+        content: "Zoom";
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        background: rgba(58, 87, 232, 0.92);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 4px 6px;
+        border-radius: 999px;
+        opacity: 0;
+        transform: translateY(3px);
+        transition: opacity .16s ease, transform .16s ease;
+        pointer-events: none;
+    }
+
+    .wmc-item-picker-photo.has-image::after {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .wmc-picker-info-box {
+        border-color: rgba(58, 87, 232, 0.12) !important;
+        background: linear-gradient(145deg, #fbfcff, #ffffff) !important;
+    }
+
+    #wmcItemPickerUseBtn {
+        box-shadow: 0 10px 20px rgba(58, 87, 232, 0.22);
+    }
+
+    .wmc-photo-zoom-content {
+        border-radius: 18px;
+        border: 1px solid rgba(58, 87, 232, 0.18) !important;
+        box-shadow: 0 24px 70px rgba(35, 45, 66, 0.30) !important;
+    }
+
+    .wmc-photo-zoom-frame {
+        min-height: 420px;
+        max-height: 70vh;
+        border: 1px solid rgba(58, 87, 232, 0.16);
+        border-radius: 16px;
+        background:
+            linear-gradient(45deg, rgba(58, 87, 232, 0.035) 25%, transparent 25%),
+            linear-gradient(-45deg, rgba(58, 87, 232, 0.035) 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, rgba(58, 87, 232, 0.035) 75%),
+            linear-gradient(-45deg, transparent 75%, rgba(58, 87, 232, 0.035) 75%);
+        background-size: 24px 24px;
+        background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: auto;
+        padding: 18px;
+    }
+
+    .wmc-photo-zoom-frame img {
+        max-width: 100%;
+        max-height: 66vh;
+        object-fit: contain;
+        border-radius: 12px;
+    }
+</style>

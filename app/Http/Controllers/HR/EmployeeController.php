@@ -13,8 +13,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use App\Models\EmployeeDocument;
@@ -98,7 +100,64 @@ class EmployeeController extends Controller
             ->paginate($perPage)
             ->appends($request->query());
 
-        return view('hr.employees.index', compact('employees', 'search', 'perPage', 'sort', 'direction'));
+        $employeeClientRows = User::query()
+            ->with(['branch', 'department', 'employeeProfile.position'])
+            ->whereHas('employeeProfile')
+            ->orderBy('users.id', 'asc')
+            ->get()
+            ->map(function (User $employee) {
+                $employeeName = trim(($employee->full_name ?? '') ?: ($employee->name ?? ''));
+
+                if ($employeeName === '') {
+                    $employeeName = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                }
+
+                if ($employeeName === '') {
+                    $employeeName = 'N/A';
+                }
+
+                $branchName = optional($employee->branch)->name ?? 'N/A';
+                $departmentName = optional($employee->department)->name ?? 'N/A';
+                $designationName = optional($employee->position)->name
+                    ?? optional(optional($employee->employeeProfile)->position)->name
+                    ?? 'N/A';
+                $status = $employee->status ?? 'active';
+                $profileEmployeeCode = optional($employee->employeeProfile)->employee_id ?? '';
+
+                $searchText = mb_strtolower(trim(implode(' ', array_filter([
+                    $employee->id,
+                    $profileEmployeeCode,
+                    $employeeName,
+                    $employee->username ?? '',
+                    $employee->email ?? '',
+                    $branchName,
+                    $departmentName,
+                    $designationName,
+                    $status,
+                ]))));
+
+                return [
+                    'id' => (int) $employee->id,
+                    'name' => $employeeName,
+                    'email' => $employee->email ?? 'N/A',
+                    'branch' => $branchName,
+                    'department' => $departmentName,
+                    'designation' => $designationName,
+                    'status' => ucfirst($status),
+                    'status_key' => strtolower($status),
+                    'search_text' => $searchText,
+                    'show_url' => Route::has('hr.employees.show') ? route('hr.employees.show', $employee->id) : '',
+                    'action_html' => \App\Helpers\ActionButtonHelper::viewEdit(
+                        null,
+                        Route::has('hr.employees.edit') ? route('hr.employees.edit', $employee->id) : null,
+                        'View Employee',
+                        'Edit Employee'
+                    ),
+                ];
+            })
+            ->values();
+
+        return view('hr.employees.index', compact('employees', 'employeeClientRows', 'search', 'perPage', 'sort', 'direction'));
     }
 
     public function create(): View
@@ -655,13 +714,10 @@ class EmployeeController extends Controller
             ->get();
 
         /*
-         * Do not generate this page through DomPDF here.
-         * The production server currently does not have barryvdh/laravel-dompdf
-         * installed, which causes: Class "Barryvdh\DomPDF\Facade\Pdf" not found.
-         *
-         * The print-201 Blade file is already designed as a printable browser page
-         * with a Print / Save as PDF button, so returning the view is more reliable
-         * and removes the missing-package server error.
+         * Keep Print 201 as a browser print page instead of generating a PDF
+         * through barryvdh/laravel-dompdf. The current project composer.json
+         * does not require that package, so calling the DomPDF facade causes
+         * a 500 Server Error when the Print 201 button is clicked.
          */
         return view('hr.employees.print-201', [
             'employee' => $employee,
@@ -705,7 +761,27 @@ class EmployeeController extends Controller
             'suffixes' => ['N/A', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V', 'VI'],
             'maritalStatuses' => ['Single', 'Married', 'Divorced', 'Separated', 'Widowed'],
             'sexes' => ['Male', 'Female'],
-            'employmentTypes' => ['Regular', 'Probationary', 'Contractual', 'Project-based', 'Part-time', 'Intern'],
+            'educationAttainments' => [
+                'Vocational',
+                'Elementary Level',
+                'Elementary Graduate',
+                'High School Level',
+                'High School Graduate',
+                'College Level',
+                'College Graduate',
+                'Masters Level',
+                'Masters Graduate',
+                'Doctorate',
+            ],
+            'employmentTypes' => [
+                'Probationary',
+                'Regular',
+                'Project-based',
+                'Casual',
+                'Fixed Term',
+                'Part-time',
+                'Intern',
+            ],
             'employmentStatuses' => ['Active', 'Inactive', 'Probationary', 'Resigned', 'Terminated'],
         ];
     }
@@ -723,6 +799,13 @@ class EmployeeController extends Controller
             'birth_date' => ['required', 'date'],
             'civil_status' => ['required', 'string', 'max:50'],
             'sex_of_birth' => ['required', 'string', 'max:20'],
+            'spouse_name' => ['nullable', 'string', 'max:255'],
+            'father_name' => ['nullable', 'string', 'max:255'],
+            'mother_name' => ['nullable', 'string', 'max:255'],
+            'highest_education_attainment' => ['nullable', 'string', 'max:100'],
+            'course' => ['nullable', 'string', 'max:255'],
+            'school' => ['nullable', 'string', 'max:255'],
+            'year_graduated' => ['nullable', 'integer', 'min:1900', 'max:' . ((int) now()->year + 10)],
             'province' => ['required', 'string', 'max:255'],
             'city' => ['required', 'string', 'max:255'],
             'barangay' => ['required', 'string', 'max:255'],
@@ -734,11 +817,27 @@ class EmployeeController extends Controller
             'position_id' => ['required', 'exists:positions,id'],
             'supervisor_id' => ['nullable', 'exists:users,id'],
             'hire_date' => ['required', 'date'],
+            'regularization_date' => ['nullable', 'date', 'after_or_equal:hire_date'],
             'employee_rate' => ['required', 'numeric', 'min:0'],
             'sss_number' => ['nullable', 'string', 'max:50'],
             'pagibig_number' => ['nullable', 'string', 'max:50'],
             'philhealth_number' => ['nullable', 'string', 'max:50'],
             'tax_id_number' => ['nullable', 'string', 'max:50'],
+            'payroll_sss' => ['nullable', 'numeric', 'min:0'],
+            'payroll_pagibig' => ['nullable', 'numeric', 'min:0'],
+            'payroll_philhealth' => ['nullable', 'numeric', 'min:0'],
+            'payroll_cash_advance' => ['nullable', 'numeric', 'min:0'],
+            'payroll_account_receivables' => ['nullable', 'numeric', 'min:0'],
+            'payroll_stl_mpl' => ['nullable', 'numeric', 'min:0'],
+            'payroll_charitable_contribution' => ['nullable', 'numeric', 'min:0'],
+            'payroll_savings_share' => ['nullable', 'numeric', 'min:0'],
+            'payroll_rice_loan' => ['nullable', 'numeric', 'min:0'],
+            'payroll_loan_payment' => ['nullable', 'numeric', 'min:0'],
+            'payroll_lot_payment' => ['nullable', 'numeric', 'min:0'],
+            'payroll_birthday_savings' => ['nullable', 'numeric', 'min:0'],
+            'payroll_tax_withheld' => ['nullable', 'numeric', 'min:0'],
+            'payroll_allowances' => ['nullable', 'numeric', 'min:0'],
+            'payroll_other_adjustment' => ['nullable', 'numeric'],
             'employment_type' => ['required', 'string', 'max:50'],
             'employment_status' => ['required', 'string', 'max:50'],
         ]);
@@ -749,16 +848,24 @@ class EmployeeController extends Controller
         return [
             'employee_id' => $validated['employee_id']
                 ?? optional($existingProfile)->employee_id
-                ?? $this->nextEmployeeCode(),
+                ?? $this->nextEmployeeCode($validated['hire_date'] ?? null),
             'position_id' => $validated['position_id'],
             'supervisor_id' => $validated['supervisor_id'] ?? null,
             'employment_type' => $validated['employment_type'],
             'employment_status' => $validated['employment_status'],
             'hire_date' => $validated['hire_date'] ?? null,
+            'regularization_date' => $validated['regularization_date'] ?? null,
             'salary' => $validated['employee_rate'] ?? null,
             'employee_rate' => $validated['employee_rate'] ?? null,
             'birth_date' => $validated['birth_date'] ?? null,
             'civil_status' => $validated['civil_status'] ?? null,
+            'spouse_name' => $validated['spouse_name'] ?? null,
+            'father_name' => $validated['father_name'] ?? null,
+            'mother_name' => $validated['mother_name'] ?? null,
+            'highest_education_attainment' => $validated['highest_education_attainment'] ?? null,
+            'course' => $validated['course'] ?? null,
+            'school' => $validated['school'] ?? null,
+            'year_graduated' => $validated['year_graduated'] ?? null,
             'gender' => $validated['sex_of_birth'] ?? null,
             'sex_of_birth' => $validated['sex_of_birth'] ?? null,
             'province' => $validated['province'] ?? null,
@@ -770,6 +877,21 @@ class EmployeeController extends Controller
             'sss_number' => $validated['sss_number'] ?? null,
             'philhealth_number' => $validated['philhealth_number'] ?? null,
             'pagibig_number' => $validated['pagibig_number'] ?? null,
+            'payroll_sss' => $validated['payroll_sss'] ?? 0,
+            'payroll_pagibig' => $validated['payroll_pagibig'] ?? 0,
+            'payroll_philhealth' => $validated['payroll_philhealth'] ?? 0,
+            'payroll_cash_advance' => $validated['payroll_cash_advance'] ?? 0,
+            'payroll_account_receivables' => $validated['payroll_account_receivables'] ?? 0,
+            'payroll_stl_mpl' => $validated['payroll_stl_mpl'] ?? 0,
+            'payroll_charitable_contribution' => $validated['payroll_charitable_contribution'] ?? 0,
+            'payroll_savings_share' => $validated['payroll_savings_share'] ?? 0,
+            'payroll_rice_loan' => $validated['payroll_rice_loan'] ?? 0,
+            'payroll_loan_payment' => $validated['payroll_loan_payment'] ?? 0,
+            'payroll_lot_payment' => $validated['payroll_lot_payment'] ?? 0,
+            'payroll_birthday_savings' => $validated['payroll_birthday_savings'] ?? 0,
+            'payroll_tax_withheld' => $validated['payroll_tax_withheld'] ?? 0,
+            'payroll_allowances' => $validated['payroll_allowances'] ?? 0,
+            'payroll_other_adjustment' => $validated['payroll_other_adjustment'] ?? 0,
         ];
     }
 
@@ -928,7 +1050,14 @@ class EmployeeController extends Controller
             ->get();
 
         foreach ($leaveTypes as $leaveType) {
-            $allocated = (float) ($leaveType->default_credits ?? 0);
+            $balance = LeaveBalance::where('employee_profile_id', $profile->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->where('year', $year)
+                ->first();
+
+            $allocated = $balance
+                ? (float) $balance->allocated
+                : (float) ($leaveType->default_credits ?? 0);
 
             $used = (float) LeaveRequest::query()
                 ->where('user_id', $employee->id)
@@ -937,27 +1066,33 @@ class EmployeeController extends Controller
                 ->whereYear('start_datetime', $year)
                 ->sum('days');
 
-            LeaveBalance::updateOrCreate(
-                [
+            if (!$balance) {
+                $balance = new LeaveBalance([
                     'employee_profile_id' => $profile->id,
                     'leave_type_id' => $leaveType->id,
                     'year' => $year,
-                ],
-                [
-                    'allocated' => $allocated,
-                    'used' => $used,
-                    'remaining' => max($allocated - $used, 0),
-                ]
-            );
+                ]);
+                $balance->allocated = $allocated;
+            }
+
+            $balance->used = $used;
+            $balance->remaining = max($allocated - $used, 0);
+            $balance->save();
         }
     }
 
-    protected function nextEmployeeCode(): string
+    protected function nextEmployeeCode(?string $hireDate = null): string
     {
-        $nextNumber = EmployeeProfile::query()->count() + 1;
+        $year = $this->employeeCodeYear($hireDate);
+        $nextNumber = EmployeeProfile::query()
+            ->where(function ($query) use ($year) {
+                $query->where('employee_id', 'like', 'EMP-' . $year . '-%')
+                    ->orWhere('employee_id', 'like', $year . '-%');
+            })
+            ->count() + 1;
 
         do {
-            $employeeCode = $this->formatEmployeeCode($nextNumber);
+            $employeeCode = $this->formatEmployeeCode($year, $nextNumber);
             $exists = EmployeeProfile::where('employee_id', $employeeCode)->exists();
             $nextNumber++;
         } while ($exists);
@@ -985,15 +1120,33 @@ class EmployeeController extends Controller
             ])->save();
         }
 
-        foreach ($profiles->values() as $index => $profile) {
+        $yearCounters = [];
+
+        foreach ($profiles as $profile) {
+            $year = $this->employeeCodeYear($profile->hire_date ?? null);
+            $yearCounters[$year] = ($yearCounters[$year] ?? 0) + 1;
+
             $profile->forceFill([
-                'employee_id' => $this->formatEmployeeCode($index + 1),
+                'employee_id' => $this->formatEmployeeCode($year, $yearCounters[$year]),
             ])->save();
         }
     }
 
-    protected function formatEmployeeCode(int $number): string
+    protected function employeeCodeYear($hireDate = null): string
     {
-        return 'EMP-' . str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+        if (blank($hireDate)) {
+            return now()->format('Y');
+        }
+
+        try {
+            return Carbon::parse($hireDate)->format('Y');
+        } catch (\Throwable $e) {
+            return now()->format('Y');
+        }
+    }
+
+    protected function formatEmployeeCode(string $year, int $number): string
+    {
+        return 'EMP-' . $year . '-' . str_pad((string) $number, 4, '0', STR_PAD_LEFT);
     }
 }

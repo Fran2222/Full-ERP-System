@@ -1,3 +1,69 @@
+<style>
+/* WMC_SIDEBAR_BRAND_WIZMASTER_COLOR_SPLIT */
+.sidebar .navbar-brand,
+.iq-sidebar .navbar-brand {
+    min-width: 0 !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-brand-stack,
+.iq-sidebar .navbar-brand .wiz-sidebar-brand-stack,
+.sidebar .navbar-brand .wiz-sidebar-text-wrap,
+.iq-sidebar .navbar-brand .wiz-sidebar-text-wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-shadow-text,
+.iq-sidebar .navbar-brand .wiz-sidebar-shadow-text {
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 2px !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 21px !important;
+    font-weight: 900 !important;
+    line-height: .88 !important;
+    letter-spacing: .04em !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    margin: 0 !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-shadow-text .wiz-brand-red,
+.iq-sidebar .navbar-brand .wiz-sidebar-shadow-text .wiz-brand-red,
+.sidebar .navbar-brand h4.logo-title .wiz-brand-red,
+.iq-sidebar .navbar-brand h4.logo-title .wiz-brand-red {
+    color: #e53935 !important;
+    -webkit-text-fill-color: #e53935 !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-shadow-text .wiz-brand-blue,
+.iq-sidebar .navbar-brand .wiz-sidebar-shadow-text .wiz-brand-blue,
+.sidebar .navbar-brand h4.logo-title .wiz-brand-blue,
+.iq-sidebar .navbar-brand h4.logo-title .wiz-brand-blue {
+    color: #3157f4 !important;
+    -webkit-text-fill-color: #3157f4 !important;
+}
+
+.sidebar .navbar-brand .wiz-sidebar-corporation-text,
+.iq-sidebar .navbar-brand .wiz-sidebar-corporation-text {
+    display: block !important;
+    color: #111827 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    line-height: .9 !important;
+    letter-spacing: .30em !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+    margin-top: 4px !important;
+    padding-left: 1px !important;
+}
+</style>
+
 <aside class="sidebar sidebar-default navs-rounded-all">
     <div class="sidebar-header d-flex align-items-center justify-content-start">
         <a href="{{ route('dashboard') }}" class="navbar-brand d-flex align-items-center gap-2 text-decoration-none">
@@ -8,8 +74,11 @@
                      class="wiz-logo">
             </div>
 
-            <div class="wiz-sidebar-text-wrap">
-                <h4 class="logo-title mb-0 wiz-sidebar-shadow-text">Wizmaster</h4>
+            <div class="wiz-sidebar-text-wrap wiz-sidebar-brand-stack">
+                <h4 class="logo-title mb-0 wiz-sidebar-shadow-text">
+                    <span class="wiz-brand-red">WIZ</span><span class="wiz-brand-blue">MASTER</span>
+                </h4>
+                <span class="wiz-sidebar-corporation-text">CORPORATION</span>
             </div>
         </a>
 

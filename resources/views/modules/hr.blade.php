@@ -685,6 +685,85 @@
             padding: 28px;
             color: #111827;
         }
+
+        /* Announcement memo header - same style as payslip header */
+        .announcement-company-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 18px 22px 14px;
+            border-top: 5px solid #174a9c;
+            border-bottom: 3px solid #174a9c;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fbff 60%, #eef5ff 100%);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .announcement-brand-wrap {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .announcement-brand-logo {
+            width: 84px;
+            height: 54px;
+            object-fit: contain;
+            flex: 0 0 auto;
+        }
+
+        .announcement-brand-text h1 {
+            font-size: 28px;
+            line-height: .95;
+            letter-spacing: 1px;
+            margin: 0;
+            text-transform: uppercase;
+            color: #174a9c;
+            font-weight: 900;
+        }
+
+        .announcement-brand-text .corp {
+            display: block;
+            color: #dc2626;
+            font-size: 18px;
+            letter-spacing: 2px;
+            font-weight: 900;
+            margin-top: 2px;
+        }
+
+        .announcement-brand-text .services {
+            display: block;
+            color: #334155;
+            font-size: 11px;
+            letter-spacing: 1px;
+            font-weight: 700;
+            margin-top: 3px;
+        }
+
+        .announcement-company-details {
+            text-align: right;
+            font-size: 10px;
+            line-height: 1.35;
+            color: #475569;
+            max-width: 300px;
+        }
+
+        @media (max-width: 767.98px) {
+            .announcement-company-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .announcement-company-details {
+                text-align: left;
+                max-width: none;
+            }
+
+            .announcement-brand-text h1 {
+                font-size: 22px;
+            }
+        }
         .announcement-memo-meta div {
             display: grid;
             grid-template-columns: 70px 1fr;
@@ -1124,9 +1203,21 @@
                             </div>
                             <div class="modal-body px-4 pb-4">
                                 <div class="announcement-memo-paper">
-                                    <div class="text-center mb-3">
-                                        <h5 class="fw-bold text-primary mb-0">WIZMASTER COMPUTER SALES AND SERVICES CORPORATION</h5>
-                                        <small class="text-secondary">Official HR Memorandum</small>
+                                    <div class="announcement-company-header mb-3">
+                                        <div class="announcement-brand-wrap">
+                                            <img src="{{ asset('images/wizmaster-logo.png') }}" alt="Wizmaster Logo" class="announcement-brand-logo">
+                                            <div class="announcement-brand-text">
+                                                <h1>Wizmaster</h1>
+                                                <span class="corp">Corporation</span>
+                                                <span class="services">Computer Sales &amp; Services</span>
+                                            </div>
+                                        </div>
+                                        <div class="announcement-company-details">
+                                            <div><strong>ADDRESS</strong> 1/F Solana District, Andres Bonifacio Ave., San Miguel, Iligan City</div>
+                                            <div><strong>TEL. NUMBER</strong> (063) 222-4277 / (063) 915-501-4668</div>
+                                            <div><strong>EMAIL</strong> sales@wizmaster.com.co</div>
+                                            <div><strong>Website</strong> http://wizmaster.com.co</div>
+                                        </div>
                                     </div>
 
                                     <hr class="my-3">
@@ -1142,7 +1233,11 @@
                                     <p class="mb-4"><strong>Subject:</strong> <u>{{ $announcement->title }}</u></p>
 
                                     <div class="announcement-memo-content">
-                                        {!! nl2br(e($announcement->content)) !!}
+                                        @php
+                                            $memoContent = html_entity_decode((string) $announcement->content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                                            $memoContent = strip_tags($memoContent, '<p><br><strong><b><em><i><u><s><strike><ul><ol><li><div><blockquote>');
+                                        @endphp
+                                        {!! $memoContent !!}
                                     </div>
 
                                     <div class="mt-5">
@@ -1911,9 +2006,21 @@
                             </div>
                             <div class="modal-body px-4 pb-4">
                                 <div class="announcement-memo-paper">
-                                    <div class="text-center mb-3">
-                                        <h5 class="fw-bold text-primary mb-0">WIZMASTER COMPUTER SALES AND SERVICES CORPORATION</h5>
-                                        <small class="text-secondary">Official HR Memorandum</small>
+                                    <div class="announcement-company-header mb-3">
+                                        <div class="announcement-brand-wrap">
+                                            <img src="{{ asset('images/wizmaster-logo.png') }}" alt="Wizmaster Logo" class="announcement-brand-logo">
+                                            <div class="announcement-brand-text">
+                                                <h1>Wizmaster</h1>
+                                                <span class="corp">Corporation</span>
+                                                <span class="services">Computer Sales &amp; Services</span>
+                                            </div>
+                                        </div>
+                                        <div class="announcement-company-details">
+                                            <div><strong>ADDRESS</strong> 1/F Solana District, Andres Bonifacio Ave., San Miguel, Iligan City</div>
+                                            <div><strong>TEL. NUMBER</strong> (063) 222-4277 / (063) 915-501-4668</div>
+                                            <div><strong>EMAIL</strong> sales@wizmaster.com.co</div>
+                                            <div><strong>Website</strong> http://wizmaster.com.co</div>
+                                        </div>
                                     </div>
 
                                     <hr class="my-3">
@@ -1929,7 +2036,11 @@
                                     <p class="mb-4"><strong>Subject:</strong> <u>{{ $announcement->title }}</u></p>
 
                                     <div class="announcement-memo-content">
-                                        {!! nl2br(e($announcement->content)) !!}
+                                        @php
+                                            $memoContent = html_entity_decode((string) $announcement->content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                                            $memoContent = strip_tags($memoContent, '<p><br><strong><b><em><i><u><s><strike><ul><ol><li><div><blockquote>');
+                                        @endphp
+                                        {!! $memoContent !!}
                                     </div>
 
                                     <div class="mt-5">

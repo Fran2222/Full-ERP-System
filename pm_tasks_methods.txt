@@ -1,0 +1,73 @@
+  98:     public function store(Request $request): RedirectResponse
+  99:     {
+ 100:         $validated = $this->validateRequest($request);
+ 101:         $validated = $this->applyProjectTypeFromProject($validated);
+ 102: 
+ 103:         DB::transaction(function () use ($validated) {
+ 104:             foreach ($validated['task_titles'] as $index => $title) {
+ 105:                 $task = ProjectTask::create([
+ 106:                     'project_id' => $validated['project_id'] ?? null,
+ 107:                     'project_type_id' => $validated['project_type_id'],
+ 108:                     'title' => $title,
+ 109:                     'start_date' => $validated['start_date'],
+ 110:                     'end_date' => $validated['end_date'] ?? $validated['start_date'],
+ 111:                     'task_time' => $validated['task_times'][$index] ?? null,
+ 112:                     'location' => $validated['location'] ?? null,
+ 113:                     'description' => $validated['description'] ?? null,
+ 114:                     'created_by' => auth()->id(),
+ 115:                 ]);
+ 116: 
+ 117:                 $task->teams()->sync($validated['team_ids'] ?? []);
+ 118:             }
+ 119:         });
+ 120: 
+ 121:         return redirect()
+ 122:             ->route('project-tasks.index', ($validated['project_id'] ?? null) ? ['project_id' => $validated['project_id']] : [])
+ 123:             ->with('success', 'Task/s created successfully.');
+ 124:     }
+ 125: 
+ 126:     public function edit(ProjectTask $projectTask): View
+ 127:     {
+ 128:         return view('modules.project-mgmt.tasks.edit', array_merge($this->formData(), [
+ 129:             'task' => $projectTask->load(['teams']),
+ 130:         ]));
+ 131:     }
+ 132: 
+ 133:     public function update(Request $request, ProjectTask $projectTask): RedirectResponse
+ 134:     {
+ 135:         $validated = $request->validate([
+ 136:             'project_id' => ['nullable', 'exists:projects,id'],
+ 137:             'project_type_id' => ['required', Rule::exists('project_types', 'id')->where('status', 'active')],
+ 138:             'title' => ['required', 'string', 'max:150'],
+ 139:             'start_date' => ['required', 'date'],
+ 140:             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+ 141:             'task_time' => ['nullable', 'date_format:H:i'],
+ 142:             'team_ids' => ['nullable', 'array'],
+ 143:             'team_ids.*' => ['exists:teams,id'],
+ 144:             'location' => ['nullable', 'string', 'max:150'],
+ 145:             'description' => ['nullable', 'string', 'max:1000'],
+ 146:         ]);
+ 147: 
+ 148:         $validated = $this->applyProjectTypeFromProject($validated);
+ 149: 
+ 150:         $projectTask->update([
+ 151:             'project_id' => $validated['project_id'] ?? null,
+ 152:             'project_type_id' => $validated['project_type_id'],
+ 153:             'title' => $validated['title'],
+ 154:             'start_date' => $validated['start_date'],
+ 155:             'end_date' => $validated['end_date'] ?? $validated['start_date'],
+ 156:             'task_time' => $validated['task_time'] ?? null,
+ 157:             'location' => $validated['location'] ?? null,
+ 158:             'description' => $validated['description'] ?? null,
+ 159:         ]);
+ 160: 
+ 161:         $projectTask->teams()->sync($validated['team_ids'] ?? []);
+ 162: 
+ 163:         return redirect()
+ 164:             ->route('project-tasks.index', $projectTask->project_id ? ['project_id' => $projectTask->project_id] : [])
+ 165:             ->with('success', 'Task updated successfully.');
+ 166:     }
+ 167: 
+ 168:     public function storeReport(Request $request, ProjectTask $projectTask): RedirectResponse
+ 169:     {
+ 170:         $projectTask->loadMissing(['project.manager', 'teams.members', 'teams.teamLeader']);

@@ -465,6 +465,10 @@ class UserController extends Controller
 
         $this->syncPrimaryModuleRole($user, $primaryModule, $primaryAccessLevel);
 
+        // Keep the simple user_module_accesses table aligned with the module assignment UI.
+        // This is used by notifications/module-level guards.
+        $this->syncSimpleUserModuleAccesses($user, $enabledModules);
+
         if (Schema::hasColumn('users', 'primary_module')) {
             $user->forceFill([
                 'primary_module' => $primaryModule,
@@ -546,9 +550,11 @@ class UserController extends Controller
             'purchasing' => 'Purchasing',
             'sales' => 'Sales',
             'accounting' => 'Accounting',
+            'pos' => 'POS',
             'payroll' => 'Payroll',
             'reports' => 'Reports',
             'project_management' => 'Project Management',
+            'vehicle_management' => 'Vehicle Management',
         ];
     }
 
@@ -845,7 +851,6 @@ class UserController extends Controller
                     'sales.dashboard.view',
                     'sales.customers.view',
                     'sales.invoices.view',
-                    'sales.receipts.view',
                     'sales.payments.view',
                 ],
                 'staff' => [
@@ -855,8 +860,6 @@ class UserController extends Controller
                     'sales.customers.edit',
                     'sales.invoices.view',
                     'sales.invoices.create',
-                    'sales.receipts.view',
-                    'sales.receipts.create',
                     'sales.payments.view',
                     'sales.payments.create',
                 ],
@@ -868,10 +871,6 @@ class UserController extends Controller
                     'sales.invoices.view',
                     'sales.invoices.create',
                     'sales.invoices.edit',
-                    'sales.receipts.view',
-                    'sales.receipts.create',
-                    'sales.receipts.void',
-                    'sales.receipts.delete',
                     'sales.payments.view',
                     'sales.payments.create',
                     'sales.reports.view',
@@ -886,13 +885,306 @@ class UserController extends Controller
                     'sales.invoices.create',
                     'sales.invoices.edit',
                     'sales.invoices.delete',
-                    'sales.receipts.view',
-                    'sales.receipts.create',
-                    'sales.receipts.void',
-                    'sales.receipts.delete',
                     'sales.payments.view',
                     'sales.payments.create',
                     'sales.reports.view',
+                ],
+            ],
+
+
+
+            // WMC_ACCOUNTING_PERMISSION_MAP
+            'accounting' => [
+                'viewer' => [
+                    'accounting.dashboard.view',
+                    'accounting.accounts.view',
+                    'accounting.journal-entries.view',
+                    'accounting.general-ledger.view',
+                    'accounting.bank-accounts.view',
+                    'accounting.pay-bills.view',
+                    'accounting.collections.view',
+                    'accounting.expenses.view',
+                    'accounting.reports.view',
+                ],
+                'staff' => [
+                    'accounting.dashboard.view',
+                    'accounting.bank-accounts.view',
+                    'accounting.pay-bills.view',
+                    'accounting.pay-bills.create',
+                    'accounting.collections.view',
+                    'accounting.collections.create',
+                    'accounting.expenses.view',
+                    'accounting.expenses.create',
+                ],
+                'manager' => [
+                    'accounting.dashboard.view',
+
+                    'accounting.accounts.view',
+                    'accounting.accounts.create',
+                    'accounting.accounts.edit',
+
+                    'accounting.journal-entries.view',
+                    'accounting.journal-entries.create',
+                    'accounting.journal-entries.edit',
+                    'accounting.journal-entries.post',
+
+                    'accounting.general-ledger.view',
+
+                    'accounting.bank-accounts.view',
+                    'accounting.bank-accounts.create',
+                    'accounting.bank-accounts.edit',
+
+                    'accounting.pay-bills.view',
+                    'accounting.pay-bills.create',
+
+                    'accounting.collections.view',
+                    'accounting.collections.create',
+
+                    'accounting.expenses.view',
+                    'accounting.expenses.create',
+
+                    'accounting.reports.view',
+                    'accounting.reports.trial-balance.view',
+                    'accounting.reports.income-statement.view',
+                    'accounting.reports.balance-sheet.view',
+                ],
+                'admin' => [
+                    'accounting.dashboard.view',
+
+                    'accounting.accounts.view',
+                    'accounting.accounts.create',
+                    'accounting.accounts.edit',
+                    'accounting.accounts.delete',
+
+                    'accounting.journal-entries.view',
+                    'accounting.journal-entries.create',
+                    'accounting.journal-entries.edit',
+                    'accounting.journal-entries.post',
+                    'accounting.journal-entries.void',
+                    'accounting.journal-entries.delete',
+
+                    'accounting.general-ledger.view',
+
+                    'accounting.bank-accounts.view',
+                    'accounting.bank-accounts.create',
+                    'accounting.bank-accounts.edit',
+                    'accounting.bank-accounts.delete',
+
+                    'accounting.pay-bills.view',
+                    'accounting.pay-bills.create',
+
+                    'accounting.collections.view',
+                    'accounting.collections.create',
+                    'accounting.collections.void',
+
+                    'accounting.expenses.view',
+                    'accounting.expenses.create',
+                    'accounting.expenses.void',
+
+                    'accounting.reports.view',
+                    'accounting.reports.trial-balance.view',
+                    'accounting.reports.income-statement.view',
+                    'accounting.reports.balance-sheet.view',
+                ],
+            ],
+            'pos' => [
+                'viewer' => [
+                    'pos.view',
+                ],
+                'staff' => [
+                    'pos.view',
+                    'pos.terminal.view',
+                    'pos.sales.create',
+                ],
+                'manager' => [
+                    'pos.view',
+                    'pos.terminal.view',
+                    'pos.sales.create',
+                    'pos.transactions.view',
+                    'pos.credit_sales.view',
+                ],
+                'admin' => [
+                    'pos.view',
+                    'pos.terminal.view',
+                    'pos.sales.create',
+                    'pos.transactions.view',
+                    'pos.credit_sales.view',
+                    'pos.settings.manage',
+                ],
+            ],
+
+
+            'project_management' => [
+                'viewer' => [
+                    'project_management.view',
+                    'project_dashboard.view',
+                    'project_management.dashboard.view',
+                    'projects_mgmt.view',
+                    'project_clients.view',
+                    'project_types.view',
+                    'project_priorities.view',
+                    'project_statuses.view',
+                    'project_tasks.view',
+                    'project_teams.view',
+                    'project_documents.view',
+                    'project_finance.view',
+                ],
+                'staff' => [
+                    'project_management.view',
+                    'project_management.create',
+                    'project_dashboard.view',
+                    'project_management.dashboard.view',
+                    'projects_mgmt.view',
+                    'projects_mgmt.create',
+                    'project_clients.view',
+                    'project_types.view',
+                    'project_priorities.view',
+                    'project_statuses.view',
+                    'project_tasks.view',
+                    'project_tasks.create',
+                    'project_teams.view',
+                    'project_documents.view',
+                    'project_documents.create',
+                    'project_finance.view',
+                    'project_finance.create',
+                ],
+                'manager' => [
+                    'project_management.view',
+                    'project_management.create',
+                    'project_management.edit',
+                    'project_dashboard.view',
+                    'project_management.dashboard.view',
+                    'projects_mgmt.view',
+                    'projects_mgmt.create',
+                    'projects_mgmt.edit',
+                    'project_clients.view',
+                    'project_clients.create',
+                    'project_clients.edit',
+                    'project_types.view',
+                    'project_types.create',
+                    'project_types.edit',
+                    'project_priorities.view',
+                    'project_priorities.create',
+                    'project_priorities.edit',
+                    'project_statuses.view',
+                    'project_statuses.create',
+                    'project_statuses.edit',
+                    'project_tasks.view',
+                    'project_tasks.create',
+                    'project_tasks.edit',
+                    'project_teams.view',
+                    'project_teams.create',
+                    'project_teams.edit',
+                    'project_documents.view',
+                    'project_documents.create',
+                    'project_documents.edit',
+                    'project_finance.view',
+                    'project_finance.create',
+                    'project_finance.edit',
+                ],
+                'admin' => [
+                    'project_management.view',
+                    'project_management.create',
+                    'project_management.edit',
+                    'project_management.delete',
+                    'project_dashboard.view',
+                    'project_management.dashboard.view',
+                    'projects_mgmt.view',
+                    'projects_mgmt.create',
+                    'projects_mgmt.edit',
+                    'projects_mgmt.delete',
+                    'project_clients.view',
+                    'project_clients.create',
+                    'project_clients.edit',
+                    'project_clients.delete',
+                    'project_types.view',
+                    'project_types.create',
+                    'project_types.edit',
+                    'project_types.delete',
+                    'project_priorities.view',
+                    'project_priorities.create',
+                    'project_priorities.edit',
+                    'project_priorities.delete',
+                    'project_statuses.view',
+                    'project_statuses.create',
+                    'project_statuses.edit',
+                    'project_statuses.delete',
+                    'project_tasks.view',
+                    'project_tasks.create',
+                    'project_tasks.edit',
+                    'project_tasks.delete',
+                    'project_teams.view',
+                    'project_teams.create',
+                    'project_teams.edit',
+                    'project_teams.delete',
+                    'project_documents.view',
+                    'project_documents.create',
+                    'project_documents.edit',
+                    'project_documents.delete',
+                    'project_finance.view',
+                    'project_finance.create',
+                    'project_finance.edit',
+                    'project_finance.delete',
+                ],
+            ],
+
+            'vehicle_management' => [
+                'viewer' => [
+                    'vehicle.view',
+                    'vehicle.dashboard.view',
+                    'vehicle.vehicles.view',
+                    'vehicle.assignments.view',
+                    'vehicle.maintenance.view',
+                    'vehicle.documents.view',
+                    'vehicle.reports.view',
+                ],
+                'staff' => [
+                    'vehicle.view',
+                    'vehicle.dashboard.view',
+                    'vehicle.vehicles.view',
+                    'vehicle.assignments.view',
+                    'vehicle.maintenance.view',
+                    'vehicle.documents.view',
+                    'vehicle.reports.view',
+                ],
+                'manager' => [
+                    'vehicle.view',
+                    'vehicle.dashboard.view',
+                    'vehicle.vehicles.view',
+                    'vehicle.vehicles.create',
+                    'vehicle.vehicles.edit',
+                    'vehicle.assignments.view',
+                    'vehicle.assignments.create',
+                    'vehicle.assignments.edit',
+                    'vehicle.maintenance.view',
+                    'vehicle.maintenance.create',
+                    'vehicle.maintenance.edit',
+                    'vehicle.documents.view',
+                    'vehicle.documents.create',
+                    'vehicle.documents.edit',
+                    'vehicle.reports.view',
+                ],
+                'admin' => [
+                    'vehicle.view',
+                    'vehicle.dashboard.view',
+                    'vehicle.vehicles.view',
+                    'vehicle.vehicles.create',
+                    'vehicle.vehicles.edit',
+                    'vehicle.vehicles.delete',
+                    'vehicle.assignments.view',
+                    'vehicle.assignments.create',
+                    'vehicle.assignments.edit',
+                    'vehicle.assignments.delete',
+                    'vehicle.maintenance.view',
+                    'vehicle.maintenance.create',
+                    'vehicle.maintenance.edit',
+                    'vehicle.maintenance.delete',
+                    'vehicle.documents.view',
+                    'vehicle.documents.create',
+                    'vehicle.documents.edit',
+                    'vehicle.documents.delete',
+                    'vehicle.reports.view',
+                    'vehicle.setup.manage',
                 ],
             ],
         ];
@@ -918,7 +1210,36 @@ class UserController extends Controller
         return match ($module) {
             'hr' => 'HR',
             'project_management' => 'Project Management',
+            'vehicle_management' => 'Vehicle Management',
             default => ucwords(str_replace(['_', '-'], ' ', $module)),
         };
+    }
+
+    private function syncSimpleUserModuleAccesses(User $user, array $enabledModules): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('user_module_accesses')) {
+            return;
+        }
+
+        $enabledModules = collect($enabledModules)
+            ->filter()
+            ->map(fn ($module) => strtolower(trim((string) $module)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        \Illuminate\Support\Facades\DB::table('user_module_accesses')
+            ->where('user_id', $user->id)
+            ->delete();
+
+        foreach ($enabledModules as $module) {
+            \Illuminate\Support\Facades\DB::table('user_module_accesses')->insert([
+                'user_id' => $user->id,
+                'module' => $module,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 }

@@ -1,0 +1,218 @@
+﻿<?php
+
+namespace App\Http\Controllers\Sales;
+
+use App\Http\Controllers\Controller;
+use App\Models\Sales\Customer;
+use App\Models\Sales\Invoice;
+use App\Models\Sales\Payment;
+use App\Models\Sales\SalesReceipt;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+
+class SalesDashboardController extends Controller
+{
+    private function access(string $permission): void
+    {
+        $user = auth()->user();
+
+        abort_unless(
+            $user && (
+                $user->can($permission)
+                || $user->hasAnyRole(['Super Admin', 'Super Administrator', 'Admin'])
+            ),
+            403,
+            'Unauthorized sales dashboard action.'
+        );
+    }
+
+    public function index(Request $request)
+    {
+        $this->access('sales.dashboard.view');
+
+        [$period, $periodFrom, $periodTo, $periodLabel] = $this->resolvePeriod($request);
+        $asOfDate = $periodTo->copy()->endOfDay();
+        $dueSoonDate = $periodTo->copy()->addDays(7)->endOfDay();
+
+        $invoiceDateColumn = $this->firstExistingColumn((new Invoice)->getTable(), ['invoice_date', 'created_at']);
+        $paymentDateColumn = $this->firstExistingColumn((new Payment)->getTable(), ['payment_date', 'created_at']);
+        $receiptDateColumn = $this->firstExistingColumn((new SalesReceipt)->getTable(), ['receipt_date', 'created_at']);
+        $customerDateColumn = $this->firstExistingColumn((new Customer)->getTable(), ['created_at']);
+
+        $customerPeriodQuery = Customer::query();
+        $this->applyDateRange($customerPeriodQuery, $customerDateColumn, $periodFrom, $periodTo);
+
+        $invoicePeriodQuery = Invoice::query();
+        $this->applyDateRange($invoicePeriodQuery, $invoiceDateColumn, $periodFrom, $periodTo);
+
+        $paymentPeriodQuery = Payment::query();
+        $this->applyDateRange($paymentPeriodQuery, $paymentDateColumn, $periodFrom, $periodTo);
+
+        $receiptPeriodQuery = SalesReceipt::query();
+        $this->applyDateRange($receiptPeriodQuery, $receiptDateColumn, $periodFrom, $periodTo);
+
+        $totalCustomers = (clone $customerPeriodQuery)->count();
+        $activeCustomers = Customer::where('status', true)->count();
+        $newCustomers = $totalCustomers;
+
+        $totalInvoices = (clone $invoicePeriodQuery)->count();
+        $paidInvoices = (clone $invoicePeriodQuery)->where('status', 'paid')->count();
+        $unpaidInvoices = (clone $invoicePeriodQuery)->whereIn('status', ['unpaid', 'partially_paid'])->count();
+
+        $totalInvoiceAmount = (float) (clone $invoicePeriodQuery)->sum('total_amount');
+        $totalPaidFromInvoices = (float) (clone $invoicePeriodQuery)->sum('paid_amount');
+
+        $outstandingBalance = (float) Invoice::where('balance_due', '>', 0)
+            ->when($invoiceDateColumn, fn ($q) => $q->whereDate($invoiceDateColumn, '<=', $asOfDate))
+            ->sum('balance_due');
+
+        $totalSalesReceipts = (clone $receiptPeriodQuery)->count();
+        $totalSalesReceiptAmount = (float) (clone $receiptPeriodQuery)->where('status', 'paid')->sum('total_amount');
+
+        $totalPayments = (float) (clone $paymentPeriodQuery)->sum('amount');
+
+        $overdueBase = Invoice::where('balance_due', '>', 0)
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', $periodTo);
+
+        $dueSoonBase = Invoice::where('balance_due', '>', 0)
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '>=', $periodTo)
+            ->whereDate('due_date', '<=', $dueSoonDate);
+
+        $overdueCount = (clone $overdueBase)->count();
+        $dueSoonCount = (clone $dueSoonBase)->count();
+
+        $overdueInvoices = (clone $overdueBase)
+            ->with('customer')
+            ->orderBy('due_date', 'asc')
+            ->limit(8)
+            ->get();
+
+        $dueSoonInvoices = (clone $dueSoonBase)
+            ->with('customer')
+            ->orderBy('due_date', 'asc')
+            ->limit(8)
+            ->get();
+
+        $recentInvoicesQuery = Invoice::with('customer');
+        $this->applyDateRange($recentInvoicesQuery, $invoiceDateColumn, $periodFrom, $periodTo);
+        $recentInvoices = $recentInvoicesQuery->latest()->limit(8)->get();
+
+        $recentPaymentsQuery = Payment::with(['customer', 'invoice']);
+        $this->applyDateRange($recentPaymentsQuery, $paymentDateColumn, $periodFrom, $periodTo);
+        $recentPayments = $recentPaymentsQuery->latest()->limit(8)->get();
+
+        $recentSalesReceiptsQuery = SalesReceipt::with(['customer', 'branch', 'location']);
+        $this->applyDateRange($recentSalesReceiptsQuery, $receiptDateColumn, $periodFrom, $periodTo);
+        $recentSalesReceipts = $recentSalesReceiptsQuery->latest()->limit(8)->get();
+
+        $periodOptions = [
+            'today' => 'Today',
+            'this_week' => 'This Week',
+            'this_month' => 'This Month',
+            'this_year' => 'This Year',
+            'custom' => 'Custom Range',
+        ];
+
+        return view('sales.dashboard', compact(
+            'period',
+            'periodFrom',
+            'periodTo',
+            'periodLabel',
+            'periodOptions',
+            'newCustomers',
+            'totalCustomers',
+            'activeCustomers',
+            'totalInvoices',
+            'paidInvoices',
+            'unpaidInvoices',
+            'totalInvoiceAmount',
+            'totalPaidFromInvoices',
+            'outstandingBalance',
+            'totalSalesReceipts',
+            'totalSalesReceiptAmount',
+            'totalPayments',
+            'overdueCount',
+            'dueSoonCount',
+            'overdueInvoices',
+            'dueSoonInvoices',
+            'recentInvoices',
+            'recentPayments',
+            'recentSalesReceipts'
+        ));
+    }
+
+    private function resolvePeriod(Request $request): array
+    {
+        $period = (string) $request->query('period', 'today');
+
+        if (! in_array($period, ['today', 'this_week', 'this_month', 'this_year', 'custom'], true)) {
+            $period = 'today';
+        }
+
+        $today = Carbon::today();
+
+        if ($period === 'this_week') {
+            $from = $today->copy()->startOfWeek();
+            $to = $today->copy()->endOfWeek();
+            $label = 'This Week';
+        } elseif ($period === 'this_month') {
+            $from = $today->copy()->startOfMonth();
+            $to = $today->copy()->endOfMonth();
+            $label = 'This Month';
+        } elseif ($period === 'this_year') {
+            $from = $today->copy()->startOfYear();
+            $to = $today->copy()->endOfYear();
+            $label = 'This Year';
+        } elseif ($period === 'custom') {
+            try {
+                $from = Carbon::parse($request->query('from', $today->toDateString()))->startOfDay();
+            } catch (\Throwable $e) {
+                $from = $today->copy()->startOfDay();
+            }
+
+            try {
+                $to = Carbon::parse($request->query('to', $today->toDateString()))->endOfDay();
+            } catch (\Throwable $e) {
+                $to = $today->copy()->endOfDay();
+            }
+
+            if ($from->gt($to)) {
+                [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+            }
+
+            $label = $from->format('M d, Y') . ' - ' . $to->format('M d, Y');
+        } else {
+            $period = 'today';
+            $from = $today->copy()->startOfDay();
+            $to = $today->copy()->endOfDay();
+            $label = 'Today';
+        }
+
+        return [$period, $from, $to, $label];
+    }
+
+    private function firstExistingColumn(string $table, array $columns): ?string
+    {
+        foreach ($columns as $column) {
+            if (Schema::hasColumn($table, $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private function applyDateRange(Builder $query, ?string $column, Carbon $from, Carbon $to): void
+    {
+        if (! $column) {
+            return;
+        }
+
+        $query->whereDate($column, '>=', $from->toDateString())
+            ->whereDate($column, '<=', $to->toDateString());
+    }
+}

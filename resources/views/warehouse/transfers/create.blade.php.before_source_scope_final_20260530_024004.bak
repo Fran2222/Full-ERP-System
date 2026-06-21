@@ -1,0 +1,934 @@
+<x-app-layout>
+    <div class="container-fluid content-inner mt-n5 py-0">
+        @include('warehouse.partials.nav')
+        @include('warehouse.inventory._alerts')
+
+        <div class="card rounded-4 border-0 shadow-sm">
+            <div class="card-header bg-white border-0 rounded-top-4 px-4 pt-4 pb-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h4 class="card-title mb-1 fw-bold">New Stock Transfer</h4>
+                        <p class="text-secondary mb-0">Create a draft transfer order. Inventory will move only when dispatched and received.</p>
+                    </div>
+                    <a href="{{ route('warehouse.transfer') }}" class="btn btn-outline-secondary">Back To Transfers</a>
+                </div>
+            </div>
+
+            <div class="card-body px-4 pb-4">
+                @if($errors->any())
+                    <div class="alert alert-danger rounded-3 mb-4">
+                        <div class="fw-semibold mb-2">Please fix the following errors:</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <form method="POST" action="{{ route('warehouse.transfer.store') }}" id="transferCreateForm">
+                    @csrf
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-lg-6">
+                            <div class="border rounded-4 p-3 h-100">
+                                <h5 class="fw-bold mb-3">From Location</h5>
+
+                                <label class="form-label">From Branch <span class="text-secondary small">(optional)</span></label>
+                                <select name="from_branch_id" id="from_branch_id" class="form-select mb-3">
+                                    <option value="">Central / Unassigned Warehouse</option>
+                                    @foreach($branches as $branch)
+                                        <option value="{{ $branch->id }}" {{ old('from_branch_id') == $branch->id ? 'selected' : ''}}>
+                                            {{ $branch->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                <label class="form-label">From Location <span class="text-danger">*</span></label>
+                                <select name="from_location_id" id="from_location_id" class="form-select" required>
+                                    <option value="">Select Location</option>
+                                    @foreach($locations as $location)
+                                        <option value="{{ $location->id }}" {{ old('from_location_id') == $location->id ? 'selected' : ''}}>
+                                            {{ $location->location_name ?? $location->name }}
+                                            {{ $location->branch ? ' - ' . $location->branch->name : ' - Central / Unassigned' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-6">
+                            <div class="border rounded-4 p-3 h-100">
+                                <h5 class="fw-bold mb-3">To Location</h5>
+
+                                <label class="form-label">To Branch <span class="text-secondary small">(optional)</span></label>
+                                <select name="to_branch_id" id="to_branch_id" class="form-select mb-3">
+                                    <option value="">Central / Unassigned Warehouse</option>
+                                    @foreach($branches as $branch)
+                                        <option value="{{ $branch->id }}" {{old('to_branch_id') == $branch->id ? 'selected' : ''}}>
+                                            {{ $branch->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                <label class="form-label">To Location <span class="text-danger">*</span></label>
+                                <select name="to_location_id" id="to_location_id" class="form-select" required>
+                                    <option value="">Select Location</option>
+                                    @foreach($locations as $location)
+                                        <option value="{{ $location->id }}" {{ old('to_location_id') == $location->id ? 'selected' : '' }}>
+                                            {{ $location->location_name ?? $location->name }}
+                                            {{ $location->branch ? ' - ' . $location->branch->name : ' - Central / Unassigned' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border rounded-4 p-3 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h5 class="fw-bold mb-1">Transfer Items</h5>
+                                <p class="text-secondary mb-0">Add multiple items. Serialized items require selected serial numbers.</p>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary" id="addTransferLine">Add Line</button>
+                        </div>
+
+                        <div id="transferLines"></div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-lg-4">
+                            <label class="form-label">Transfer Date</label>
+                            <input type="date" name="transfer_date" value="{{ old('transfer_date', now()->toDateString()) }}" class="form-control">
+                        </div>
+                        <div class="col-lg-8">
+                            <label class="form-label">Remarks</label>
+                            <input type="text" name="remarks" value="{{ old('remarks') }}" class="form-control" placeholder="Optional transfer remarks">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ route('warehouse.transfer') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Save Draft Transfer</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <x-warehouse.item-picker-modal />
+
+    @php
+        $transferItemsForJson = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'code' => $item->code ?: $item->item_code,
+                'name' => $item->name ?: $item->item_name,
+                'serialized' => (bool) $item->is_serialized,
+            ];
+        })->values()->toArray();
+    @endphp
+
+    @push('scripts')
+        <script>
+            window.WMC_ITEM_PICKER_BASE = "{{ url('') }}";
+            window.WMC_TRANSFER_AVAILABLE_SERIALS_URL = "{{ route('warehouse.transfer.serials.available') }}";
+        </script>
+        <script src="{{ asset('assets/js/wmc-item-picker.js') }}"></script>
+        <style>
+            .wmc-transfer-picker-card {
+                border: 1px solid rgba(58, 87, 232, .20);
+                border-radius: 12px;
+                background: linear-gradient(145deg, #fbfcff, #ffffff);
+                box-shadow: 0 10px 24px rgba(35, 45, 66, .055);
+                padding: 10px;
+            }
+
+            .wmc-transfer-picker-summary {
+                min-height: 54px;
+            }
+
+            .wmc-transfer-picker-button {
+                width: 100%;
+                border-color: #3a57e8 !important;
+                color: #3a57e8 !important;
+                font-weight: 600;
+                border-radius: 8px;
+            }
+
+            .wmc-transfer-picker-button:hover {
+                background: #3a57e8 !important;
+                color: #fff !important;
+                box-shadow: 0 8px 18px rgba(58, 87, 232, .22);
+            }
+
+            .wmc-transfer-serial-panel {
+                border: 1px solid rgba(58, 87, 232, .18);
+                border-radius: 12px;
+                background: #fff;
+                padding: 12px;
+                box-shadow: 0 8px 18px rgba(35, 45, 66, .04);
+            }
+
+            .wmc-transfer-serial-list {
+                max-height: 260px;
+                overflow: auto;
+                border: 1px solid #eef0f6;
+                border-radius: 10px;
+                background: #fbfcff;
+            }
+
+            .wmc-transfer-serial-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 9px 11px;
+                border-bottom: 1px solid #eef0f6;
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .wmc-transfer-serial-row:last-child {
+                border-bottom: 0;
+            }
+
+            .wmc-transfer-serial-row:hover {
+                background: rgba(58, 87, 232, .06);
+            }
+
+            .wmc-transfer-serial-row input {
+                cursor: pointer;
+            }
+
+            .wmc-transfer-serial-empty {
+                padding: 16px;
+                text-align: center;
+                color: #8a92a6;
+            }
+
+            .wmc-transfer-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                border: 1px solid rgba(58, 87, 232, .18);
+                background: rgba(58, 87, 232, .08);
+                color: #232d42;
+                border-radius: 999px;
+                padding: 5px 9px;
+                font-size: 12px;
+                margin: 3px;
+            }
+
+            .wmc-transfer-chip button {
+                border: 0;
+                background: transparent;
+                color: #3a57e8;
+                font-weight: 700;
+                padding: 0;
+                line-height: 1;
+            }
+
+            #wmcItemPickerModal .modal-content {
+                border: 1px solid rgba(58, 87, 232, 0.24) !important;
+                border-top: 5px solid #3a57e8 !important;
+                border-radius: 18px !important;
+                box-shadow: 0 25px 70px rgba(35, 45, 66, 0.28) !important;
+                overflow: hidden !important;
+            }
+
+            #wmcItemPickerModal .modal-header {
+                background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1)) !important;
+                border-bottom: 1px solid rgba(58, 87, 232, 0.14) !important;
+            }
+
+            #wmcItemPickerModal .wmc-item-picker-photo {
+                border: 2px solid rgba(58, 87, 232, 0.35) !important;
+                background: linear-gradient(145deg, #f7f9ff, #ffffff) !important;
+                box-shadow: 0 10px 22px rgba(58, 87, 232, 0.16) !important;
+                cursor: pointer !important;
+                position: relative !important;
+            }
+
+            #wmcItemPickerModal .wmc-item-picker-photo::after {
+                content: "Zoom";
+                position: absolute;
+                right: 6px;
+                bottom: 6px;
+                background: #3a57e8;
+                color: #fff;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 5px 7px;
+                border-radius: 999px;
+                z-index: 2;
+            }
+
+            .wmc-force-photo-zoom-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(20, 24, 38, 0.76);
+                backdrop-filter: blur(3px);
+                z-index: 99999;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+            }
+
+            .wmc-force-photo-zoom-overlay.show { display: flex; }
+
+            .wmc-force-photo-zoom-panel {
+                width: min(900px, 96vw);
+                max-height: 90vh;
+                background: #fff;
+                border-radius: 18px;
+                border: 1px solid rgba(58, 87, 232, 0.25);
+                border-top: 5px solid #3a57e8;
+                box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+                overflow: hidden;
+                position: relative;
+            }
+
+            .wmc-force-photo-zoom-close {
+                position: absolute;
+                top: 13px;
+                right: 16px;
+                width: 36px;
+                height: 36px;
+                border: 0;
+                background: rgba(58, 87, 232, 0.10);
+                color: #232d42;
+                border-radius: 999px;
+                font-size: 26px;
+                line-height: 30px;
+                cursor: pointer;
+                z-index: 2;
+            }
+
+            .wmc-force-photo-zoom-header {
+                padding: 18px 62px 14px 22px;
+                background: linear-gradient(90deg, rgba(58, 87, 232, 0.10), rgba(255, 255, 255, 1));
+                border-bottom: 1px solid rgba(58, 87, 232, 0.14);
+            }
+
+            .wmc-force-photo-zoom-title {
+                font-size: 18px;
+                font-weight: 700;
+                color: #232d42;
+            }
+
+            .wmc-force-photo-zoom-subtitle {
+                font-size: 13px;
+                color: #6c757d;
+                margin-top: 2px;
+            }
+
+            .wmc-force-photo-zoom-body {
+                min-height: 420px;
+                max-height: calc(90vh - 90px);
+                overflow: auto;
+                padding: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background:
+                    linear-gradient(45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+                    linear-gradient(-45deg, rgba(58, 87, 232, 0.04) 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%),
+                    linear-gradient(-45deg, transparent 75%, rgba(58, 87, 232, 0.04) 75%);
+                background-size: 24px 24px;
+                background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+            }
+
+            .wmc-force-photo-zoom-body img {
+                max-width: 100%;
+                max-height: calc(90vh - 150px);
+                object-fit: contain;
+                border-radius: 12px;
+                background: #fff;
+            }
+        </style>
+
+        <div id="wmcTransferPhotoZoomOverlay" class="wmc-force-photo-zoom-overlay" aria-hidden="true">
+            <div class="wmc-force-photo-zoom-panel">
+                <button type="button" class="wmc-force-photo-zoom-close" aria-label="Close preview">&times;</button>
+                <div class="wmc-force-photo-zoom-header">
+                    <div class="wmc-force-photo-zoom-title">Item Photo Preview</div>
+                    <div class="wmc-force-photo-zoom-subtitle" id="wmcTransferPhotoZoomSubtitle">Warehouse item image</div>
+                </div>
+                <div class="wmc-force-photo-zoom-body">
+                    <img id="wmcTransferPhotoZoomImg" src="" alt="Item Photo Preview">
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const transferItems = @json($transferItemsForJson);
+            let lineIndex = 0;
+
+            function qs(selector, root = document) { return root.querySelector(selector); }
+            function qsa(selector, root = document) { return Array.from(root.querySelectorAll(selector)); }
+            function escapeHtml(value) {
+                return String(value === null || value === undefined ? '' : value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function sourceValues() {
+                return {
+                    branchId: qs('#from_branch_id')?.value || '',
+                    locationId: qs('#from_location_id')?.value || '',
+                    branchText: qs('#from_branch_id option:checked')?.textContent?.trim() || 'Central / Unassigned',
+                    locationText: qs('#from_location_id option:checked')?.textContent?.trim() || ''
+                };
+            }
+
+            function requireSourceLocation() {
+                const source = sourceValues();
+                if (!source.locationId) {
+                    alert('Please select From Location first before selecting items.');
+                    qs('#from_location_id')?.focus();
+                    return false;
+                }
+                return true;
+            }
+
+            function addLine() {
+                const index = lineIndex++;
+                const html = `
+                    <div class="transfer-line border rounded-4 p-3 mb-3" data-line-index="${index}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <strong>Item Line</strong>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-line">Remove</button>
+                        </div>
+
+                        <div class="row g-3 align-items-end">
+                            <div class="col-lg-5">
+                                <label class="form-label">Item <span class="text-danger">*</span></label>
+                                <input type="hidden" name="items[${index}][item_id]" class="transfer-item-id" required>
+                                <select name="_transfer_picker[${index}][warehouse_inventory_id]" class="d-none transfer-picker-inventory"></select>
+                                <div class="wmc-transfer-picker-card" data-material-row="1" data-item-picker-context="transfer">
+                                    <div class="wmc-transfer-picker-summary">
+                                        <div class="text-muted">No item selected.</div>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm mt-2 wmc-transfer-picker-button open-transfer-picker">
+                                        Search / Select Item
+                                    </button>
+                                    <div class="form-text">Search item, view details, then select serials below if serialized.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label">Qty <span class="text-danger">*</span></label>
+                                <input type="number" name="items[${index}][quantity]" class="form-control transfer-qty" min="0.01" step="0.01" required>
+                            </div>
+
+                            <div class="col-lg-5">
+                                <label class="form-label">Remarks</label>
+                                <input type="text" name="items[${index}][remarks]" class="form-control" placeholder="Optional line remarks">
+                            </div>
+
+                            <div class="col-12 transfer-serial-wrap d-none">
+                                <div class="wmc-transfer-serial-panel">
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                        <div>
+                                            <label class="form-label mb-0">Serial Numbers <span class="text-danger">*</span></label>
+                                            <div class="form-text mb-0">No CTRL needed. Tick the serials to transfer from the selected source location only.</div>
+                                        </div>
+                                        <div class="badge bg-primary selected-count-badge">Selected: 0</div>
+                                    </div>
+                                    <div class="row g-2 align-items-center mb-2">
+                                        <div class="col-md-6">
+                                            <input type="text" class="form-control form-control-sm transfer-serial-search" placeholder="Search serial no...">
+                                        </div>
+                                        <div class="col-md-6 text-md-end d-flex justify-content-md-end gap-2">
+                                            <button type="button" class="btn btn-sm btn-outline-primary select-visible-serials">Select all visible</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary clear-serials">Clear</button>
+                                        </div>
+                                    </div>
+                                    <div class="transfer-serial-hidden-inputs"></div>
+                                    <div class="wmc-transfer-serial-list"></div>
+                                    <div class="transfer-serial-chips mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                qs('#transferLines').insertAdjacentHTML('beforeend', html);
+                const line = qs(`.transfer-line[data-line-index="${index}"]`);
+                initializeLine(line);
+            }
+
+            function initializeLine(line) {
+                if (!line || line.dataset.initialized === '1') return;
+                line.dataset.initialized = '1';
+                line.serialRows = [];
+                line.selectedSerials = new Map();
+
+                const pickerCard = qs('.wmc-transfer-picker-card', line);
+                const hiddenInventory = qs('.transfer-picker-inventory', line);
+                if (pickerCard && hiddenInventory) {
+                    pickerCard.appendChild(hiddenInventory);
+                }
+
+                // Clean up any generic item picker UI accidentally injected by the
+                // global picker script in older cached files. Transfer uses only
+                // the custom .open-transfer-picker button above.
+                qsa('.wmc-selected-material-summary, .wmc-open-item-picker', pickerCard).forEach(el => el.remove());
+
+                qs('.open-transfer-picker', line)?.addEventListener('click', function () {
+                    // Remove any generic picker button injected by cached/global JS.
+                    qsa('.wmc-selected-material-summary, .wmc-open-item-picker', pickerCard).forEach(el => el.remove());
+
+                    if (!requireSourceLocation()) return;
+                    const source = sourceValues();
+                    pickerCard.dataset.fromBranchId = source.branchId;
+                    pickerCard.dataset.fromLocationId = source.locationId;
+                    pickerCard.dataset.sourceBranchId = source.branchId;
+                    pickerCard.dataset.sourceLocationId = source.locationId;
+
+                    if (window.WMCItemPicker && typeof window.WMCItemPicker.openPicker === 'function') {
+                        window.WMCItemPicker.openPicker(pickerCard);
+                    } else if (window.WMCItemPicker && typeof window.WMCItemPicker.open === 'function') {
+                        window.WMCItemPicker.open(pickerCard);
+                    } else {
+                        alert('Global item picker script not loaded. Please refresh with CTRL + F5.');
+                    }
+                });
+
+                qs('.transfer-serial-search', line)?.addEventListener('input', () => renderSerialList(line));
+                qs('.select-visible-serials', line)?.addEventListener('click', () => selectVisibleSerials(line));
+                qs('.clear-serials', line)?.addEventListener('click', () => clearSerials(line));
+            }
+
+            function resetLineSelection(line) {
+                if (!line) return;
+                qs('.transfer-item-id', line).value = '';
+                qs('.transfer-picker-inventory', line).innerHTML = '';
+                qs('.transfer-qty', line).value = '';
+                qs('.transfer-qty', line).readOnly = false;
+                qs('.wmc-transfer-picker-summary', line).innerHTML = '<div class="text-muted">No item selected.</div>';
+                qs('.transfer-serial-wrap', line).classList.add('d-none');
+                line.serialRows = [];
+                line.selectedSerials = new Map();
+                renderSerialList(line);
+            }
+
+            function lineSummaryHtml(item, serialCount = 0) {
+                const photo = item.image_url
+                    ? `<img src="${escapeHtml(item.image_url)}" alt="" style="width:46px;height:46px;object-fit:contain;border:1px solid rgba(58,87,232,.25);border-radius:8px;background:#fff;">`
+                    : `<div style="width:46px;height:46px;border:1px solid rgba(58,87,232,.18);border-radius:8px;background:#f7f8fb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#8a92a6;">No Photo</div>`;
+
+                return `
+                    <div class="d-flex align-items-center gap-2">
+                        ${photo}
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold text-dark">${escapeHtml(item.item_code || 'ITEM')} - ${escapeHtml(item.item_name || '')}</div>
+                            <div class="small text-muted">${escapeHtml(item.category_name || '-')} | Source: ${escapeHtml(item.location_name || '-')}</div>
+                            <div class="small text-muted">Available: ${escapeHtml(item.available ?? '-')} | ${item.is_serialized ? 'Serialized' : 'Regular'}${item.is_serialized ? ' | Serials: ' + serialCount : ''}</div>
+                        </div>
+                    </div>`;
+            }
+
+            async function loadSerialsForLine(line) {
+                const itemId = qs('.transfer-item-id', line).value;
+                const source = sourceValues();
+                const list = qs('.wmc-transfer-serial-list', line);
+
+                line.serialRows = [];
+                line.selectedSerials = new Map();
+                renderSerialList(line, 'Loading available serials...');
+
+                if (!itemId || !(line.selectedItem?.location_id || source.locationId)) {
+                    renderSerialList(line, 'Select source location and item first.');
+                    return;
+                }
+
+                const selectedItem = line.selectedItem || {};
+                const serialLocationId = selectedItem.location_id || source.locationId;
+                const serialBranchId = selectedItem.branch_id ?? source.branchId;
+                const selectedInventoryId = line.selectedInventoryId || selectedItem.inventory_id || '';
+                const availableLimit = parseInt(line.selectedItemAvailable || selectedItem.available || 0, 10) || 0;
+
+                const params = new URLSearchParams({
+                    item_id: itemId,
+                    inventory_id: selectedInventoryId,
+                    location_id: serialLocationId,
+                    branch_id: serialBranchId,
+                    available_limit: availableLimit,
+                    limit: 1000
+                });
+
+                try {
+                    const response = await fetch(`${window.WMC_TRANSFER_AVAILABLE_SERIALS_URL}?${params.toString()}`, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok) throw new Error('Unable to load serials.');
+
+                    const data = await response.json();
+                    let rows = Array.isArray(data) ? data : (data.data || []);
+
+                    // Hard safety cap in the UI too. Even if old cached backend
+                    // still returns extra serials, the transfer line must never
+                    // display/select more serials than the selected inventory's
+                    // available quantity.
+                    if (availableLimit > 0 && rows.length > availableLimit) {
+                        rows = rows.slice(0, availableLimit);
+                    }
+
+                    line.serialRows = rows;
+                    renderSerialList(line);
+                } catch (error) {
+                    console.error(error);
+                    renderSerialList(line, 'Unable to load serials.');
+                }
+            }
+
+            function filteredSerials(line) {
+                const q = (qs('.transfer-serial-search', line)?.value || '').toLowerCase().trim();
+                return (line.serialRows || []).filter(row => String(row.text || row.serial_number || row.serial_no || '').toLowerCase().includes(q));
+            }
+
+            function renderSerialList(line, message = null) {
+                const list = qs('.wmc-transfer-serial-list', line);
+                const chips = qs('.transfer-serial-chips', line);
+                const hidden = qs('.transfer-serial-hidden-inputs', line);
+                const qty = qs('.transfer-qty', line);
+                const badge = qs('.selected-count-badge', line);
+                const index = line.dataset.lineIndex;
+
+                if (!list || !chips || !hidden || !qty || !badge) return;
+
+                hidden.innerHTML = '';
+                (line.selectedSerials || new Map()).forEach((row, id) => {
+                    hidden.insertAdjacentHTML('beforeend', `<input type="hidden" name="items[${index}][serial_ids][]" value="${escapeHtml(id)}">`);
+                });
+
+                const selectedCount = line.selectedSerials ? line.selectedSerials.size : 0;
+                qty.value = selectedCount;
+                qty.readOnly = true;
+                badge.textContent = `Selected: ${selectedCount}`;
+
+                chips.innerHTML = selectedCount
+                    ? Array.from(line.selectedSerials.values()).map(row => {
+                        const label = row.text || row.serial_number || row.serial_no || row.id;
+                        return `<span class="wmc-transfer-chip">${escapeHtml(label)} <button type="button" data-remove-serial="${escapeHtml(row.id)}">×</button></span>`;
+                    }).join('')
+                    : '<div class="small text-muted">No serial selected yet.</div>';
+
+                qsa('[data-remove-serial]', chips).forEach(btn => {
+                    btn.addEventListener('click', function () {
+                        line.selectedSerials.delete(String(btn.dataset.removeSerial));
+                        renderSerialList(line);
+                    });
+                });
+
+                if (message) {
+                    list.innerHTML = `<div class="wmc-transfer-serial-empty">${escapeHtml(message)}</div>`;
+                    return;
+                }
+
+                const rows = filteredSerials(line);
+                if (!rows.length) {
+                    list.innerHTML = '<div class="wmc-transfer-serial-empty">No available serials for the selected source inventory/location.</div>';
+                    return;
+                }
+
+                list.innerHTML = rows.map(row => {
+                    const id = String(row.id);
+                    const label = row.text || row.serial_number || row.serial_no || id;
+                    const checked = line.selectedSerials && line.selectedSerials.has(id) ? 'checked' : '';
+                    return `
+                        <label class="wmc-transfer-serial-row">
+                            <input type="checkbox" class="form-check-input transfer-serial-checkbox" value="${escapeHtml(id)}" ${checked}>
+                            <span class="fw-semibold">${escapeHtml(label)}</span>
+                            <span class="ms-auto badge bg-success">Available</span>
+                        </label>`;
+                }).join('');
+
+                qsa('.transfer-serial-checkbox', list).forEach(input => {
+                    input.addEventListener('change', function () {
+                        const row = (line.serialRows || []).find(serial => String(serial.id) === String(input.value));
+                        if (input.checked && row) {
+                            const maxAllowed = parseInt(line.selectedItemAvailable || line.selectedItem?.available || 0, 10) || 0;
+                            if (maxAllowed > 0 && line.selectedSerials.size >= maxAllowed && !line.selectedSerials.has(String(row.id))) {
+                                input.checked = false;
+                                alert('Selected serials cannot exceed available quantity (' + maxAllowed + ').');
+                                return;
+                            }
+                            line.selectedSerials.set(String(row.id), row);
+                        } else {
+                            line.selectedSerials.delete(String(input.value));
+                        }
+                        renderSerialList(line);
+                    });
+                });
+            }
+
+            function selectVisibleSerials(line) {
+                const maxAllowed = parseInt(line.selectedItemAvailable || line.selectedItem?.available || 0, 10) || 0;
+                filteredSerials(line).forEach(row => {
+                    if (maxAllowed > 0 && line.selectedSerials.size >= maxAllowed) return;
+                    line.selectedSerials.set(String(row.id), row);
+                });
+                renderSerialList(line);
+            }
+
+            function clearSerials(line) {
+                line.selectedSerials = new Map();
+                renderSerialList(line);
+            }
+
+            function cleanupDuplicateTransferPickerButtons() {
+                document.querySelectorAll('.wmc-transfer-picker-card').forEach(card => {
+                    qsa('.wmc-selected-material-summary, .wmc-open-item-picker', card).forEach(el => el.remove());
+                });
+            }
+
+            document.getElementById('addTransferLine').addEventListener('click', function () {
+                addLine();
+                setTimeout(cleanupDuplicateTransferPickerButtons, 50);
+                setTimeout(cleanupDuplicateTransferPickerButtons, 250);
+            });
+
+            document.getElementById('transferLines').addEventListener('click', function (event) {
+                if (event.target.classList.contains('remove-line')) {
+                    event.target.closest('.transfer-line').remove();
+
+                    if (!document.querySelector('.transfer-line')) {
+                        addLine();
+                    }
+                }
+            });
+
+            document.addEventListener('wmc:item-picker:selected', function (event) {
+                const detail = event.detail || {};
+                const pickerCard = detail.targetRow;
+
+                if (!pickerCard || pickerCard.dataset.itemPickerContext !== 'transfer') return;
+
+                const line = pickerCard.closest('.transfer-line');
+                const item = detail.item;
+                if (!line || !item) return;
+
+                qs('.transfer-item-id', line).value = item.item_id || '';
+                qs('.transfer-picker-inventory', line).innerHTML = `<option value="${escapeHtml(item.inventory_id || '')}" selected>${escapeHtml((item.item_code || 'ITEM') + ' - ' + (item.item_name || ''))}</option>`;
+                qs('.wmc-transfer-picker-summary', line).innerHTML = lineSummaryHtml(item, 0);
+
+                const qty = qs('.transfer-qty', line);
+                const serialWrap = qs('.transfer-serial-wrap', line);
+
+                line.selectedItem = item;
+                line.selectedInventoryId = item.inventory_id || '';
+                line.selectedItemAvailable = item.available || 0;
+                line.selectedItemBranchId = item.branch_id || '';
+                line.selectedItemLocationId = item.location_id || '';
+                line.serialRows = [];
+                line.selectedSerials = new Map();
+
+                if (item.is_serialized) {
+                    qty.value = '';
+                    qty.readOnly = true;
+                    serialWrap.classList.remove('d-none');
+                    loadSerialsForLine(line);
+                } else {
+                    qty.value = detail.quantity || 1;
+                    qty.readOnly = false;
+                    qty.max = item.available || '';
+                    serialWrap.classList.add('d-none');
+                    renderSerialList(line);
+                }
+            });
+
+            ['from_branch_id', 'from_location_id'].forEach(id => {
+                document.getElementById(id).addEventListener('change', function () {
+                    document.querySelectorAll('.transfer-line').forEach(line => resetLineSelection(line));
+                });
+            });
+
+            function bootPhotoZoom() {
+                const overlay = qs('#wmcTransferPhotoZoomOverlay');
+                const closeBtn = qs('#wmcTransferPhotoZoomOverlay .wmc-force-photo-zoom-close');
+                const zoomImg = qs('#wmcTransferPhotoZoomImg');
+                const subtitle = qs('#wmcTransferPhotoZoomSubtitle');
+
+                function visiblePhoto() {
+                    const img = qs('#wmcItemPickerPhoto');
+                    if (!img || img.classList.contains('d-none') || !img.src) return null;
+                    return img;
+                }
+
+                function openZoom() {
+                    const img = visiblePhoto();
+                    if (!img || !overlay || !zoomImg) return;
+
+                    zoomImg.src = img.src;
+                    const code = qs('#wmcItemPickerCode')?.textContent?.trim() || '';
+                    const name = qs('#wmcItemPickerName')?.textContent?.trim() || '';
+                    subtitle.textContent = [code, name].filter(Boolean).join(' - ') || 'Warehouse item image';
+                    overlay.classList.add('show');
+                    overlay.setAttribute('aria-hidden', 'false');
+                }
+
+                function closeZoom() {
+                    overlay?.classList.remove('show');
+                    overlay?.setAttribute('aria-hidden', 'true');
+                }
+
+                document.addEventListener('click', function (event) {
+                    const photoBox = event.target.closest('#wmcItemPickerModal .wmc-item-picker-photo');
+                    if (photoBox) openZoom();
+                    if (event.target === overlay) closeZoom();
+                });
+
+                closeBtn?.addEventListener('click', closeZoom);
+                document.addEventListener('keydown', event => {
+                    if (event.key === 'Escape') closeZoom();
+                });
+            }
+
+            addLine();
+            setTimeout(cleanupDuplicateTransferPickerButtons, 100);
+            setTimeout(cleanupDuplicateTransferPickerButtons, 500);
+            bootPhotoZoom();
+        </script>
+    @endpush
+</x-app-layout>
+{{-- wmc-transfer-regular-qty-force-guard-start --}}
+<script>
+(function () {
+    'use strict';
+
+    if (window.__WMC_TRANSFER_REGULAR_QTY_FORCE_GUARD__) return;
+    window.__WMC_TRANSFER_REGULAR_QTY_FORCE_GUARD__ = true;
+
+    function onTransferCreatePage() {
+        return /\/warehouse\/transfer(\/create)?/i.test(window.location.pathname || '');
+    }
+
+    function isQtyInput(el) {
+        if (!el || !el.matches) return false;
+        const name = String(el.getAttribute('name') || '').toLowerCase();
+        const id = String(el.getAttribute('id') || '').toLowerCase();
+        const cls = String(el.className || '').toLowerCase();
+        return el.matches('input[type="number"], input:not([type]), input[type="text"]') &&
+            (name === 'quantity' || name.includes('[quantity]') || name.includes('qty') || id.includes('quantity') || id.includes('qty') || cls.includes('qty') || cls.includes('quantity'));
+    }
+
+    function rowText(row) {
+        return String(row ? row.textContent || '' : '').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function isSerializedRow(row) {
+        const text = rowText(row);
+        if (!text) return false;
+
+        // Explicit regular labels must win. Your UI shows "Regular" for non-serialized rows.
+        if (text.includes('regular') || text.includes('non-serialized') || text.includes('non serialized')) return false;
+
+        // Serialized section / serial checklist belongs only to serialized rows.
+        if (text.includes('serialized') || text.includes('serial numbers') || text.includes('selected:') || text.includes('select all visible')) return true;
+
+        return false;
+    }
+
+    function findLineContainer(input) {
+        return input.closest('.item-line, .transfer-item-line, [data-transfer-line], .warehouse-transfer-line, .border, .card, .row, .col-12') || input.parentElement;
+    }
+
+    function unlockRegularQty(input) {
+        if (!input) return;
+        const row = findLineContainer(input);
+        if (!row || isSerializedRow(row)) return;
+
+        input.disabled = false;
+        input.readOnly = false;
+        input.removeAttribute('disabled');
+        input.removeAttribute('readonly');
+        input.classList.remove('disabled');
+        input.style.pointerEvents = 'auto';
+        input.style.userSelect = 'auto';
+        input.style.backgroundColor = '';
+        input.style.cursor = '';
+
+        if (!input.getAttribute('step')) input.setAttribute('step', '0.01');
+        if (!input.getAttribute('min')) input.setAttribute('min', '0.01');
+
+        // Do NOT force overwrite a user's typed value. Only change blank/zero after item select.
+        const v = String(input.value || '').trim();
+        if ((v === '' || v === '0' || v === '0.00') && rowText(row).includes('available:')) {
+            input.value = '1';
+        }
+    }
+
+    function lockSerializedQty(input) {
+        const row = findLineContainer(input);
+        if (!row || !isSerializedRow(row)) return;
+        input.readOnly = true;
+        // use readonly, not disabled, so Laravel can still submit the selected serial count
+        input.removeAttribute('disabled');
+        input.disabled = false;
+    }
+
+    function syncQtyInputs() {
+        if (!onTransferCreatePage()) return;
+        document.querySelectorAll('input').forEach(function (input) {
+            if (!isQtyInput(input)) return;
+            const row = findLineContainer(input);
+            if (isSerializedRow(row)) {
+                lockSerializedQty(input);
+            } else {
+                unlockRegularQty(input);
+            }
+        });
+    }
+
+    document.addEventListener('input', function (e) {
+        if (isQtyInput(e.target)) unlockRegularQty(e.target);
+    }, true);
+
+    document.addEventListener('focusin', function (e) {
+        if (isQtyInput(e.target)) unlockRegularQty(e.target);
+    }, true);
+
+    document.addEventListener('wmc:item-picker:selected', function () {
+        setTimeout(syncQtyInputs, 0);
+        setTimeout(syncQtyInputs, 100);
+        setTimeout(syncQtyInputs, 350);
+        setTimeout(syncQtyInputs, 900);
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncQtyInputs);
+    } else {
+        syncQtyInputs();
+    }
+
+    const observer = new MutationObserver(function (mutations) {
+        let shouldSync = false;
+        mutations.forEach(function (m) {
+            if (m.type === 'childList') shouldSync = true;
+            if (m.type === 'attributes' && isQtyInput(m.target)) shouldSync = true;
+        });
+        if (shouldSync) setTimeout(syncQtyInputs, 0);
+    });
+
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['disabled', 'readonly', 'class', 'value']
+    });
+
+    setInterval(syncQtyInputs, 800);
+})();
+</script>
+{{-- wmc-transfer-regular-qty-force-guard-end --}}

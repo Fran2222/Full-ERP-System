@@ -1,0 +1,175 @@
+<?php
+
+namespace App\Http\Controllers\Chat;
+
+use App\Http\Controllers\Controller;
+use App\Models\Chat\ChatConversation;
+use App\Models\Chat\ChatMessage;
+use App\Models\Chat\ChatParticipant;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class ChatController extends Controller
+{
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        $conversations = ChatConversation::query()
+            ->with(['participantUsers', 'latestMessage.sender'])
+            ->whereHas('participants', fn ($query) => $query->where('user_id', $user->id))
+            ->orderByDesc(
+                ChatMessage::select('created_at')
+                    ->whereColumn('chat_messages.chat_conversation_id', 'chat_conversations.id')
+                    ->latest()
+                    ->take(1)
+            )
+            ->latest()
+            ->get();
+
+        $participantRows = ChatParticipant::where('user_id', $user->id)
+            ->whereIn('chat_conversation_id', $conversations->pluck('id'))
+            ->get()
+            ->keyBy('chat_conversation_id');
+
+        $unreadCounts = [];
+
+        foreach ($conversations as $conversation) {
+            $participant = $participantRows->get($conversation->id);
+            $lastReadAt = optional($participant)->last_read_at;
+
+            $unreadCounts[$conversation->id] = ChatMessage::where('chat_conversation_id', $conversation->id)
+                ->where('sender_id', '!=', $user->id)
+                ->when($lastReadAt, fn ($query) => $query->where('created_at', '>', $lastReadAt))
+                ->when(! $lastReadAt, fn ($query) => $query)
+                ->count();
+        }
+
+        $users = User::query()
+            ->where('id', '!=', $user->id)
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->orderBy('email')
+            ->get();
+
+        return view('chat.index', compact('conversations', 'users', 'unreadCounts'));
+    }
+
+    public function start(Request $request)
+    {
+        $data = $request->validate([
+            'recipient_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        $currentUserId = (int) $request->user()->id;
+        $recipientId = (int) $data['recipient_id'];
+
+        abort_if($currentUserId === $recipientId, 422, 'You cannot start a chat with yourself.');
+
+        $conversation = DB::transaction(function () use ($currentUserId, $recipientId) {
+            $conversationId = ChatParticipant::query()
+                ->select('chat_conversation_id')
+                ->whereIn('user_id', [$currentUserId, $recipientId])
+                ->groupBy('chat_conversation_id')
+                ->havingRaw('COUNT(DISTINCT user_id) = 2')
+                ->pluck('chat_conversation_id')
+                ->first();
+
+            if ($conversationId) {
+                $existing = ChatConversation::where('type', 'direct')->find($conversationId);
+
+                if ($existing) {
+                    return $existing;
+                }
+            }
+
+            $conversation = ChatConversation::create([
+                'type' => 'direct',
+                'created_by' => $currentUserId,
+            ]);
+
+            ChatParticipant::create([
+                'chat_conversation_id' => $conversation->id,
+                'user_id' => $currentUserId,
+                'last_read_at' => now(),
+            ]);
+
+            ChatParticipant::create([
+                'chat_conversation_id' => $conversation->id,
+                'user_id' => $recipientId,
+                'last_read_at' => null,
+            ]);
+
+            return $conversation;
+        });
+
+        return redirect()->route('chat.show', $conversation);
+    }
+
+    public function show(Request $request, ChatConversation $conversation)
+    {
+        $user = $request->user();
+
+        $this->ensureParticipant($conversation, $user->id);
+
+        ChatParticipant::where('chat_conversation_id', $conversation->id)
+            ->where('user_id', $user->id)
+            ->update(['last_read_at' => now()]);
+
+        $conversation->load(['participantUsers', 'messages.sender']);
+
+        return view('chat.show', [
+            'conversation' => $conversation,
+            'messages' => $conversation->messages()->with('sender')->oldest()->get(),
+        ]);
+    }
+
+    public function send(Request $request, ChatConversation $conversation)
+    {
+        $user = $request->user();
+
+        $this->ensureParticipant($conversation, $user->id);
+
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $message = DB::transaction(function () use ($conversation, $user, $data) {
+            $message = ChatMessage::create([
+                'chat_conversation_id' => $conversation->id,
+                'sender_id' => $user->id,
+                'body' => trim($data['body']),
+            ]);
+
+            ChatParticipant::where('chat_conversation_id', $conversation->id)
+                ->where('user_id', $user->id)
+                ->update(['last_read_at' => now()]);
+
+            return $message;
+        });
+
+        $recipientIds = ChatParticipant::where('chat_conversation_id', $conversation->id)
+            ->where('user_id', '!=', $user->id)
+            ->pluck('user_id');
+
+        foreach ($recipientIds as $recipientId) {
+            if (class_exists(\App\Services\SystemNotificationService::class)
+                && method_exists(\App\Services\SystemNotificationService::class, 'notifyChatMessageCreated')) {
+                \App\Services\SystemNotificationService::notifyChatMessageCreated($message->fresh(['sender', 'conversation']), (int) $recipientId, $user->id);
+            }
+        }
+
+        return redirect()->route('chat.show', $conversation)->with('success', 'Message sent.');
+    }
+
+    private function ensureParticipant(ChatConversation $conversation, int $userId): void
+    {
+        abort_unless(
+            ChatParticipant::where('chat_conversation_id', $conversation->id)
+                ->where('user_id', $userId)
+                ->exists(),
+            403
+        );
+    }
+}
